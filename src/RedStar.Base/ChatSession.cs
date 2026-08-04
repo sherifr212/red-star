@@ -1,6 +1,10 @@
+using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.Text;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
+using RedStar.Base.Telemetry;
 
 namespace RedStar.Base;
 
@@ -41,20 +45,47 @@ public sealed class ChatSession
         Action<AgentResponseUpdate>? onUpdate = null,
         CancellationToken cancellationToken = default)
     {
-        _session ??= await _agent.CreateSessionAsync(cancellationToken);
+        using var activity = RedStarTelemetry.ActivitySource.StartActivity("ChatSession.SendAsync", ActivityKind.Client);
+        activity?.SetTag("chat.user_text.length", userText.Length);
 
-        var responseText = new StringBuilder();
-        await foreach (var update in _agent.RunStreamingAsync(userText, _session, options: null, cancellationToken))
+        var logger = RedStarTelemetry.CreateLogger("RedStar.ChatSession");
+        var stopwatch = Stopwatch.StartNew();
+        var tags = new TagList { { "operation", "chat" } };
+
+        try
         {
-            onUpdate?.Invoke(update);
+            _session ??= await _agent.CreateSessionAsync(cancellationToken);
 
-            if (!string.IsNullOrEmpty(update.Text))
+            var responseText = new StringBuilder();
+            await foreach (var update in _agent.RunStreamingAsync(userText, _session, options: null, cancellationToken))
             {
-                onTextChunk?.Invoke(update.Text);
-                responseText.Append(update.Text);
-            }
-        }
+                onUpdate?.Invoke(update);
 
-        return responseText.ToString();
+                if (!string.IsNullOrEmpty(update.Text))
+                {
+                    onTextChunk?.Invoke(update.Text);
+                    responseText.Append(update.Text);
+                }
+            }
+
+            activity?.SetTag("chat.response.length", responseText.Length);
+            logger.LogInformation(
+                "Chat turn completed in {ElapsedMs}ms, {ResponseLength} response chars",
+                stopwatch.Elapsed.TotalMilliseconds, responseText.Length);
+
+            return responseText.ToString();
+        }
+        catch (Exception ex)
+        {
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            activity?.AddException(ex);
+            logger.LogError(ex, "Chat turn failed after {ElapsedMs}ms", stopwatch.Elapsed.TotalMilliseconds);
+            throw;
+        }
+        finally
+        {
+            RedStarTelemetry.RequestCount.Add(1, tags);
+            RedStarTelemetry.RequestDuration.Record(stopwatch.Elapsed.TotalMilliseconds, tags);
+        }
     }
 }

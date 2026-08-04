@@ -1,5 +1,7 @@
 using System.Text;
+using RedStar.Cli;
 using RedStar.Cli.Commands;
+using RedStar.Cli.Telemetry;
 using Spectre.Console.Cli;
 
 // Windows consoles default to the system codepage (rarely UTF-8), so the box-drawing characters used
@@ -33,5 +35,8 @@ app.Configure(config =>
     config.AddCommand<ModelsCommand>("models")
         .WithDescription("List models available on the server.");
 });
+
+var startupOptions = RedStarOptionsFactory.Build(endpoint: null, apiKey: null);
+using var telemetry = TelemetryBootstrapper.Configure(startupOptions);
 
 return await app.RunAsync(args, cts.Token);

@@ -3,8 +3,10 @@ using System.ClientModel.Primitives;
 using System.Text.Json;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
 using OpenAI;
 using OpenAI.Chat;
+using RedStar.Base.Telemetry;
 
 namespace RedStar.Base;
 
@@ -19,6 +21,9 @@ public static class RedStarChatClientFactory
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentException.ThrowIfNullOrEmpty(modelId);
+
+        RedStarTelemetry.CreateLogger("RedStar.RedStarChatClientFactory")
+            .LogInformation("Building chat agent for model {ModelId}", modelId);
 
         var hasApiKey = !string.IsNullOrEmpty(options.ApiKey);
 

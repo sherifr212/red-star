@@ -1,4 +1,6 @@
+using Microsoft.Extensions.Logging;
 using RedStar.Base;
+using RedStar.Base.Telemetry;
 using Spectre.Console;
 
 namespace RedStar.Cli;
@@ -9,11 +11,24 @@ internal static class ModelsCommandHandler
     /// Builds the <see cref="IModelsClient"/> to query. Defaults to a real <see cref="ModelsClient"/>;
     /// tests can substitute a fake here without touching the network.
     /// </param>
+    /// <param name="runId">
+    /// Correlation ID tagged onto this run's root OTel span (<c>run.correlation.id</c>). Falls back to the
+    /// <c>REDSTAR_RUN_ID</c> environment variable, then a generated GUID. See the identical parameter on
+    /// <see cref="ChatCommandHandler.RunAsync"/> for the full rationale.
+    /// </param>
     public static async Task<int> RunAsync(
         RedStarOptions options,
         CancellationToken cancellationToken,
-        Func<RedStarOptions, IModelsClient>? modelsClientFactory = null)
+        Func<RedStarOptions, IModelsClient>? modelsClientFactory = null,
+        string? runId = null)
     {
+        using var activity = RedStarTelemetry.ActivitySource.StartActivity("redstar.models");
+        runId ??= Environment.GetEnvironmentVariable("REDSTAR_RUN_ID") ?? Guid.NewGuid().ToString("N");
+        activity?.SetTag("run.correlation.id", runId);
+
+        var logger = RedStarTelemetry.CreateLogger("RedStar.Cli.ModelsCommandHandler");
+        logger.LogInformation("Starting redstar models run {RunId}", runId);
+
         var modelsClient = modelsClientFactory is null ? new ModelsClient(options) : modelsClientFactory(options);
         try
         {
@@ -40,6 +55,7 @@ internal static class ModelsCommandHandler
         }
         catch (Exception ex)
         {
+            logger.LogError(ex, "Run {RunId} failed to list models", runId);
             ConsoleOutput.Error.MarkupLine($"[red]Error listing models: {Markup.Escape(ex.Message)}[/]");
             return 1;
         }

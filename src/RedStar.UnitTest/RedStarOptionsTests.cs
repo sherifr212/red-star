@@ -80,6 +80,28 @@ public class RedStarOptionsTests
         Assert.True(result.WebSearchEnabled);
     }
 
+    [Fact]
+    public void Otel_DefaultsToEnabledWithLocalhostEndpoint()
+    {
+        var otel = new RedStarOptions().Otel;
+
+        Assert.True(otel.Enabled);
+        Assert.Equal("http://localhost:4317", otel.Endpoint);
+    }
+
+    [Fact]
+    public void ApplyOverrides_PreservesOtelSettings_WhichHaveNoCliOverride()
+    {
+        var original = Original();
+        original.Otel = new OtelOptions { Enabled = false, Endpoint = "http://collector:4317" };
+
+        var result = original.ApplyOverrides(
+            baseUrl: "http://override/v1", apiKey: "override-key", defaultModel: "override-model");
+
+        Assert.False(result.Otel.Enabled);
+        Assert.Equal("http://collector:4317", result.Otel.Endpoint);
+    }
+
     /// <summary>
     /// Guards against regressing to a field-by-field <c>ApplyOverrides</c> implementation that silently drops
     /// any property with no corresponding CLI override (the bug that dropped <see cref="RedStarOptions.WebSearchEnabled"/>).
@@ -101,9 +123,11 @@ public class RedStarOptionsTests
                 ? true
                 : property.PropertyType == typeof(string)
                     ? $"sample-{property.Name}"
-                    : throw new NotSupportedException(
-                        $"Add a sample value for new {nameof(RedStarOptions)} property '{property.Name}' " +
-                        $"of type {property.PropertyType} in this test.");
+                    : property.PropertyType == typeof(OtelOptions)
+                        ? new OtelOptions { Enabled = false, Endpoint = "http://sample-otel" }
+                        : throw new NotSupportedException(
+                            $"Add a sample value for new {nameof(RedStarOptions)} property '{property.Name}' " +
+                            $"of type {property.PropertyType} in this test.");
             property.SetValue(original, sampleValue);
         }
 

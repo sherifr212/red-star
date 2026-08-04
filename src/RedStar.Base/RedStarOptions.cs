@@ -20,6 +20,12 @@ public sealed class RedStarOptions
     public bool WebSearchEnabled { get; set; }
 
     /// <summary>
+    /// OpenTelemetry export settings (traces/logs/metrics to an OTLP collector, e.g. the standalone
+    /// Aspire Dashboard). Config/env-only, like <see cref="WebSearchEnabled"/> -- no CLI override.
+    /// </summary>
+    public OtelOptions Otel { get; set; } = new();
+
+    /// <summary>
     /// Returns a copy with any non-blank overrides applied, leaving unspecified ones untouched.
     /// Clones via <see cref="MemberwiseClone"/> rather than a field-by-field object initializer so that
     /// properties with no CLI override (like <see cref="WebSearchEnabled"/>) are carried over automatically
@@ -45,4 +51,14 @@ public sealed class RedStarOptions
 
         return clone;
     }
+}
+
+/// <summary>OpenTelemetry OTLP export settings. See <see cref="RedStarOptions.Otel"/>.</summary>
+public sealed class OtelOptions
+{
+    /// <summary>On by default -- points at a local OTLP collector (e.g. the Aspire Dashboard) unless disabled.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>OTLP gRPC endpoint. Default matches the Aspire Dashboard's default OTLP intake port.</summary>
+    public string Endpoint { get; set; } = "http://localhost:4317";
 }

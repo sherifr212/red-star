@@ -4,7 +4,9 @@ using System.Threading.Channels;
 using BoxOfYellow.ConsoleMarkdownRenderer.Spectre;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
 using RedStar.Base;
+using RedStar.Base.Telemetry;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 
@@ -21,14 +23,28 @@ internal static class ChatCommandHandler
     /// Builds the <see cref="IModelsClient"/> used for auto-resolving a default model. Defaults to a real
     /// <see cref="ModelsClient"/>; tests can substitute a fake here without touching the network.
     /// </param>
+    /// <param name="runId">
+    /// Correlation ID tagged onto this run's root OTel span (<c>run.correlation.id</c>). Falls back to the
+    /// <c>REDSTAR_RUN_ID</c> environment variable, then a generated GUID -- every child span created for the
+    /// rest of this call (chat turns, outbound HTTP calls) shares this run's trace ID automatically since
+    /// they're started while this method's <see cref="Activity"/> is <see cref="Activity.Current"/>.
+    /// </param>
     public static async Task<int> RunAsync(
         RedStarOptions options,
         string? oneShotPrompt,
         string? systemPrompt,
         CancellationToken cancellationToken,
         Func<RedStarOptions, string, string?, AIAgent>? agentFactory = null,
-        Func<RedStarOptions, IModelsClient>? modelsClientFactory = null)
+        Func<RedStarOptions, IModelsClient>? modelsClientFactory = null,
+        string? runId = null)
     {
+        using var activity = RedStarTelemetry.ActivitySource.StartActivity("redstar.chat");
+        runId ??= Environment.GetEnvironmentVariable("REDSTAR_RUN_ID") ?? Guid.NewGuid().ToString("N");
+        activity?.SetTag("run.correlation.id", runId);
+
+        var logger = RedStarTelemetry.CreateLogger("RedStar.Cli.ChatCommandHandler");
+        logger.LogInformation("Starting redstar chat run {RunId}", runId);
+
         agentFactory ??= static (opts, modelId, instructions) => RedStarChatClientFactory.Create(opts, modelId, instructions);
 
         if (string.IsNullOrEmpty(options.ApiKey))
@@ -42,8 +58,11 @@ internal static class ChatCommandHandler
         var modelId = await ResolveModelAsync(options, cancellationToken, modelsClientFactory);
         if (modelId is null)
         {
+            logger.LogWarning("Run {RunId} aborted: model resolution failed", runId);
             return 1;
         }
+
+        logger.LogInformation("Run {RunId} resolved model {ModelId}", runId, modelId);
 
         AIAgent agent = agentFactory(options, modelId, systemPrompt);
         var session = new ChatSession(agent);
@@ -171,6 +190,7 @@ internal static class ChatCommandHandler
         }
         catch (Exception ex)
         {
+            RedStarTelemetry.CreateLogger("RedStar.Cli.ChatCommandHandler").LogError(ex, "Error calling the model");
             ConsoleOutput.Error.MarkupLine($"\n[red]Error calling the model:[/]\n{Markup.Escape(ex.ToString())}\n");
             return 1;
         }
@@ -276,7 +296,7 @@ internal static class ChatCommandHandler
             if (isLive)
             {
                 using var gate = new SemaphoreSlim(1, 1);
-                await AnsiConsole.Live(box.Render())
+                await AnsiConsole.Live(box.Render(final: false))
                     .StartAsync(async ctx =>
                     {
                         using var tickerCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -287,7 +307,7 @@ internal static class ChatCommandHandler
                             await gate.WaitAsync();
                             try
                             {
-                                ctx.UpdateTarget(box.Render());
+                                ctx.UpdateTarget(box.Render(final: false));
                                 ctx.Refresh();
                             }
                             finally
@@ -305,7 +325,7 @@ internal static class ChatCommandHandler
                         await gate.WaitAsync();
                         try
                         {
-                            ctx.UpdateTarget(box.Render());
+                            ctx.UpdateTarget(box.Render(final: true));
                             ctx.Refresh();
                         }
                         finally
@@ -319,7 +339,7 @@ internal static class ChatCommandHandler
                 using var gate = new SemaphoreSlim(1, 1);
                 var drainResult = await DrainStageAsync(reader, box, gate, maxHeight: null, cancellationToken, onChanged: null);
                 next = drainResult.NextEvent;
-                AnsiConsole.Write(box.Render());
+                AnsiConsole.Write(box.Render(final: true));
             }
 
             if (box.Stage == TurnStage.Generating && box.HasText)
@@ -340,17 +360,19 @@ internal static class ChatCommandHandler
     /// <paramref name="maxHeight"/> (see <see cref="GetSafeBoxHeight"/> -- <c>null</c> disables this check,
     /// used for the non-live/redirected-output path where there's no console viewport to protect), or once
     /// the channel is drained with no error -- see <see cref="DrainResult"/> for how those three outcomes
-    /// are distinguished. <paramref name="gate"/> must be the same <see cref="SemaphoreSlim"/> <see cref="TickFooterAsync"/>
-    /// and the live-region redraw acquire: <see cref="StageBox.Apply"/> mutates the box's internal
-    /// <see cref="StringBuilder"/>, and <see cref="StageBox.Render"/>/<see cref="StageBox.EstimatedBodyLines"/>
-    /// read it via <c>ToString()</c> from the ticker task on a timer -- StringBuilder isn't thread-safe, so
-    /// without holding the same gate around the mutation too (not just the render/estimate calls), a concurrent
-    /// Append/ToString pair can corrupt its internal chunk list and throw
-    /// <see cref="ArgumentOutOfRangeException"/> ("chunkLength") out of <c>StringBuilder.ToString()</c>. A
-    /// <see cref="SemaphoreSlim"/> is used instead of <c>lock</c> because this method and its callers are
-    /// async: <c>lock</c>'s <c>Monitor</c> is thread-affine and can't be held across an <c>await</c>, whereas
-    /// <c>SemaphoreSlim.WaitAsync</c>/<c>Release</c> works correctly as an async-friendly mutex (count of 1)
-    /// across the awaits in <see cref="RenderStageBoxesAsync"/>'s live-region callback.</summary>
+    /// are distinguished. <paramref name="gate"/> must be the same <see cref="SemaphoreSlim"/>
+    /// <see cref="TickFooterAsync"/> and the live-region redraw acquire: <see cref="StageBox.Apply"/> mutates
+    /// the box's internal <see cref="StringBuilder"/>, and <see cref="StageBox.Render"/>/
+    /// <see cref="StageBox.EstimatedBodyLines"/> read it via <c>ToString()</c> from the ticker task on a
+    /// timer -- StringBuilder isn't thread-safe, so without holding the same gate around the mutation too
+    /// (not just the render/estimate calls), a concurrent Append/ToString pair can corrupt its internal
+    /// chunk list and throw <see cref="ArgumentOutOfRangeException"/> ("chunkLength") out of
+    /// <c>StringBuilder.ToString()</c>. A <see cref="SemaphoreSlim"/> is used instead of <c>lock</c> because
+    /// this method and its callers are async: <c>lock</c>'s <c>Monitor</c> is thread-affine and can't be held
+    /// across an <c>await</c>, whereas <c>SemaphoreSlim.WaitAsync</c>/<c>Release</c> works correctly as an
+    /// async-friendly mutex (count of 1) across the awaits in <see cref="RenderStageBoxesAsync"/>'s
+    /// live-region callback.
+    /// </summary>
     private static async Task<DrainResult> DrainStageAsync(
         ChannelReader<StageEvent> reader, StageBox box, SemaphoreSlim gate, int? maxHeight, CancellationToken cancellationToken, Func<Task>? onChanged)
     {
@@ -424,7 +446,7 @@ internal static class ChatCommandHandler
             try
             {
                 box.Tick();
-                ctx.UpdateTarget(box.Render());
+                ctx.UpdateTarget(box.Render(final: false));
                 ctx.Refresh();
             }
             finally
@@ -464,6 +486,7 @@ internal static class ChatCommandHandler
         private readonly bool _isContinuation;
         private IReadOnlyList<WebSearchResult>? _sites;
         private int _frame;
+        private string? _copyFilePath;
 
         public StageBox(TurnStage stage, Stopwatch turnStopwatch, bool isContinuation = false)
         {
@@ -512,7 +535,7 @@ internal static class ChatCommandHandler
         /// rendering oddly, so the render is wrapped below and falls back to plain escaped text for that one
         /// frame -- the next redraw, once more text has streamed in, normally parses fine.
         /// </summary>
-        public Panel Render()
+        public Panel Render(bool final)
         {
             IRenderable body;
             if (Stage == TurnStage.Generating && _text.Length > 0)
@@ -524,13 +547,31 @@ internal static class ChatCommandHandler
                 body = new Markup(string.Join("\n\n", NonGeneratingBlocks()));
             }
 
-            var footer = Align.Right(new Markup($"[grey]{Markup.Escape(ElapsedLabel())}[/]"));
+            var footerMarkup = final && HasText
+                ? $"[grey]{Markup.Escape(ElapsedLabel())}[/]  [link={EnsureCopyFileUri()}]Copy[/]"
+                : $"[grey]{Markup.Escape(ElapsedLabel())}[/]";
+            var footer = Align.Right(new Markup(footerMarkup));
             var (header, color) = StageStyle(Stage, _isContinuation);
             return new Panel(new Rows(body, footer))
                 .Header(header)
                 .RoundedBorder()
                 .BorderColor(color)
                 .Expand();
+        }
+
+        /// <summary>
+        /// Lazily writes this box's raw text to a fresh temp <c>.txt</c> file the first time a final frame
+        /// needs the "Copy" link, then reuses that same file/URI on every subsequent final render -- a box
+        /// only ever reaches <c>final: true</c> once its content has stopped changing (see the remarks on
+        /// <see cref="RenderStageBoxesAsync"/>), so writing once here is correct, not just an optimization.
+        /// <c>.txt</c> rather than <c>.md</c> so the OS has a default handler for it on virtually any
+        /// platform. No cleanup: relies on normal OS temp-directory housekeeping.
+        /// </summary>
+        private string EnsureCopyFileUri()
+        {
+            _copyFilePath ??= Path.Combine(Path.GetTempPath(), $"redstar-{Guid.NewGuid():N}.txt");
+            File.WriteAllText(_copyFilePath, _text.ToString());
+            return new Uri(_copyFilePath).AbsoluteUri;
         }
 
         /// <summary>Null on any renderer failure -- see the remarks on <see cref="Render"/> for why a

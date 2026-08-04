@@ -11,6 +11,6 @@ public sealed class ChatCommand : AsyncCommand<ChatSettings>
     protected override async Task<int> ExecuteAsync(CommandContext context, ChatSettings settings, CancellationToken cancellationToken)
     {
         var options = RedStarOptionsFactory.Build(settings.Endpoint, settings.ApiKey, settings.Model);
-        return await ChatCommandHandler.RunAsync(options, settings.Prompt, settings.System, cancellationToken);
+        return await ChatCommandHandler.RunAsync(options, settings.Prompt, settings.System, cancellationToken, runId: settings.RunId);
     }
 }

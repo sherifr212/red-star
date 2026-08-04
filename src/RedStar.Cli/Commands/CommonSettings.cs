@@ -13,4 +13,8 @@ public class CommonSettings : CommandSettings
     [CommandOption("--api-key")]
     [Description("Bearer API key for the server. Falls back to RedStar__ApiKey env var or appsettings.local.json.")]
     public string? ApiKey { get; set; }
+
+    [CommandOption("--run-id")]
+    [Description("Correlation ID tagged onto this run's OTel trace. Falls back to the REDSTAR_RUN_ID env var, then a generated GUID.")]
+    public string? RunId { get; set; }
 }
