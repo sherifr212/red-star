@@ -100,6 +100,25 @@ new instance it returns — it was dropped (silently reset to `false`) for a whi
 only copied the three overridable fields, and every CLI run rebuilds `RedStarOptions` via
 `ApplyOverrides`. See the `ApplyOverrides_PreservesWebSearchEnabled_WhichHasNoCliOverride` test.
 
+**Telemetry** (`RedStarTelemetry` in `RedStar.Base`, `TelemetryBootstrapper` in `RedStar.Cli`):
+OpenTelemetry traces, metrics, and structured logs export to an OTLP collector (e.g. the standalone
+Aspire Dashboard container) — never to the console or a file, so the boxed chat UI stays untouched.
+`RedStarTelemetry` is the ambient surface library code uses (`ActivitySource`, `Meter`, a mutable
+`ILoggerFactory` defaulting to a no-op) — it references no OTel SDK package, only BCL
+(`System.Diagnostics`) and `Microsoft.Extensions.Logging.Abstractions`, so `ActivitySource.StartActivity`
+calls return `null` harmlessly (and logging is silently dropped) in unit tests or any path that never
+runs the bootstrapper. `RedStar.Cli/Telemetry/TelemetryBootstrapper.Configure` is the *only* place the
+OTel SDK/exporter/instrumentation packages are referenced — it builds the `TracerProvider`/
+`MeterProvider`/`ILoggerFactory` from `RedStarOptions.Otel` (`Enabled`, default `true`; `Endpoint`,
+default `http://localhost:4317` — config/env-only like `WebSearchEnabled`, no CLI flag) and assigns the
+logger factory to `RedStarTelemetry.LoggerFactory`. `Program.cs` holds it in a `using` around
+`app.RunAsync` so providers flush on normal exit, an unhandled exception, or Ctrl+C. Each command
+(`chat`/`models`) opens its own root `Activity` inside `ChatCommandHandler.RunAsync`/
+`ModelsCommandHandler.RunAsync` (not in `Program.cs`, since only Spectre's parsed `CommandSettings` has
+the `--run-id` value) tagged `run.correlation.id` — from `--run-id`, else the `REDSTAR_RUN_ID` env var,
+else a generated GUID — so every child span/log for that invocation (chat turns, outbound HTTP calls
+via `AddHttpClientInstrumentation`) shares one trace ID.
+
 **No-auth mode**: `RedStarOptions.ApiKey` empty means "talk to a server with no auth" — but the
 OpenAI SDK requires a non-empty credential object, so `RedStarChatClientFactory.Create` always
 passes a placeholder credential and relies on `ConditionalAuthHandler` (a `DelegatingHandler`) to
