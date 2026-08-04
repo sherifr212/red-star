@@ -1,8 +1,12 @@
-using RedStar.Cli;
 using RedStar.Cli.Commands;
 using Spectre.Console.Cli;
 
-CliCancellation.Initialize();
+using var cts = new CancellationTokenSource();
+Console.CancelKeyPress += (_, e) =>
+{
+    e.Cancel = true;
+    cts.Cancel();
+};
 
 var app = new CommandApp<ChatCommand>();
 app.Configure(config =>
@@ -14,4 +18,4 @@ app.Configure(config =>
         .WithDescription("List models available on the server.");
 });
 
-return await app.RunAsync(args);
+return await app.RunAsync(args, cts.Token);

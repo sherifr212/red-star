@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using System.Threading.Channels;
+using BoxOfYellow.ConsoleMarkdownRenderer.Spectre;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using RedStar.Base;
@@ -236,10 +237,19 @@ internal static class ChatCommandHandler
     /// footer is "total time this request has taken so far," not "time this particular box has been open,"
     /// so it keeps counting up across stage transitions and only stops once the last box closes -- a box
     /// that finishes quickly shows the running total at that moment, not a misleadingly small "0m 0s".
+    ///
+    /// When stdout is redirected (no real console attached -- piped, `&gt; file`, a non-interactive
+    /// debugger/CI runner), <see cref="AnsiConsole.Live"/> itself is unusable: it unconditionally toggles
+    /// `Console.CursorVisible`, which throws `IOException: The handle is invalid` with no console attached
+    /// -- a known, still-open Spectre.Console bug (spectreconsole/spectre.console#1393; a maintainer there
+    /// confirms `app.exe &gt; file.txt` reproduces it). In that case each box is written once, fully formed,
+    /// when its stage ends, instead of animated in place -- no flicker/cursor tricks needed since nothing
+    /// after it gets overwritten.
     /// </summary>
     private static async Task<bool> RenderStageBoxesAsync(
         ChannelReader<StageEvent> reader, Stopwatch turnStopwatch, CancellationToken cancellationToken)
     {
+        var isLive = !Console.IsOutputRedirected;
         var hasResponseText = false;
         StageEvent? next = null;
         var isFirstBox = true;
@@ -247,65 +257,80 @@ internal static class ChatCommandHandler
         while (isFirstBox || next is not null)
         {
             var box = new StageBox(isFirstBox ? TurnStage.Other : next!.Value.Stage, turnStopwatch);
-            var sync = new object();
 
             if (!isFirstBox)
             {
                 box.Apply(next!.Value);
-                if (box.Stage == TurnStage.Generating && !string.IsNullOrEmpty(next.Value.TextDelta))
-                {
-                    hasResponseText = true;
-                }
             }
 
             isFirstBox = false;
-            next = null;
 
-            await AnsiConsole.Live(box.Render())
-                .StartAsync(async ctx =>
-                {
-                    using var tickerCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                    var ticker = TickFooterAsync(ctx, sync, box, tickerCts.Token);
-
-                    while (true)
+            if (isLive)
+            {
+                var sync = new object();
+                await AnsiConsole.Live(box.Render())
+                    .StartAsync(async ctx =>
                     {
-                        var evt = await ReadNextAsync(reader, cancellationToken);
-                        if (evt is null)
-                        {
-                            break;
-                        }
+                        using var tickerCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                        var ticker = TickFooterAsync(ctx, sync, box, tickerCts.Token);
 
-                        if (evt.Value.Stage != box.Stage)
+                        next = await DrainStageAsync(reader, box, cancellationToken, () =>
                         {
-                            next = evt;
-                            break;
-                        }
+                            lock (sync)
+                            {
+                                ctx.UpdateTarget(box.Render());
+                                ctx.Refresh();
+                            }
+                        });
+
+                        tickerCts.Cancel();
+                        await ticker;
 
                         lock (sync)
                         {
-                            box.Apply(evt.Value);
-                            if (box.Stage == TurnStage.Generating && !string.IsNullOrEmpty(evt.Value.TextDelta))
-                            {
-                                hasResponseText = true;
-                            }
-
                             ctx.UpdateTarget(box.Render());
                             ctx.Refresh();
                         }
-                    }
+                    });
+            }
+            else
+            {
+                next = await DrainStageAsync(reader, box, cancellationToken, onChanged: null);
+                AnsiConsole.Write(box.Render());
+            }
 
-                    tickerCts.Cancel();
-                    await ticker;
-
-                    lock (sync)
-                    {
-                        ctx.UpdateTarget(box.Render());
-                        ctx.Refresh();
-                    }
-                });
+            if (box.Stage == TurnStage.Generating && box.HasText)
+            {
+                hasResponseText = true;
+            }
         }
 
         return hasResponseText;
+    }
+
+    /// <summary>Applies events to <paramref name="box"/> for as long as they belong to its stage, invoking
+    /// <paramref name="onChanged"/> after each (used to redraw a live region; null when not live). Returns
+    /// the first differently-staged event once the stage ends, or null once the channel is drained with no
+    /// error.</summary>
+    private static async Task<StageEvent?> DrainStageAsync(
+        ChannelReader<StageEvent> reader, StageBox box, CancellationToken cancellationToken, Action? onChanged)
+    {
+        while (true)
+        {
+            var evt = await ReadNextAsync(reader, cancellationToken);
+            if (evt is null)
+            {
+                return null;
+            }
+
+            if (evt.Value.Stage != box.Stage)
+            {
+                return evt;
+            }
+
+            box.Apply(evt.Value);
+            onChanged?.Invoke();
+        }
     }
 
     /// <summary>Reads one event, or null once the channel is drained with no error. A producer exception
@@ -358,6 +383,19 @@ internal static class ChatCommandHandler
     {
         private static readonly Spinner Spinner = Spinner.Known.Dots;
 
+        /// <summary>
+        /// Only the <see cref="TurnStage.Generating"/> (final-answer) box renders through this for now --
+        /// see the remarks on <see cref="Render"/>. <c>Headers = []</c> turns off the library's default of
+        /// rendering a level-1 heading (<c>#</c>) as large FIGlet ASCII art, which would blow out a chat
+        /// panel's width; every heading level then falls back to the library's plain bold/underlined
+        /// <c>Header</c> style instead. <c>WrapHeader = false</c> turns off re-wrapping rendered heading
+        /// text in literal <c>#</c> characters (e.g. <c>## Title ##</c>) -- sensible for a document/pager
+        /// view where that's the only visual cue for heading level, but redundant here since the bold +
+        /// underline styling from <c>Header</c> already reads as a heading inside a chat box.
+        /// </summary>
+        private static readonly MarkdownRenderer MarkdownRenderer = new();
+        private static readonly SpectreDisplayOptions MarkdownOptions = new() { Headers = [], WrapHeader = false };
+
         private readonly StringBuilder _text = new();
         private readonly Stopwatch _stopwatch;
         private IReadOnlyList<WebSearchResult>? _sites;
@@ -370,6 +408,8 @@ internal static class ChatCommandHandler
         }
 
         public TurnStage Stage { get; }
+
+        public bool HasText => _text.Length > 0;
 
         public void Tick() => _frame++;
 
@@ -391,7 +431,41 @@ internal static class ChatCommandHandler
             }
         }
 
+        /// <summary>
+        /// The answer is plain text as far as the model is concerned, but in practice models write it as
+        /// markdown, so the <see cref="TurnStage.Generating"/> box renders it as such (headings, code
+        /// fences, tables, etc.) instead of dumping it as escaped plain text. The other stages (Reasoning,
+        /// Searching, the initial waiting box) are lower priority and still render as plain escaped text for
+        /// now -- markdown there is mostly free-form model narration or our own status/site-list lines, not
+        /// as valuable to format, and this keeps the change scoped to the one box that matters most while
+        /// that approach gets proven out. Re-parses the whole accumulated answer on every redraw (there's no
+        /// incremental markdown parser here), which means a still-open construct (an unclosed code fence, a
+        /// dangling `**`) can render oddly until enough of it has streamed in to close -- an inherent
+        /// tradeoff of rendering markdown live rather than only once the message is complete.
+        /// </summary>
         public Panel Render()
+        {
+            IRenderable body;
+            if (Stage == TurnStage.Generating && _text.Length > 0)
+            {
+                var result = MarkdownRenderer.Render(_text.ToString(), MarkdownOptions);
+                body = result.Root ?? new Markup(Markup.Escape(_text.ToString()));
+            }
+            else
+            {
+                body = new Markup(string.Join("\n\n", NonGeneratingBlocks()));
+            }
+
+            var footer = Align.Right(new Markup($"[grey]{Markup.Escape(ElapsedLabel())}[/]"));
+            var (header, color) = StageStyle(Stage);
+            return new Panel(new Rows(body, footer))
+                .Header(header)
+                .RoundedBorder()
+                .BorderColor(color)
+                .Expand();
+        }
+
+        private List<string> NonGeneratingBlocks()
         {
             var blocks = new List<string>();
 
@@ -419,14 +493,7 @@ internal static class ChatCommandHandler
                 blocks.Add(" ");
             }
 
-            IRenderable body = new Markup(string.Join("\n\n", blocks));
-            var footer = Align.Right(new Markup($"[grey]{Markup.Escape(ElapsedLabel())}[/]"));
-            var (header, color) = StageStyle(Stage);
-            return new Panel(new Rows(body, footer))
-                .Header(header)
-                .RoundedBorder()
-                .BorderColor(color)
-                .Expand();
+            return blocks;
         }
 
         private string ElapsedLabel()

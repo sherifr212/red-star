@@ -4,9 +4,9 @@ namespace RedStar.Cli.Commands;
 
 public sealed class ModelsCommand : AsyncCommand<CommonSettings>
 {
-    public override async Task<int> ExecuteAsync(CommandContext context, CommonSettings settings)
+    protected override async Task<int> ExecuteAsync(CommandContext context, CommonSettings settings, CancellationToken cancellationToken)
     {
         var options = RedStarOptionsFactory.Build(settings.Endpoint, settings.ApiKey);
-        return await ModelsCommandHandler.RunAsync(options, CliCancellation.Token);
+        return await ModelsCommandHandler.RunAsync(options, cancellationToken);
     }
 }

@@ -68,9 +68,10 @@ Spectre.Console.Cli. `RedStarOptionsFactory.Build` centralizes the `appsettings.
 both commands call it instead of duplicating it. `ConsoleOutput.Error` is a markup-capable
 `IAnsiConsole` pointed at stderr (`AnsiConsole`'s default console only writes stdout), used for
 every warning/error message so streamed model output and error text can't interleave on the same
-stream. `CliCancellation` hooks `Ctrl+C` once at startup and exposes a `CancellationToken`,
-replacing the wiring System.CommandLine used to pass into action delegates automatically —
-Spectre.Console.Cli's `AsyncCommand.ExecuteAsync` has no `CancellationToken` parameter of its own.
+stream. `Program.cs` hooks `Ctrl+C` into a `CancellationTokenSource` once at startup and passes its
+token into `app.RunAsync(args, token)`; Spectre.Console.Cli (0.55.0+) forwards that same token into
+every `AsyncCommand<T>.ExecuteAsync`'s `CancellationToken` parameter automatically, so commands
+don't need their own cancellation wiring.
 
 **Interactive chat rendering** (`ChatCommandHandler`): user and assistant turns are drawn as boxed
 panels, not plain `Console.Write`. A typed line gets an open "You" box (`ReadUserMessageBoxed`
