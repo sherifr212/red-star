@@ -21,14 +21,28 @@ public sealed class RedStarOptions
 
     /// <summary>
     /// Returns a copy with any non-blank overrides applied, leaving unspecified ones untouched.
+    /// Clones via <see cref="MemberwiseClone"/> rather than a field-by-field object initializer so that
+    /// properties with no CLI override (like <see cref="WebSearchEnabled"/>) are carried over automatically
+    /// instead of silently resetting to their default whenever a new property is added to this class.
     /// </summary>
     public RedStarOptions ApplyOverrides(string? baseUrl = null, string? apiKey = null, string? defaultModel = null)
     {
-        return new RedStarOptions
+        var clone = (RedStarOptions)MemberwiseClone();
+        if (!string.IsNullOrWhiteSpace(baseUrl))
         {
-            BaseUrl = string.IsNullOrWhiteSpace(baseUrl) ? BaseUrl : baseUrl,
-            ApiKey = string.IsNullOrWhiteSpace(apiKey) ? ApiKey : apiKey,
-            DefaultModel = string.IsNullOrWhiteSpace(defaultModel) ? DefaultModel : defaultModel,
-        };
+            clone.BaseUrl = baseUrl;
+        }
+
+        if (!string.IsNullOrWhiteSpace(apiKey))
+        {
+            clone.ApiKey = apiKey;
+        }
+
+        if (!string.IsNullOrWhiteSpace(defaultModel))
+        {
+            clone.DefaultModel = defaultModel;
+        }
+
+        return clone;
     }
 }

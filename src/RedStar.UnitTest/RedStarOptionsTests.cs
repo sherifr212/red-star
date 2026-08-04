@@ -69,6 +69,53 @@ public class RedStarOptionsTests
     }
 
     [Fact]
+    public void ApplyOverrides_PreservesWebSearchEnabled_WhichHasNoCliOverride()
+    {
+        var original = Original();
+        original.WebSearchEnabled = true;
+
+        var result = original.ApplyOverrides(
+            baseUrl: "http://override/v1", apiKey: "override-key", defaultModel: "override-model");
+
+        Assert.True(result.WebSearchEnabled);
+    }
+
+    /// <summary>
+    /// Guards against regressing to a field-by-field <c>ApplyOverrides</c> implementation that silently drops
+    /// any property with no corresponding CLI override (the bug that dropped <see cref="RedStarOptions.WebSearchEnabled"/>).
+    /// Walks every public settable property via reflection instead of naming them, so a future property added
+    /// to <see cref="RedStarOptions"/> is covered automatically without anyone remembering to update this test.
+    /// </summary>
+    [Fact]
+    public void ApplyOverrides_PreservesEveryProperty_WhenCalledWithNoOverrides()
+    {
+        var original = new RedStarOptions();
+        var properties = typeof(RedStarOptions).GetProperties()
+            .Where(p => p.CanRead && p.CanWrite)
+            .ToArray();
+        Assert.NotEmpty(properties);
+
+        foreach (var property in properties)
+        {
+            object sampleValue = property.PropertyType == typeof(bool)
+                ? true
+                : property.PropertyType == typeof(string)
+                    ? $"sample-{property.Name}"
+                    : throw new NotSupportedException(
+                        $"Add a sample value for new {nameof(RedStarOptions)} property '{property.Name}' " +
+                        $"of type {property.PropertyType} in this test.");
+            property.SetValue(original, sampleValue);
+        }
+
+        var result = original.ApplyOverrides();
+
+        foreach (var property in properties)
+        {
+            Assert.Equal(property.GetValue(original), property.GetValue(result));
+        }
+    }
+
+    [Fact]
     public void ApplyOverrides_DoesNotMutateTheOriginalInstance()
     {
         var original = Original();
