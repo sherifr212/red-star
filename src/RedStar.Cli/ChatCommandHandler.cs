@@ -263,35 +263,46 @@ internal static class ChatCommandHandler
 
             if (isLive)
             {
-                var sync = new object();
+                using var gate = new SemaphoreSlim(1, 1);
                 await AnsiConsole.Live(box.Render())
                     .StartAsync(async ctx =>
                     {
                         using var tickerCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                        var ticker = TickFooterAsync(ctx, sync, box, tickerCts.Token);
+                        var ticker = TickFooterAsync(ctx, gate, box, tickerCts.Token);
 
-                        next = await DrainStageAsync(reader, box, cancellationToken, () =>
+                        next = await DrainStageAsync(reader, box, gate, cancellationToken, async () =>
                         {
-                            lock (sync)
+                            await gate.WaitAsync();
+                            try
                             {
                                 ctx.UpdateTarget(box.Render());
                                 ctx.Refresh();
+                            }
+                            finally
+                            {
+                                gate.Release();
                             }
                         });
 
                         tickerCts.Cancel();
                         await ticker;
 
-                        lock (sync)
+                        await gate.WaitAsync();
+                        try
                         {
                             ctx.UpdateTarget(box.Render());
                             ctx.Refresh();
+                        }
+                        finally
+                        {
+                            gate.Release();
                         }
                     });
             }
             else
             {
-                next = await DrainStageAsync(reader, box, cancellationToken, onChanged: null);
+                using var gate = new SemaphoreSlim(1, 1);
+                next = await DrainStageAsync(reader, box, gate, cancellationToken, onChanged: null);
                 AnsiConsole.Write(box.Render());
             }
 
@@ -307,9 +318,19 @@ internal static class ChatCommandHandler
     /// <summary>Applies events to <paramref name="box"/> for as long as they belong to its stage, invoking
     /// <paramref name="onChanged"/> after each (used to redraw a live region; null when not live). Returns
     /// the first differently-staged event once the stage ends, or null once the channel is drained with no
-    /// error.</summary>
+    /// error. <paramref name="gate"/> must be the same <see cref="SemaphoreSlim"/> <see cref="TickFooterAsync"/>
+    /// and the live-region redraw acquire: <see cref="StageBox.Apply"/> mutates the box's internal
+    /// <see cref="StringBuilder"/>, and <see cref="StageBox.Render"/> reads it via <c>ToString()</c> from the
+    /// ticker task on a timer -- StringBuilder isn't thread-safe, so without holding the same gate around the
+    /// mutation too (not just the render calls), a concurrent Append/ToString pair can corrupt its internal
+    /// chunk list and throw <see cref="ArgumentOutOfRangeException"/> ("chunkLength") out of
+    /// <c>StringBuilder.ToString()</c>. A <see cref="SemaphoreSlim"/> is used instead of <c>lock</c> because
+    /// this method and its callers are async: <c>lock</c>'s <c>Monitor</c> is thread-affine and can't be held
+    /// across an <c>await</c>, whereas <c>SemaphoreSlim.WaitAsync</c>/<c>Release</c> works correctly as an
+    /// async-friendly mutex (count of 1) across the awaits in <see cref="RenderStageBoxesAsync"/>'s
+    /// live-region callback.</summary>
     private static async Task<StageEvent?> DrainStageAsync(
-        ChannelReader<StageEvent> reader, StageBox box, CancellationToken cancellationToken, Action? onChanged)
+        ChannelReader<StageEvent> reader, StageBox box, SemaphoreSlim gate, CancellationToken cancellationToken, Func<Task>? onChanged)
     {
         while (true)
         {
@@ -324,8 +345,20 @@ internal static class ChatCommandHandler
                 return evt;
             }
 
-            box.Apply(evt.Value);
-            onChanged?.Invoke();
+            await gate.WaitAsync();
+            try
+            {
+                box.Apply(evt.Value);
+            }
+            finally
+            {
+                gate.Release();
+            }
+
+            if (onChanged is not null)
+            {
+                await onChanged();
+            }
         }
     }
 
@@ -344,8 +377,10 @@ internal static class ChatCommandHandler
     }
 
     /// <summary>Redraws a box's footer once a second for as long as its <see cref="AnsiConsole.Live"/> region
-    /// stays open, so the elapsed-time counter keeps ticking between content updates, not just because of them.</summary>
-    private static async Task TickFooterAsync(LiveDisplayContext ctx, object sync, StageBox box, CancellationToken cancellationToken)
+    /// stays open, so the elapsed-time counter keeps ticking between content updates, not just because of
+    /// them. Shares <paramref name="gate"/> with <see cref="DrainStageAsync"/> and the live-region redraw --
+    /// see the remarks there for why a <see cref="SemaphoreSlim"/> guards this instead of <c>lock</c>.</summary>
+    private static async Task TickFooterAsync(LiveDisplayContext ctx, SemaphoreSlim gate, StageBox box, CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -358,11 +393,16 @@ internal static class ChatCommandHandler
                 break;
             }
 
-            lock (sync)
+            await gate.WaitAsync();
+            try
             {
                 box.Tick();
                 ctx.UpdateTarget(box.Render());
                 ctx.Refresh();
+            }
+            finally
+            {
+                gate.Release();
             }
         }
     }
