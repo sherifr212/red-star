@@ -63,6 +63,12 @@ public class RedStarOptionsTests
     }
 
     [Fact]
+    public void WebSearchEnabled_DefaultsToFalse()
+    {
+        Assert.False(new RedStarOptions().WebSearchEnabled);
+    }
+
+    [Fact]
     public void ApplyOverrides_DoesNotMutateTheOriginalInstance()
     {
         var original = Original();

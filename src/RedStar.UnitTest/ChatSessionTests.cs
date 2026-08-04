@@ -106,4 +106,29 @@ public class ChatSessionTests
 
         await Assert.ThrowsAsync<ArgumentNullException>(() => session.SendAsync(null!));
     }
+
+    [Fact]
+    public async Task SendAsync_PassesProvidedChatOptions_ToTheChatClient()
+    {
+        var session = new ChatSession();
+        session.AddUserMessage("hi");
+        var client = new FakeChatClient("ok");
+        var options = new ChatOptions { ModelId = "explicit-model" };
+
+        await session.SendAsync(client, options);
+
+        Assert.Same(options, client.LastOptions);
+    }
+
+    [Fact]
+    public async Task SendAsync_PassesNullChatOptions_WhenNoneProvided()
+    {
+        var session = new ChatSession();
+        session.AddUserMessage("hi");
+        var client = new FakeChatClient("ok");
+
+        await session.SendAsync(client);
+
+        Assert.Null(client.LastOptions);
+    }
 }

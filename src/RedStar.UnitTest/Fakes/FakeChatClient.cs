@@ -8,6 +8,8 @@ internal sealed class FakeChatClient : IChatClient
 
     public IReadOnlyList<ChatMessage>? LastMessages { get; private set; }
 
+    public ChatOptions? LastOptions { get; private set; }
+
     public FakeChatClient(params string[] textChunks)
         : this(_ => StreamChunks(textChunks))
     {
@@ -42,6 +44,7 @@ internal sealed class FakeChatClient : IChatClient
         IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
     {
         LastMessages = messages.ToList();
+        LastOptions = options;
         return _respond(messages);
     }
 
