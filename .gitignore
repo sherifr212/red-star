@@ -57,4 +57,4 @@ TestResult.xml
 nunit-*.xml
 
 # Project-specific
-appsettings*.json
+appsettings.Production.json
