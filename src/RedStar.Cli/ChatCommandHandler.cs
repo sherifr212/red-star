@@ -279,15 +279,11 @@ internal static class ChatCommandHandler
         var isFirstBox = true;
         var isContinuation = false;
         var lastStage = TurnStage.Other;
-        string? chainCopyFilePath = null;
-        var chainText = string.Empty;
 
         while (isFirstBox || next is not null || isContinuation)
         {
             var stage = isFirstBox ? TurnStage.Other : isContinuation ? lastStage : next!.Value.Stage;
-            var box = new StageBox(
-                stage, turnStopwatch, isContinuation,
-                isContinuation ? chainCopyFilePath : null, isContinuation ? chainText : "");
+            var box = new StageBox(stage, turnStopwatch, isContinuation);
 
             if (!isFirstBox && !isContinuation)
             {
@@ -349,17 +345,6 @@ internal static class ChatCommandHandler
             if (box.Stage == TurnStage.Generating && box.HasText)
             {
                 hasResponseText = true;
-            }
-
-            if (splitForHeight)
-            {
-                chainCopyFilePath = box.CopyFilePath;
-                chainText += box.Text;
-            }
-            else
-            {
-                chainCopyFilePath = null;
-                chainText = string.Empty;
             }
 
             lastStage = box.Stage;
@@ -499,44 +484,20 @@ internal static class ChatCommandHandler
         private readonly StringBuilder _text = new();
         private readonly Stopwatch _stopwatch;
         private readonly bool _isContinuation;
-        private readonly string _priorChainText;
         private IReadOnlyList<WebSearchResult>? _sites;
         private int _frame;
         private string? _copyFilePath;
 
-        /// <param name="sharedCopyFilePath">
-        /// The previous box's <see cref="CopyFilePath"/> when this box is a same-stage "(cont'd)"
-        /// continuation, so this box's own <see cref="EnsureCopyFileUri"/> reuses that same temp file
-        /// instead of minting a new one -- see the remarks there for why the whole chain needs to share
-        /// one file/link.
-        /// </param>
-        /// <param name="priorChainText">Every earlier continuation box's full text, in order, for a
-        /// continuation chain -- concatenated with this box's own text when (re)writing the shared copy
-        /// file. Empty for a non-continuation (first-in-chain) box.</param>
-        public StageBox(
-            TurnStage stage, Stopwatch turnStopwatch, bool isContinuation = false,
-            string? sharedCopyFilePath = null, string priorChainText = "")
+        public StageBox(TurnStage stage, Stopwatch turnStopwatch, bool isContinuation = false)
         {
             Stage = stage;
             _stopwatch = turnStopwatch;
             _isContinuation = isContinuation;
-            _copyFilePath = sharedCopyFilePath;
-            _priorChainText = priorChainText;
         }
 
         public TurnStage Stage { get; }
 
         public bool HasText => _text.Length > 0;
-
-        /// <summary>This box's own accumulated text (not including any earlier continuation box's text in
-        /// the same chain) -- read by the caller once this box seals, to build the next continuation box's
-        /// <c>priorChainText</c>.</summary>
-        public string Text => _text.ToString();
-
-        /// <summary>Set once <see cref="EnsureCopyFileUri"/> has run (i.e. once this box has rendered a
-        /// final frame with text); otherwise null. Read by the caller once this box seals, to hand to the
-        /// next same-stage continuation box as <c>sharedCopyFilePath</c>.</summary>
-        public string? CopyFilePath => _copyFilePath;
 
         public void Tick() => _frame++;
 
@@ -587,7 +548,7 @@ internal static class ChatCommandHandler
             }
 
             var footerMarkup = final && HasText
-                ? $"[grey]{Markup.Escape(ElapsedLabel())}[/]  [link={EnsureCopyFileUri()}]Copy[/] [grey]({Markup.Escape(_copyFilePath!)})[/]"
+                ? $"[grey]{Markup.Escape(ElapsedLabel())}[/]  [link={EnsureCopyFileUri()}]Copy[/]"
                 : $"[grey]{Markup.Escape(ElapsedLabel())}[/]";
             var footer = Align.Right(new Markup(footerMarkup));
             var (header, color) = StageStyle(Stage, _isContinuation);
@@ -599,23 +560,17 @@ internal static class ChatCommandHandler
         }
 
         /// <summary>
-        /// Lazily writes this chain's full text (<see cref="_priorChainText"/> plus this box's own) to a
-        /// temp <c>.txt</c> file the first time a final frame needs the "Copy" link. A same-stage "(cont'd)"
-        /// continuation box is constructed with the previous box's <see cref="CopyFilePath"/> as
-        /// <c>sharedCopyFilePath</c>, so it overwrites that same file with the combined text instead of
-        /// minting a new one per box -- otherwise every continuation box's Copy link pointed at only its own
-        /// fragment, not the whole logical message the height-based split cut into pieces. Because every box
-        /// in the chain shares one path/URI, even a link an earlier, already-sealed box printed still
-        /// resolves to the complete text once the chain finishes and this method's last call overwrites the
-        /// file. A box only ever reaches <c>final: true</c> once its content has stopped changing (see the
-        /// remarks on <see cref="RenderStageBoxesAsync"/>), so writing once per box here is correct, not just
-        /// an optimization. <c>.txt</c> rather than <c>.md</c> so the OS has a default handler for it on
-        /// virtually any platform. No cleanup: relies on normal OS temp-directory housekeeping.
+        /// Lazily writes this box's raw text to a fresh temp <c>.txt</c> file the first time a final frame
+        /// needs the "Copy" link, then reuses that same file/URI on every subsequent final render -- a box
+        /// only ever reaches <c>final: true</c> once its content has stopped changing (see the remarks on
+        /// <see cref="RenderStageBoxesAsync"/>), so writing once here is correct, not just an optimization.
+        /// <c>.txt</c> rather than <c>.md</c> so the OS has a default handler for it on virtually any
+        /// platform. No cleanup: relies on normal OS temp-directory housekeeping.
         /// </summary>
         private string EnsureCopyFileUri()
         {
             _copyFilePath ??= Path.Combine(Path.GetTempPath(), $"redstar-{Guid.NewGuid():N}.txt");
-            File.WriteAllText(_copyFilePath, _priorChainText + _text);
+            File.WriteAllText(_copyFilePath, _text.ToString());
             return new Uri(_copyFilePath).AbsoluteUri;
         }
 
