@@ -1,20 +1,39 @@
+using System.Diagnostics;
+using System.Text;
+using System.Threading.Channels;
+using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using RedStar.Base;
+using Spectre.Console;
+using Spectre.Console.Rendering;
 
 namespace RedStar.Cli;
 
 internal static class ChatCommandHandler
 {
+    /// <param name="agentFactory">
+    /// Builds the <see cref="AIAgent"/> to chat with, given (options, modelId, instructions). Defaults to
+    /// <see cref="RedStarChatClientFactory.Create"/>; tests can substitute a fake here without touching the
+    /// network.
+    /// </param>
+    /// <param name="modelsClientFactory">
+    /// Builds the <see cref="IModelsClient"/> used for auto-resolving a default model. Defaults to a real
+    /// <see cref="ModelsClient"/>; tests can substitute a fake here without touching the network.
+    /// </param>
     public static async Task<int> RunAsync(
         RedStarOptions options,
         string? oneShotPrompt,
         string? systemPrompt,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<RedStarOptions, string, string?, AIAgent>? agentFactory = null,
+        Func<RedStarOptions, IModelsClient>? modelsClientFactory = null)
     {
+        agentFactory ??= static (opts, modelId, instructions) => RedStarChatClientFactory.Create(opts, modelId, instructions);
+
         if (string.IsNullOrEmpty(options.ApiKey))
         {
-            Console.Error.WriteLine(
-                "Warning: no API key configured. Unsloth Studio requires a bearer token for /v1 calls.\n" +
+            ConsoleOutput.Error.MarkupLine(
+                "[yellow]Warning: no API key configured.[/] Unsloth Studio requires a bearer token for /v1 calls.\n" +
                 "Generate one from the Unsloth Studio UI (Settings -> API Keys), then set it via\n" +
                 "--api-key, the RedStar__ApiKey environment variable, or appsettings.local.json.\n");
         }
@@ -22,32 +41,28 @@ internal static class ChatCommandHandler
         var modelId = options.DefaultModel;
         if (string.IsNullOrEmpty(modelId))
         {
-            modelId = await ResolveDefaultModelAsync(options, cancellationToken);
+            modelId = await ResolveDefaultModelAsync(options, cancellationToken, modelsClientFactory);
             if (modelId is null)
             {
                 return 1;
             }
         }
 
-        IChatClient chatClient = RedStarChatClientFactory.Create(options, modelId);
-        var chatOptions = RedStarChatClientFactory.CreateChatOptions(options);
-        var session = new ChatSession();
-        if (!string.IsNullOrWhiteSpace(systemPrompt))
-        {
-            session.AddSystemPrompt(systemPrompt);
-        }
+        AIAgent agent = agentFactory(options, modelId, systemPrompt);
+        var session = new ChatSession(agent);
 
         if (!string.IsNullOrWhiteSpace(oneShotPrompt))
         {
-            session.AddUserMessage(oneShotPrompt);
-            return await SendAndPrintAsync(session, chatClient, chatOptions, cancellationToken);
+            PrintUserMessageBox(oneShotPrompt);
+            return await SendAndPrintAsync(session, oneShotPrompt, cancellationToken);
         }
 
-        Console.WriteLine($"RedStar chat - model '{modelId}'. Type 'exit' or press Ctrl+C to quit.");
+        AnsiConsole.MarkupLine(
+            $"[bold]RedStar chat[/] - model '[green]{Markup.Escape(modelId)}[/]'. Type 'exit' or press Ctrl+C to quit.");
         while (!cancellationToken.IsCancellationRequested)
         {
-            Console.Write("\nyou> ");
-            var line = Console.ReadLine();
+            AnsiConsole.WriteLine();
+            var line = ReadUserMessageBoxed();
             if (line is null)
             {
                 break;
@@ -65,9 +80,7 @@ internal static class ChatCommandHandler
                 continue;
             }
 
-            session.AddUserMessage(line);
-            Console.Write("assistant> ");
-            var exitCode = await SendAndPrintAsync(session, chatClient, chatOptions, cancellationToken);
+            var exitCode = await SendAndPrintAsync(session, line, cancellationToken);
             if (exitCode != 0)
             {
                 return exitCode;
@@ -77,42 +90,407 @@ internal static class ChatCommandHandler
         return 0;
     }
 
-    private static async Task<int> SendAndPrintAsync(
-        ChatSession session, IChatClient chatClient, ChatOptions? chatOptions, CancellationToken cancellationToken)
+    /// <summary>
+    /// Draws an open "You" box (top border, then a "&gt; " prompt on the unclosed line) and reads one line
+    /// with the console's normal line editor, then closes the box with a bottom border -- so the same box
+    /// frames both the typing area and, once Enter is pressed, the submitted message.
+    /// </summary>
+    private static string? ReadUserMessageBoxed()
     {
+        var width = GetBoxWidth();
+        PrintBoxTopBorder(width, "You", Color.Cyan1);
+        AnsiConsole.Markup($"[{Color.Cyan1.ToMarkup()}]│[/] > ");
+        var line = Console.ReadLine();
+        PrintBoxBottomBorder(width, Color.Cyan1);
+        return line;
+    }
+
+    /// <summary>Prints a closed "You" box around a message that wasn't typed interactively (the one-shot prompt).</summary>
+    private static void PrintUserMessageBox(string text)
+    {
+        var panel = new Panel(Markup.Escape(text))
+            .Header("[cyan]You[/]")
+            .RoundedBorder()
+            .BorderColor(Color.Cyan1)
+            .Expand();
+        AnsiConsole.Write(panel);
+    }
+
+    /// <summary>
+    /// One leg of a turn's lifecycle. Each is its own sealed-in-place box once the turn moves past it --
+    /// see the "Multi-box rendering" remarks on <see cref="RenderStageBoxesAsync"/>. <see cref="Other"/> is
+    /// the initial "nothing has happened yet" box every turn opens with, and doubles as the fallback for any
+    /// future update shape this switch doesn't recognize; it never appears for a reason a user would
+    /// otherwise see labeled, which is why it gets the deliberately-odd grey rather than one of the other
+    /// three's saturated colors.
+    /// </summary>
+    private enum TurnStage
+    {
+        Other,
+        Reasoning,
+        Searching,
+        Generating,
+    }
+
+    /// <summary>One piece of one stage's content: either a text delta to append, or a completed site list.</summary>
+    private readonly record struct StageEvent(TurnStage Stage, string? TextDelta, IReadOnlyList<WebSearchResult>? Sites);
+
+    private static async Task<int> SendAndPrintAsync(
+        ChatSession session, string userText, CancellationToken cancellationToken)
+    {
+        var channel = Channel.CreateUnbounded<StageEvent>(new UnboundedChannelOptions
+        {
+            SingleReader = true,
+            SingleWriter = true,
+        });
+
+        var producer = ProduceStageEventsAsync(session, userText, channel.Writer, cancellationToken);
+        var turnStopwatch = Stopwatch.StartNew();
+
         try
         {
-            await session.SendAsync(chatClient, chatOptions, onTextChunk: Console.Write, cancellationToken: cancellationToken);
-            Console.WriteLine();
+            var hasResponseText = await RenderStageBoxesAsync(channel.Reader, turnStopwatch, cancellationToken);
+            await producer; // never faults -- ProduceStageEventsAsync catches everything -- just observed for hygiene.
+
+            AnsiConsole.WriteLine();
+
+            if (!hasResponseText)
+            {
+                ConsoleOutput.Error.MarkupLine(
+                    "[yellow]The model returned no response.[/] This can happen when a server-side tool call " +
+                    "(e.g. web search) fails and the server drops the connection instead of finishing the reply. " +
+                    "Try again or rephrase the prompt.\n");
+            }
+
             return 0;
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"\nError calling the model: {ex.Message}");
+            ConsoleOutput.Error.MarkupLine($"\n[red]Error calling the model: {Markup.Escape(ex.Message)}[/]");
             return 1;
         }
     }
 
-    private static async Task<string?> ResolveDefaultModelAsync(RedStarOptions options, CancellationToken cancellationToken)
+    /// <summary>
+    /// Drives the streamed turn and translates it into <see cref="StageEvent"/>s on <paramref name="writer"/>:
+    /// reasoning text from <see cref="TextReasoningContent"/>, Unsloth tool-status labels and completed
+    /// web-search hit lists via <see cref="RedStarChatClientFactory"/>'s raw-JSON extractors, and the final
+    /// answer's text chunks. Runs concurrently with <see cref="RenderStageBoxesAsync"/> so the UI can start
+    /// drawing a stage's box as soon as that stage's first event lands, rather than after the whole turn
+    /// completes. Completes the channel (successfully or with the caught exception) when
+    /// <see cref="ChatSession.SendAsync"/> returns or throws, which is how the reader side learns the turn is
+    /// over.
+    /// </summary>
+    private static async Task ProduceStageEventsAsync(
+        ChatSession session, string userText, ChannelWriter<StageEvent> writer, CancellationToken cancellationToken)
     {
         try
         {
-            using var modelsClient = new ModelsClient(options);
-            var models = await modelsClient.ListAsync(cancellationToken);
-            var selected = ModelSelector.SelectDefault(models, configuredDefault: null);
-            if (selected is null)
-            {
-                Console.Error.WriteLine("No models are available on the server. Load one in Unsloth Studio first.");
-                return null;
-            }
+            await session.SendAsync(
+                userText,
+                onTextChunk: chunk => writer.TryWrite(new StageEvent(TurnStage.Generating, chunk, null)),
+                onUpdate: update =>
+                {
+                    foreach (var content in update.Contents)
+                    {
+                        if (content is TextReasoningContent { Text.Length: > 0 } reasoning)
+                        {
+                            writer.TryWrite(new StageEvent(TurnStage.Reasoning, reasoning.Text, null));
+                        }
+                    }
 
-            return selected.Id;
+                    var status = RedStarChatClientFactory.TryGetToolStatus(update);
+                    if (status is not null)
+                    {
+                        writer.TryWrite(new StageEvent(TurnStage.Searching, status, null));
+                    }
+
+                    var sites = RedStarChatClientFactory.TryGetWebSearchResults(update);
+                    if (sites is { Count: > 0 })
+                    {
+                        writer.TryWrite(new StageEvent(TurnStage.Searching, null, sites));
+                    }
+                },
+                cancellationToken: cancellationToken);
+
+            writer.Complete();
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine(
-                $"Could not auto-detect a model ({ex.Message}). Pass --model explicitly or run 'redstar models'.");
+            writer.Complete(ex);
+        }
+    }
+
+    /// <summary>
+    /// Multi-box rendering: rather than one panel that gets overwritten as the turn moves through phases,
+    /// each run of same-stage events gets its own <see cref="AnsiConsole.Live"/> region, colored by
+    /// <see cref="StageBox"/>'s stage-to-color mapping. Once a differently-staged event arrives, the current
+    /// region's <c>StartAsync</c> delegate returns -- which leaves that box's last rendered frame on the
+    /// terminal permanently (Spectre doesn't erase a completed Live region) -- and a new one opens for the
+    /// new stage, seeded with the event that triggered the switch. The very first box is always
+    /// <see cref="TurnStage.Other"/> (a plain waiting spinner), which closes the instant the first real event
+    /// arrives, same as any other stage transition. Returns whether any <see cref="TurnStage.Generating"/>
+    /// text was ever seen, for the caller's empty-response check.
+    ///
+    /// <paramref name="turnStopwatch"/> is shared across every box rather than each starting its own: the
+    /// footer is "total time this request has taken so far," not "time this particular box has been open,"
+    /// so it keeps counting up across stage transitions and only stops once the last box closes -- a box
+    /// that finishes quickly shows the running total at that moment, not a misleadingly small "0m 0s".
+    /// </summary>
+    private static async Task<bool> RenderStageBoxesAsync(
+        ChannelReader<StageEvent> reader, Stopwatch turnStopwatch, CancellationToken cancellationToken)
+    {
+        var hasResponseText = false;
+        StageEvent? next = null;
+        var isFirstBox = true;
+
+        while (isFirstBox || next is not null)
+        {
+            var box = new StageBox(isFirstBox ? TurnStage.Other : next!.Value.Stage, turnStopwatch);
+            var sync = new object();
+
+            if (!isFirstBox)
+            {
+                box.Apply(next!.Value);
+                if (box.Stage == TurnStage.Generating && !string.IsNullOrEmpty(next.Value.TextDelta))
+                {
+                    hasResponseText = true;
+                }
+            }
+
+            isFirstBox = false;
+            next = null;
+
+            await AnsiConsole.Live(box.Render())
+                .StartAsync(async ctx =>
+                {
+                    using var tickerCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    var ticker = TickFooterAsync(ctx, sync, box, tickerCts.Token);
+
+                    while (true)
+                    {
+                        var evt = await ReadNextAsync(reader, cancellationToken);
+                        if (evt is null)
+                        {
+                            break;
+                        }
+
+                        if (evt.Value.Stage != box.Stage)
+                        {
+                            next = evt;
+                            break;
+                        }
+
+                        lock (sync)
+                        {
+                            box.Apply(evt.Value);
+                            if (box.Stage == TurnStage.Generating && !string.IsNullOrEmpty(evt.Value.TextDelta))
+                            {
+                                hasResponseText = true;
+                            }
+
+                            ctx.UpdateTarget(box.Render());
+                            ctx.Refresh();
+                        }
+                    }
+
+                    tickerCts.Cancel();
+                    await ticker;
+
+                    lock (sync)
+                    {
+                        ctx.UpdateTarget(box.Render());
+                        ctx.Refresh();
+                    }
+                });
+        }
+
+        return hasResponseText;
+    }
+
+    /// <summary>Reads one event, or null once the channel is drained with no error. A producer exception
+    /// propagates as-is (not wrapped) so the caller's try/catch reports the real failure.</summary>
+    private static async ValueTask<StageEvent?> ReadNextAsync(ChannelReader<StageEvent> reader, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await reader.ReadAsync(cancellationToken);
+        }
+        catch (ChannelClosedException)
+        {
             return null;
         }
+    }
+
+    /// <summary>Redraws a box's footer once a second for as long as its <see cref="AnsiConsole.Live"/> region
+    /// stays open, so the elapsed-time counter keeps ticking between content updates, not just because of them.</summary>
+    private static async Task TickFooterAsync(LiveDisplayContext ctx, object sync, StageBox box, CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+
+            lock (sync)
+            {
+                box.Tick();
+                ctx.UpdateTarget(box.Render());
+                ctx.Refresh();
+            }
+        }
+    }
+
+    /// <summary>
+    /// One sealed-in-place box: its own accumulated text and a stage-specific header/border color, but the
+    /// elapsed-time footer reads a <see cref="Stopwatch"/> shared across every box in the turn -- see the
+    /// remarks on <see cref="RenderStageBoxesAsync"/> for why. <see cref="TurnStage.Searching"/> status
+    /// labels (e.g. "Searching: current year", then later "Reading: some-site.com") are kept as separate
+    /// lines rather than concatenated, since each is a standalone label, not a token-by-token delta like
+    /// reasoning/answer text is.
+    /// </summary>
+    private sealed class StageBox
+    {
+        private static readonly Spinner Spinner = Spinner.Known.Dots;
+
+        private readonly StringBuilder _text = new();
+        private readonly Stopwatch _stopwatch;
+        private IReadOnlyList<WebSearchResult>? _sites;
+        private int _frame;
+
+        public StageBox(TurnStage stage, Stopwatch turnStopwatch)
+        {
+            Stage = stage;
+            _stopwatch = turnStopwatch;
+        }
+
+        public TurnStage Stage { get; }
+
+        public void Tick() => _frame++;
+
+        public void Apply(StageEvent evt)
+        {
+            if (!string.IsNullOrEmpty(evt.TextDelta))
+            {
+                if (Stage == TurnStage.Searching && _text.Length > 0)
+                {
+                    _text.Append('\n');
+                }
+
+                _text.Append(evt.TextDelta);
+            }
+
+            if (evt.Sites is { Count: > 0 })
+            {
+                _sites = evt.Sites;
+            }
+        }
+
+        public Panel Render()
+        {
+            var blocks = new List<string>();
+
+            if (Stage == TurnStage.Other && _text.Length == 0)
+            {
+                blocks.Add($"{Spinner.Frames[_frame % Spinner.Frames.Count]} Waiting for the model...");
+            }
+            else
+            {
+                if (_text.Length > 0)
+                {
+                    blocks.Add(Markup.Escape(_text.ToString()));
+                }
+
+                if (_sites is { Count: > 0 })
+                {
+                    var lines = _sites.Select(
+                        (site, index) => $"  [cyan]{index + 1}.[/] {Markup.Escape(site.Title)} [grey]-- {Markup.Escape(site.Url)}[/]");
+                    blocks.Add(string.Join("\n", lines));
+                }
+            }
+
+            if (blocks.Count == 0)
+            {
+                blocks.Add(" ");
+            }
+
+            IRenderable body = new Markup(string.Join("\n\n", blocks));
+            var footer = Align.Right(new Markup($"[grey]{Markup.Escape(ElapsedLabel())}[/]"));
+            var (header, color) = StageStyle(Stage);
+            return new Panel(new Rows(body, footer))
+                .Header(header)
+                .RoundedBorder()
+                .BorderColor(color)
+                .Expand();
+        }
+
+        private string ElapsedLabel()
+        {
+            var elapsed = _stopwatch.Elapsed;
+            return $"{(int)elapsed.TotalMinutes}m {elapsed.Seconds}s";
+        }
+
+        private static (string Header, Color Color) StageStyle(TurnStage stage) => stage switch
+        {
+            TurnStage.Reasoning => ("[skyblue1]Reasoning[/]", Color.SkyBlue1),
+            TurnStage.Searching => ("[gold1]Searching[/]", Color.Gold1),
+            TurnStage.Generating => ("[magenta]Assistant[/]", Color.Magenta1),
+            _ => ("[grey]Working[/]", Color.Grey),
+        };
+    }
+
+    private static int GetBoxWidth() => Math.Clamp(Console.WindowWidth - 2, 20, 100);
+
+    private static void PrintBoxTopBorder(int width, string label, Color color)
+    {
+        var title = $" {label} ";
+        var dashes = Math.Max(2, width - 2 - title.Length);
+        var left = dashes / 2;
+        var right = dashes - left;
+        AnsiConsole.MarkupLine(
+            $"[{color.ToMarkup()}]╭{new string('─', left)}[/]{Markup.Escape(title)}[{color.ToMarkup()}]{new string('─', right)}╮[/]");
+    }
+
+    private static void PrintBoxBottomBorder(int width, Color color) =>
+        AnsiConsole.MarkupLine($"[{color.ToMarkup()}]╰{new string('─', width - 2)}╯[/]");
+
+    private static async Task<string?> ResolveDefaultModelAsync(
+        RedStarOptions options, CancellationToken cancellationToken, Func<RedStarOptions, IModelsClient>? modelsClientFactory)
+    {
+        return await AnsiConsole.Status()
+            .Spinner(Spinner.Known.Dots)
+            .StartAsync("Resolving default model...", async _ =>
+            {
+                var modelsClient = modelsClientFactory is null ? new ModelsClient(options) : modelsClientFactory(options);
+                try
+                {
+                    var models = await modelsClient.ListAsync(cancellationToken);
+                    var selected = ModelSelector.SelectDefault(models, configuredDefault: null);
+                    if (selected is null)
+                    {
+                        ConsoleOutput.Error.MarkupLine(
+                            "[red]No models are available on the server.[/] Load one in Unsloth Studio first.");
+                        return null;
+                    }
+
+                    return selected.Id;
+                }
+                catch (Exception ex)
+                {
+                    ConsoleOutput.Error.MarkupLine(
+                        $"[red]Could not auto-detect a model ({Markup.Escape(ex.Message)}).[/] " +
+                        "Pass --model explicitly or run 'redstar models'.");
+                    return null;
+                }
+                finally
+                {
+                    (modelsClient as IDisposable)?.Dispose();
+                }
+            });
     }
 }

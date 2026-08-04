@@ -1,39 +1,53 @@
 using System.Text;
+using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
 namespace RedStar.Base;
 
 /// <summary>
-/// A conversation's message history plus the logic to stream one more turn through an
-/// <see cref="IChatClient"/> and fold the result back into that history.
+/// One conversation bound to a single <see cref="AIAgent"/>. Lazily creates the agent's
+/// <see cref="AgentSession"/> on first send and streams each turn through it, letting the
+/// agent's chat history provider own message history instead of tracking it locally.
 /// </summary>
 public sealed class ChatSession
 {
-    private readonly List<ChatMessage> _messages = [];
+    private readonly AIAgent _agent;
+    private AgentSession? _session;
 
-    public IReadOnlyList<ChatMessage> Messages => _messages;
-
-    public void AddSystemPrompt(string prompt) => _messages.Add(new ChatMessage(ChatRole.System, prompt));
-
-    public void AddUserMessage(string content) => _messages.Add(new ChatMessage(ChatRole.User, content));
+    public ChatSession(AIAgent agent)
+    {
+        ArgumentNullException.ThrowIfNull(agent);
+        _agent = agent;
+    }
 
     /// <summary>
-    /// Streams a response for the current history through <paramref name="chatClient"/>,
-    /// invoking <paramref name="onTextChunk"/> for each piece of text as it arrives. On success
-    /// the full response is appended to the history as an assistant message. If the call throws,
+    /// The conversation history recorded so far, or empty before the first <see cref="SendAsync"/> call.
+    /// </summary>
+    public IReadOnlyList<ChatMessage> Messages =>
+        _session is not null && AgentSessionExtensions.TryGetInMemoryChatHistory(_session, out var messages)
+            ? messages
+            : [];
+
+    /// <summary>
+    /// Streams a response for <paramref name="userText"/> through the agent, invoking
+    /// <paramref name="onTextChunk"/> for each piece of text as it arrives and <paramref name="onUpdate"/>
+    /// for every raw streamed update (including ones with no text, e.g. tool-call progress). On success
+    /// the full turn is appended to history by the agent's chat history provider. If the call throws,
     /// nothing is appended and the exception propagates to the caller.
     /// </summary>
     public async Task<string> SendAsync(
-        IChatClient chatClient,
-        ChatOptions? options = null,
+        string userText,
         Action<string>? onTextChunk = null,
+        Action<AgentResponseUpdate>? onUpdate = null,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(chatClient);
+        _session ??= await _agent.CreateSessionAsync(cancellationToken);
 
         var responseText = new StringBuilder();
-        await foreach (var update in chatClient.GetStreamingResponseAsync(_messages, options, cancellationToken))
+        await foreach (var update in _agent.RunStreamingAsync(userText, _session, options: null, cancellationToken))
         {
+            onUpdate?.Invoke(update);
+
             if (!string.IsNullOrEmpty(update.Text))
             {
                 onTextChunk?.Invoke(update.Text);
@@ -41,8 +55,6 @@ public sealed class ChatSession
             }
         }
 
-        var fullText = responseText.ToString();
-        _messages.Add(new ChatMessage(ChatRole.Assistant, fullText));
-        return fullText;
+        return responseText.ToString();
     }
 }

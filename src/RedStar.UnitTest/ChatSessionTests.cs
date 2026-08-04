@@ -1,3 +1,4 @@
+using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using RedStar.Base;
 using RedStar.UnitTest.Fakes;
@@ -7,26 +8,12 @@ namespace RedStar.UnitTest;
 public class ChatSessionTests
 {
     [Fact]
-    public void AddSystemPrompt_ThenAddUserMessage_PreservesOrder()
-    {
-        var session = new ChatSession();
-
-        session.AddSystemPrompt("be terse");
-        session.AddUserMessage("hi");
-
-        Assert.Equal(2, session.Messages.Count);
-        Assert.Equal(ChatRole.System, session.Messages[0].Role);
-        Assert.Equal(ChatRole.User, session.Messages[1].Role);
-    }
-
-    [Fact]
     public async Task SendAsync_AccumulatesStreamedChunks_IntoFullResponseText()
     {
-        var session = new ChatSession();
-        session.AddUserMessage("hi");
-        var client = new FakeChatClient("Hel", "lo, ", "world!");
+        var agent = new ChatClientAgent(new FakeChatClient("Hel", "lo, ", "world!"));
+        var session = new ChatSession(agent);
 
-        var result = await session.SendAsync(client);
+        var result = await session.SendAsync("hi");
 
         Assert.Equal("Hello, world!", result);
     }
@@ -34,101 +21,79 @@ public class ChatSessionTests
     [Fact]
     public async Task SendAsync_InvokesOnTextChunk_ForEachStreamedPiece()
     {
-        var session = new ChatSession();
-        session.AddUserMessage("hi");
-        var client = new FakeChatClient("a", "b", "c");
+        var agent = new ChatClientAgent(new FakeChatClient("a", "b", "c"));
+        var session = new ChatSession(agent);
         var received = new List<string>();
 
-        await session.SendAsync(client, onTextChunk: received.Add);
+        await session.SendAsync("hi", onTextChunk: received.Add);
 
         Assert.Equal(["a", "b", "c"], received);
     }
 
     [Fact]
-    public async Task SendAsync_AppendsAssistantMessage_ToHistory_OnSuccess()
+    public async Task SendAsync_AppendsBothTurns_ToHistory_OnSuccess()
     {
-        var session = new ChatSession();
-        session.AddUserMessage("hi");
-        var client = new FakeChatClient("hello there");
+        var agent = new ChatClientAgent(new FakeChatClient("hello there"));
+        var session = new ChatSession(agent);
 
-        await session.SendAsync(client);
+        await session.SendAsync("hi");
 
         Assert.Equal(2, session.Messages.Count);
-        var assistantMessage = session.Messages[^1];
-        Assert.Equal(ChatRole.Assistant, assistantMessage.Role);
-        Assert.Equal("hello there", assistantMessage.Text);
+        Assert.Equal(ChatRole.User, session.Messages[0].Role);
+        Assert.Equal("hi", session.Messages[0].Text);
+        Assert.Equal(ChatRole.Assistant, session.Messages[^1].Role);
+        Assert.Equal("hello there", session.Messages[^1].Text);
     }
 
     [Fact]
-    public async Task SendAsync_PassesFullHistory_ToTheChatClient()
+    public async Task SendAsync_MergesInstructions_IntoChatOptions()
     {
-        var session = new ChatSession();
-        session.AddSystemPrompt("be terse");
-        session.AddUserMessage("hi");
         var client = new FakeChatClient("ok");
+        var agent = new ChatClientAgent(client, instructions: "be terse");
+        var session = new ChatSession(agent);
 
-        await session.SendAsync(client);
+        await session.SendAsync("hi");
+
+        Assert.Equal("be terse", client.LastOptions?.Instructions);
+    }
+
+    [Fact]
+    public async Task SendAsync_PassesTheUserMessage_ToTheChatClient()
+    {
+        var client = new FakeChatClient("ok");
+        var agent = new ChatClientAgent(client);
+        var session = new ChatSession(agent);
+
+        await session.SendAsync("hi");
 
         Assert.NotNull(client.LastMessages);
-        Assert.Equal(2, client.LastMessages!.Count);
-        Assert.Equal(ChatRole.System, client.LastMessages[0].Role);
-        Assert.Equal(ChatRole.User, client.LastMessages[1].Role);
+        Assert.Contains(client.LastMessages!, m => m.Role == ChatRole.User && m.Text == "hi");
     }
 
     [Fact]
-    public async Task SendAsync_DoesNotAppendAssistantMessage_WhenClientThrows()
+    public async Task SendAsync_PropagatesTheClientsException_AndDoesNotGrowHistory()
     {
-        var session = new ChatSession();
-        session.AddUserMessage("hi");
-        var client = FakeChatClient.Throwing(new InvalidOperationException("boom"));
+        var agent = new ChatClientAgent(FakeChatClient.Throwing(new InvalidOperationException("boom")));
+        var session = new ChatSession(agent);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => session.SendAsync(client));
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => session.SendAsync("hi"));
 
-        Assert.Single(session.Messages);
-        Assert.Equal(ChatRole.User, session.Messages[0].Role);
-    }
-
-    [Fact]
-    public async Task SendAsync_PropagatesTheClientsException()
-    {
-        var session = new ChatSession();
-        session.AddUserMessage("hi");
-        var client = FakeChatClient.Throwing(new InvalidOperationException("boom"));
-
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => session.SendAsync(client));
         Assert.Equal("boom", exception.Message);
+        Assert.Empty(session.Messages);
     }
 
     [Fact]
-    public async Task SendAsync_Throws_WhenChatClientIsNull()
+    public void Constructor_Throws_WhenAgentIsNull()
     {
-        var session = new ChatSession();
-
-        await Assert.ThrowsAsync<ArgumentNullException>(() => session.SendAsync(null!));
+        Assert.Throws<ArgumentNullException>(() => new ChatSession(null!));
     }
 
     [Fact]
-    public async Task SendAsync_PassesProvidedChatOptions_ToTheChatClient()
+    public void Messages_IsEmpty_BeforeFirstSend()
     {
-        var session = new ChatSession();
-        session.AddUserMessage("hi");
-        var client = new FakeChatClient("ok");
-        var options = new ChatOptions { ModelId = "explicit-model" };
+        var agent = new ChatClientAgent(new FakeChatClient("ok"));
+        var session = new ChatSession(agent);
 
-        await session.SendAsync(client, options);
-
-        Assert.Same(options, client.LastOptions);
-    }
-
-    [Fact]
-    public async Task SendAsync_PassesNullChatOptions_WhenNoneProvided()
-    {
-        var session = new ChatSession();
-        session.AddUserMessage("hi");
-        var client = new FakeChatClient("ok");
-
-        await session.SendAsync(client);
-
-        Assert.Null(client.LastOptions);
+        Assert.Empty(session.Messages);
     }
 }
