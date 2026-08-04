@@ -163,7 +163,7 @@ internal static class ChatCommandHandler
         }
         catch (Exception ex)
         {
-            ConsoleOutput.Error.MarkupLine($"\n[red]Error calling the model: {Markup.Escape(ex.Message)}[/]");
+            ConsoleOutput.Error.MarkupLine($"\n[red]Error calling the model:[/]\n{Markup.Escape(ex.ToString())}\n");
             return 1;
         }
     }
@@ -437,15 +437,18 @@ internal static class ChatCommandHandler
         /// that approach gets proven out. Re-parses the whole accumulated answer on every redraw (there's no
         /// incremental markdown parser here), which means a still-open construct (an unclosed code fence, a
         /// dangling `**`) can render oddly until enough of it has streamed in to close -- an inherent
-        /// tradeoff of rendering markdown live rather than only once the message is complete.
+        /// tradeoff of rendering markdown live rather than only once the message is complete. A still-open
+        /// fenced code block specifically can crash <c>BoxOfYellow.ConsoleMarkdownRenderer.Spectre</c> with a
+        /// <see cref="NullReferenceException"/> (seen in practice, not just theorized) rather than just
+        /// rendering oddly, so the render is wrapped below and falls back to plain escaped text for that one
+        /// frame -- the next redraw, once more text has streamed in, normally parses fine.
         /// </summary>
         public Panel Render()
         {
             IRenderable body;
             if (Stage == TurnStage.Generating && _text.Length > 0)
             {
-                var result = MarkdownRenderer.Render(_text.ToString(), MarkdownOptions);
-                body = result.Root ?? new Markup(Markup.Escape(_text.ToString()));
+                body = TryRenderMarkdown(_text.ToString()) ?? new Markup(Markup.Escape(_text.ToString()));
             }
             else
             {
@@ -459,6 +462,20 @@ internal static class ChatCommandHandler
                 .RoundedBorder()
                 .BorderColor(color)
                 .Expand();
+        }
+
+        /// <summary>Null on any renderer failure -- see the remarks on <see cref="Render"/> for why a
+        /// still-open construct can throw rather than just render oddly.</summary>
+        private static IRenderable? TryRenderMarkdown(string text)
+        {
+            try
+            {
+                return MarkdownRenderer.Render(text, MarkdownOptions).Root;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
         }
 
         private List<string> NonGeneratingBlocks()
