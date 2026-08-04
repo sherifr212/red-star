@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/RedStar.Base/RedStar.Base.csproj" />
+    <Project Path="src/RedStar.Cli/RedStar.Cli.csproj" />
+    <Project Path="src/RedStar.UnitTest/RedStar.UnitTest.csproj" />
+  </Folder>
+</Solution>
