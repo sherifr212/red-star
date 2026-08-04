@@ -73,19 +73,30 @@ token into `app.RunAsync(args, token)`; Spectre.Console.Cli (0.55.0+) forwards t
 every `AsyncCommand<T>.ExecuteAsync`'s `CancellationToken` parameter automatically, so commands
 don't need their own cancellation wiring.
 
-**Interactive chat rendering** (`ChatCommandHandler`): user and assistant turns are drawn as boxed
-panels, not plain `Console.Write`. A typed line gets an open "You" box (`ReadUserMessageBoxed`
-prints the top border and a `>` prompt, reads with `Console.ReadLine`, then closes the bottom
-border around whatever was typed); a one-shot `--prompt` gets the same box drawn closed around it
-upfront (`PrintUserMessageBox`), since there's nothing to read interactively. The assistant side
-(`SendAndPrintAsync`) renders into a single `AnsiConsole.Live` panel that's updated in place as
-`ChatSession.SendAsync`'s `onTextChunk` callback delivers streamed text — before the first chunk
-arrives it shows a spinner cycling through `ThinkingMessages` ("Thinking"/"Generating"/"Searching"/
-"Reasoning") every `MessageChangeInterval` (2s), driven by a background `AnimateSpinnerAsync` task
-that's cancelled once real content starts arriving. Both the streaming callback and the spinner
-task touch the same `LiveDisplayContext`, so they share a `sync` lock around every
-`ctx.UpdateTarget`/`ctx.Refresh()` call — don't add a third mutator of that panel without taking
-the same lock.
+**Interactive chat rendering** (`ChatCommandHandler`): user turns draw as boxed panels via
+`PrintUserMessageBox`/`ReadUserMessageBoxed` (top border, a `>` prompt, bottom border). The
+assistant side is multi-box, not one panel overwritten in place: `ProduceStageEventsAsync`
+translates a streamed `ChatSession.SendAsync` call into `StageEvent`s (reasoning text, Unsloth
+tool-status labels, web-search hits, answer text chunks) on an unbounded `Channel`, each tagged
+with a `TurnStage` (`Other`/`Reasoning`/`Searching`/`Generating`); `RenderStageBoxesAsync` reads
+that channel and opens one `AnsiConsole.Live` region per run of same-stage events via `StageBox`,
+sealing it and opening the next once the stage changes — see the "Multi-box rendering" remarks
+there. A still-growing box that would exceed `GetSafeBoxHeight()` (console height minus a margin)
+seals early and reopens as a same-stage "(cont'd)" continuation instead of letting Spectre's `Live`
+region silently crop it from the top once it overflows the console (see the remarks on
+`GetSafeBoxHeight`/`StageBox.EstimatedBodyLines`). A sealed box's footer gets a "Copy" link to a
+temp `.txt` file of its raw text (`StageBox.EnsureCopyFileUri`).
+
+`DrainStageAsync` (draining events into the current box), `TickFooterAsync` (the once-a-second
+elapsed-time redraw), and the live-region's own redraw callback all read/write the same `StageBox`'s
+internal `StringBuilder` and the same `LiveDisplayContext`, so they share one `SemaphoreSlim(1, 1)`
+(`gate`) acquired via `WaitAsync`/`Release` around every mutation and every
+`ctx.UpdateTarget`/`ctx.Refresh()` call — a plain `lock` doesn't work here since these call sites
+need to hold it across `await`s (`Monitor` is thread-affine and can't cross an `await`). Skipping
+the gate around a `StringBuilder.Append` while another task concurrently calls `.ToString()`
+corrupts its internal chunk list and throws `ArgumentOutOfRangeException` ("chunkLength") out of
+`StringBuilder.ToString()` — don't add a fourth mutator of a box's text/panel without taking the
+same gate.
 
 **Config resolution** (`RedStarOptions`, bound from the `RedStar` section): layered as
 `appsettings.json` → `appsettings.local.json` → environment variables (`RedStar__*`) → CLI flags
