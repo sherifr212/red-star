@@ -85,7 +85,14 @@ there. A still-growing box that would exceed `GetSafeBoxHeight()` (console heigh
 seals early and reopens as a same-stage "(cont'd)" continuation instead of letting Spectre's `Live`
 region silently crop it from the top once it overflows the console (see the remarks on
 `GetSafeBoxHeight`/`StageBox.EstimatedBodyLines`). A sealed box's footer gets a "Copy" link to a
-temp `.txt` file of its raw text (`StageBox.EnsureCopyFileUri`).
+temp `.txt` file of its raw text (`StageBox.EnsureCopyFileUri`) — it's a real OSC-8 terminal
+hyperlink, so most terminals (Windows Terminal included) require Ctrl+Click to open it, not a plain
+click; that's the terminal deliberately guarding against a click during text selection, not a bug.
+Continuation boxes in the same "(cont'd)" chain share one such file/URI (threaded through as
+`StageBox`'s `sharedCopyFilePath`/`priorChainText` constructor args, tracked across the chain by
+`RenderStageBoxesAsync`'s `chainCopyFilePath`/`chainText`), each rewriting it with the whole chain's
+text so far — otherwise every continuation box's Copy link would resolve to only its own fragment
+instead of the full message the height split cut apart.
 
 `DrainStageAsync` (draining events into the current box), `TickFooterAsync` (the once-a-second
 elapsed-time redraw), and the live-region's own redraw callback all read/write the same `StageBox`'s
