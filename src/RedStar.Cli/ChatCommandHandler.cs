@@ -30,6 +30,7 @@ internal static class ChatCommandHandler
         }
 
         IChatClient chatClient = RedStarChatClientFactory.Create(options, modelId);
+        var chatOptions = RedStarChatClientFactory.CreateChatOptions(options);
         var session = new ChatSession();
         if (!string.IsNullOrWhiteSpace(systemPrompt))
         {
@@ -39,7 +40,7 @@ internal static class ChatCommandHandler
         if (!string.IsNullOrWhiteSpace(oneShotPrompt))
         {
             session.AddUserMessage(oneShotPrompt);
-            return await SendAndPrintAsync(session, chatClient, cancellationToken);
+            return await SendAndPrintAsync(session, chatClient, chatOptions, cancellationToken);
         }
 
         Console.WriteLine($"RedStar chat - model '{modelId}'. Type 'exit' or press Ctrl+C to quit.");
@@ -66,7 +67,7 @@ internal static class ChatCommandHandler
 
             session.AddUserMessage(line);
             Console.Write("assistant> ");
-            var exitCode = await SendAndPrintAsync(session, chatClient, cancellationToken);
+            var exitCode = await SendAndPrintAsync(session, chatClient, chatOptions, cancellationToken);
             if (exitCode != 0)
             {
                 return exitCode;
@@ -76,11 +77,12 @@ internal static class ChatCommandHandler
         return 0;
     }
 
-    private static async Task<int> SendAndPrintAsync(ChatSession session, IChatClient chatClient, CancellationToken cancellationToken)
+    private static async Task<int> SendAndPrintAsync(
+        ChatSession session, IChatClient chatClient, ChatOptions? chatOptions, CancellationToken cancellationToken)
     {
         try
         {
-            await session.SendAsync(chatClient, onTextChunk: Console.Write, cancellationToken: cancellationToken);
+            await session.SendAsync(chatClient, chatOptions, onTextChunk: Console.Write, cancellationToken: cancellationToken);
             Console.WriteLine();
             return 0;
         }

@@ -25,13 +25,14 @@ public sealed class ChatSession
     /// </summary>
     public async Task<string> SendAsync(
         IChatClient chatClient,
+        ChatOptions? options = null,
         Action<string>? onTextChunk = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(chatClient);
 
         var responseText = new StringBuilder();
-        await foreach (var update in chatClient.GetStreamingResponseAsync(_messages, cancellationToken: cancellationToken))
+        await foreach (var update in chatClient.GetStreamingResponseAsync(_messages, options, cancellationToken))
         {
             if (!string.IsNullOrEmpty(update.Text))
             {
