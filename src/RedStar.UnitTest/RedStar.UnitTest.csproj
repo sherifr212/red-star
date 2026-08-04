@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\RedStar.Base\RedStar.Base.csproj" />
+    <ProjectReference Include="..\RedStar.Cli\RedStar.Cli.csproj" />
   </ItemGroup>
 
 </Project>
