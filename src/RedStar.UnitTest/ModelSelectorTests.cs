@@ -18,15 +18,13 @@ public class ModelSelectorTests
     }
 
     [Fact]
-    public void SelectDefault_TrustsConfiguredModel_WhenNotInServerList()
+    public void SelectDefault_ReturnsNull_WhenConfiguredModelNotInServerList()
     {
         var models = new[] { Loaded };
 
         var result = ModelSelector.SelectDefault(models, configuredDefault: "not-yet-downloaded");
 
-        Assert.NotNull(result);
-        Assert.Equal("not-yet-downloaded", result.Id);
-        Assert.False(result.Loaded);
+        Assert.Null(result);
     }
 
     [Fact]

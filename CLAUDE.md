@@ -106,12 +106,15 @@ passes a placeholder credential and relies on `ConditionalAuthHandler` (a `Deleg
 strip the `Authorization` header from outgoing requests when no real key is configured. Don't try
 to "fix" this by passing a null/empty credential to the SDK — it throws.
 
-**Model resolution** (`ModelSelector.SelectDefault`): when no model is specified on the command
-line, resolution order is (1) `RedStarOptions.DefaultModel` if set — trusted even if the server
-doesn't currently list it as available, since Unsloth Studio can load models on demand — (2) the
-server's currently-loaded model, (3) the first model the server reports, (4) `null` if the server
-has none. This is why `ChatCommandHandler.ResolveDefaultModelAsync` hits `/v1/models` before
-building the chat client whenever `DefaultModel` is blank.
+**Model resolution** (`ModelSelector.SelectDefault`): `ChatCommandHandler.ResolveModelAsync` always
+hits `/v1/models` before building the chat client, whether or not `RedStarOptions.DefaultModel` is
+set, so a bad model id is caught here — with a clear error — instead of surfacing later as a
+misleading "the model returned no response" once the chat stream unexpectedly ends empty (Unsloth
+just silently drops the connection for an unloaded/nonexistent model rather than erroring). Given
+that list, resolution order is (1) `DefaultModel` if set and present in the server's list — returned
+even if not currently loaded, since Unsloth Studio can load a known model on demand, but `null`
+(hard failure) if the configured id isn't in the list at all — (2) the server's currently-loaded
+model, (3) the first model the server reports, (4) `null` if the server has none.
 
 **Unsloth-specific request fields via `Patch`**: Unsloth's API extends OpenAI's chat-completions
 schema with fields the OpenAI SDK doesn't model (`enable_thinking`, `enable_tools`,

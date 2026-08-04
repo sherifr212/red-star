@@ -39,14 +39,10 @@ internal static class ChatCommandHandler
                 "--api-key, the RedStar__ApiKey environment variable, or appsettings.local.json.\n");
         }
 
-        var modelId = options.DefaultModel;
-        if (string.IsNullOrEmpty(modelId))
+        var modelId = await ResolveModelAsync(options, cancellationToken, modelsClientFactory);
+        if (modelId is null)
         {
-            modelId = await ResolveDefaultModelAsync(options, cancellationToken, modelsClientFactory);
-            if (modelId is null)
-            {
-                return 1;
-            }
+            return 1;
         }
 
         AIAgent agent = agentFactory(options, modelId, systemPrompt);
@@ -526,22 +522,43 @@ internal static class ChatCommandHandler
     private static void PrintBoxBottomBorder(int width, Color color) =>
         AnsiConsole.MarkupLine($"[{color.ToMarkup()}]╰{new string('─', width - 2)}╯[/]");
 
-    private static async Task<string?> ResolveDefaultModelAsync(
+    /// <summary>
+    /// Resolves and validates the model to chat with by checking it against the server's
+    /// <c>/v1/models</c> list before any chat request is made -- this always makes the call
+    /// (whether or not <see cref="RedStarOptions.DefaultModel"/> is set) so an unloaded or
+    /// nonexistent model is caught here, with a clear message, instead of surfacing later as a
+    /// misleading "the model returned no response" once the chat stream unexpectedly ends empty.
+    /// See <see cref="ModelSelector.SelectDefault"/> for the resolution/trust rules.
+    /// </summary>
+    private static async Task<string?> ResolveModelAsync(
         RedStarOptions options, CancellationToken cancellationToken, Func<RedStarOptions, IModelsClient>? modelsClientFactory)
     {
         return await AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots)
-            .StartAsync("Resolving default model...", async _ =>
+            .StartAsync("Checking available models...", async _ =>
             {
                 var modelsClient = modelsClientFactory is null ? new ModelsClient(options) : modelsClientFactory(options);
                 try
                 {
                     var models = await modelsClient.ListAsync(cancellationToken);
-                    var selected = ModelSelector.SelectDefault(models, configuredDefault: null);
+                    var selected = ModelSelector.SelectDefault(models, options.DefaultModel);
                     if (selected is null)
                     {
-                        ConsoleOutput.Error.MarkupLine(
-                            "[red]No models are available on the server.[/] Load one in Unsloth Studio first.");
+                        if (string.IsNullOrWhiteSpace(options.DefaultModel))
+                        {
+                            ConsoleOutput.Error.MarkupLine(
+                                "[red]No models are available on the server.[/] Load one in Unsloth Studio first.");
+                        }
+                        else
+                        {
+                            var available = models.Count > 0
+                                ? string.Join(", ", models.Select(m => m.Id))
+                                : "(none)";
+                            ConsoleOutput.Error.MarkupLine(
+                                $"[red]Model '{Markup.Escape(options.DefaultModel)}' was not found on the server.[/] " +
+                                $"Available models: {Markup.Escape(available)}. Run 'redstar models' for details.");
+                        }
+
                         return null;
                     }
 
@@ -550,8 +567,8 @@ internal static class ChatCommandHandler
                 catch (Exception ex)
                 {
                     ConsoleOutput.Error.MarkupLine(
-                        $"[red]Could not auto-detect a model ({Markup.Escape(ex.Message)}).[/] " +
-                        "Pass --model explicitly or run 'redstar models'.");
+                        $"[red]Could not check available models ({Markup.Escape(ex.Message)}).[/] " +
+                        "Check --endpoint/--api-key, or run 'redstar models'.");
                     return null;
                 }
                 finally
