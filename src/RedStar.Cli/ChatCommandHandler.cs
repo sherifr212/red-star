@@ -132,6 +132,14 @@ internal static class ChatCommandHandler
     /// <summary>One piece of one stage's content: either a text delta to append, or a completed site list.</summary>
     private readonly record struct StageEvent(TurnStage Stage, string? TextDelta, IReadOnlyList<WebSearchResult>? Sites);
 
+    /// <summary>Result of draining one stage's events until either a differently-staged event arrives
+    /// (<see cref="NextEvent"/> set, <see cref="SplitForHeight"/> false) or the current box's estimated
+    /// height crossed the safe-to-redraw threshold before the stage itself changed (<see cref="NextEvent"/>
+    /// null, <see cref="SplitForHeight"/> true) -- the latter tells the caller to seal the current box and
+    /// open a same-stage continuation instead of waiting for a real stage transition. See the remarks on
+    /// <see cref="GetSafeBoxHeight"/> for why that matters.</summary>
+    private readonly record struct DrainResult(StageEvent? NextEvent, bool SplitForHeight);
+
     private static async Task<int> SendAndPrintAsync(
         ChatSession session, string userText, CancellationToken cancellationToken)
     {
@@ -249,17 +257,21 @@ internal static class ChatCommandHandler
         var hasResponseText = false;
         StageEvent? next = null;
         var isFirstBox = true;
+        var isContinuation = false;
+        var lastStage = TurnStage.Other;
 
-        while (isFirstBox || next is not null)
+        while (isFirstBox || next is not null || isContinuation)
         {
-            var box = new StageBox(isFirstBox ? TurnStage.Other : next!.Value.Stage, turnStopwatch);
+            var stage = isFirstBox ? TurnStage.Other : isContinuation ? lastStage : next!.Value.Stage;
+            var box = new StageBox(stage, turnStopwatch, isContinuation);
 
-            if (!isFirstBox)
+            if (!isFirstBox && !isContinuation)
             {
                 box.Apply(next!.Value);
             }
 
             isFirstBox = false;
+            var splitForHeight = false;
 
             if (isLive)
             {
@@ -270,7 +282,7 @@ internal static class ChatCommandHandler
                         using var tickerCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                         var ticker = TickFooterAsync(ctx, gate, box, tickerCts.Token);
 
-                        next = await DrainStageAsync(reader, box, gate, cancellationToken, async () =>
+                        var drainResult = await DrainStageAsync(reader, box, gate, GetSafeBoxHeight(), cancellationToken, async () =>
                         {
                             await gate.WaitAsync();
                             try
@@ -283,6 +295,9 @@ internal static class ChatCommandHandler
                                 gate.Release();
                             }
                         });
+
+                        next = drainResult.NextEvent;
+                        splitForHeight = drainResult.SplitForHeight;
 
                         tickerCts.Cancel();
                         await ticker;
@@ -302,7 +317,8 @@ internal static class ChatCommandHandler
             else
             {
                 using var gate = new SemaphoreSlim(1, 1);
-                next = await DrainStageAsync(reader, box, gate, cancellationToken, onChanged: null);
+                var drainResult = await DrainStageAsync(reader, box, gate, maxHeight: null, cancellationToken, onChanged: null);
+                next = drainResult.NextEvent;
                 AnsiConsole.Write(box.Render());
             }
 
@@ -310,6 +326,9 @@ internal static class ChatCommandHandler
             {
                 hasResponseText = true;
             }
+
+            lastStage = box.Stage;
+            isContinuation = splitForHeight;
         }
 
         return hasResponseText;
@@ -317,38 +336,46 @@ internal static class ChatCommandHandler
 
     /// <summary>Applies events to <paramref name="box"/> for as long as they belong to its stage, invoking
     /// <paramref name="onChanged"/> after each (used to redraw a live region; null when not live). Returns
-    /// the first differently-staged event once the stage ends, or null once the channel is drained with no
-    /// error. <paramref name="gate"/> must be the same <see cref="SemaphoreSlim"/> <see cref="TickFooterAsync"/>
+    /// once a differently-staged event arrives, once <paramref name="box"/>'s estimated height crosses
+    /// <paramref name="maxHeight"/> (see <see cref="GetSafeBoxHeight"/> -- <c>null</c> disables this check,
+    /// used for the non-live/redirected-output path where there's no console viewport to protect), or once
+    /// the channel is drained with no error -- see <see cref="DrainResult"/> for how those three outcomes
+    /// are distinguished. <paramref name="gate"/> must be the same <see cref="SemaphoreSlim"/> <see cref="TickFooterAsync"/>
     /// and the live-region redraw acquire: <see cref="StageBox.Apply"/> mutates the box's internal
-    /// <see cref="StringBuilder"/>, and <see cref="StageBox.Render"/> reads it via <c>ToString()</c> from the
-    /// ticker task on a timer -- StringBuilder isn't thread-safe, so without holding the same gate around the
-    /// mutation too (not just the render calls), a concurrent Append/ToString pair can corrupt its internal
-    /// chunk list and throw <see cref="ArgumentOutOfRangeException"/> ("chunkLength") out of
-    /// <c>StringBuilder.ToString()</c>. A <see cref="SemaphoreSlim"/> is used instead of <c>lock</c> because
-    /// this method and its callers are async: <c>lock</c>'s <c>Monitor</c> is thread-affine and can't be held
-    /// across an <c>await</c>, whereas <c>SemaphoreSlim.WaitAsync</c>/<c>Release</c> works correctly as an
-    /// async-friendly mutex (count of 1) across the awaits in <see cref="RenderStageBoxesAsync"/>'s
-    /// live-region callback.</summary>
-    private static async Task<StageEvent?> DrainStageAsync(
-        ChannelReader<StageEvent> reader, StageBox box, SemaphoreSlim gate, CancellationToken cancellationToken, Func<Task>? onChanged)
+    /// <see cref="StringBuilder"/>, and <see cref="StageBox.Render"/>/<see cref="StageBox.EstimatedBodyLines"/>
+    /// read it via <c>ToString()</c> from the ticker task on a timer -- StringBuilder isn't thread-safe, so
+    /// without holding the same gate around the mutation too (not just the render/estimate calls), a concurrent
+    /// Append/ToString pair can corrupt its internal chunk list and throw
+    /// <see cref="ArgumentOutOfRangeException"/> ("chunkLength") out of <c>StringBuilder.ToString()</c>. A
+    /// <see cref="SemaphoreSlim"/> is used instead of <c>lock</c> because this method and its callers are
+    /// async: <c>lock</c>'s <c>Monitor</c> is thread-affine and can't be held across an <c>await</c>, whereas
+    /// <c>SemaphoreSlim.WaitAsync</c>/<c>Release</c> works correctly as an async-friendly mutex (count of 1)
+    /// across the awaits in <see cref="RenderStageBoxesAsync"/>'s live-region callback.</summary>
+    private static async Task<DrainResult> DrainStageAsync(
+        ChannelReader<StageEvent> reader, StageBox box, SemaphoreSlim gate, int? maxHeight, CancellationToken cancellationToken, Func<Task>? onChanged)
     {
         while (true)
         {
             var evt = await ReadNextAsync(reader, cancellationToken);
             if (evt is null)
             {
-                return null;
+                return new DrainResult(null, false);
             }
 
             if (evt.Value.Stage != box.Stage)
             {
-                return evt;
+                return new DrainResult(evt, false);
             }
 
             await gate.WaitAsync();
             try
             {
                 box.Apply(evt.Value);
+
+                if (maxHeight is int max && box.EstimatedBodyLines() + PanelChromeLines > max)
+                {
+                    return new DrainResult(null, true);
+                }
             }
             finally
             {
@@ -434,13 +461,15 @@ internal static class ChatCommandHandler
 
         private readonly StringBuilder _text = new();
         private readonly Stopwatch _stopwatch;
+        private readonly bool _isContinuation;
         private IReadOnlyList<WebSearchResult>? _sites;
         private int _frame;
 
-        public StageBox(TurnStage stage, Stopwatch turnStopwatch)
+        public StageBox(TurnStage stage, Stopwatch turnStopwatch, bool isContinuation = false)
         {
             Stage = stage;
             _stopwatch = turnStopwatch;
+            _isContinuation = isContinuation;
         }
 
         public TurnStage Stage { get; }
@@ -496,7 +525,7 @@ internal static class ChatCommandHandler
             }
 
             var footer = Align.Right(new Markup($"[grey]{Markup.Escape(ElapsedLabel())}[/]"));
-            var (header, color) = StageStyle(Stage);
+            var (header, color) = StageStyle(Stage, _isContinuation);
             return new Panel(new Rows(body, footer))
                 .Header(header)
                 .RoundedBorder()
@@ -555,16 +584,95 @@ internal static class ChatCommandHandler
             return $"{(int)elapsed.TotalMinutes}m {elapsed.Seconds}s";
         }
 
-        private static (string Header, Color Color) StageStyle(TurnStage stage) => stage switch
+        /// <summary>
+        /// Rough estimate of how many rows this box's body will occupy once rendered, used by
+        /// <see cref="ChatCommandHandler.DrainStageAsync"/> to decide whether the box needs to seal early
+        /// -- see the remarks on <see cref="ChatCommandHandler.GetSafeBoxHeight"/> for why. There's no
+        /// cheap way to ask Spectre "how tall would this render" without its internal
+        /// <c>RenderOptions</c>/measurement types (unreachable from outside <c>Spectre.Console.dll</c>),
+        /// so this estimates from raw text instead: explicit newlines plus a width-based wrap estimate.
+        /// For the markdown-rendered <see cref="TurnStage.Generating"/> box this is necessarily rough --
+        /// headings, code fences, and tables can render taller than their raw text -- but markdown
+        /// rendering only ever adds rows relative to raw text, never removes them, and estimating from
+        /// escaped raw text (which is longer than the visible text once markup-escaped) only ever
+        /// over-counts too. Both biases push the trigger earlier, never later, which is the safe
+        /// direction: an occasional early seal is harmless, undercounting would reintroduce the bug this
+        /// exists to fix.
+        /// </summary>
+        public int EstimatedBodyLines()
         {
-            TurnStage.Reasoning => ("[skyblue1]Reasoning[/]", Color.SkyBlue1),
-            TurnStage.Searching => ("[gold1]Searching[/]", Color.Gold1),
-            TurnStage.Generating => ("[magenta]Assistant[/]", Color.Magenta1),
-            _ => ("[grey]Working[/]", Color.Grey),
-        };
+            var innerWidth = Math.Max(1, GetBoxWidth() - 4);
+
+            if (Stage == TurnStage.Generating && _text.Length > 0)
+            {
+                return Math.Max(1, EstimateWrappedLines(_text.ToString(), innerWidth));
+            }
+
+            var blocks = NonGeneratingBlocks();
+            var lines = blocks.Count > 1 ? blocks.Count - 1 : 0; // blank-line separators from the "\n\n" join
+            foreach (var block in blocks)
+            {
+                lines += EstimateWrappedLines(block, innerWidth);
+            }
+
+            return Math.Max(1, lines);
+        }
+
+        private static int EstimateWrappedLines(string text, int innerWidth)
+        {
+            if (text.Length == 0)
+            {
+                return 0;
+            }
+
+            var lines = 0;
+            foreach (var line in text.Split('\n'))
+            {
+                lines += Math.Max(1, (int)Math.Ceiling(line.Length / (double)innerWidth));
+            }
+
+            return lines;
+        }
+
+        private static (string Header, Color Color) StageStyle(TurnStage stage, bool isContinuation)
+        {
+            var (label, markupColor, color) = stage switch
+            {
+                TurnStage.Reasoning => ("Reasoning", "skyblue1", Color.SkyBlue1),
+                TurnStage.Searching => ("Searching", "gold1", Color.Gold1),
+                TurnStage.Generating => ("Assistant", "magenta", Color.Magenta1),
+                _ => ("Working", "grey", Color.Grey),
+            };
+
+            if (isContinuation)
+            {
+                label += " (cont'd)";
+            }
+
+            return ($"[{markupColor}]{label}[/]", color);
+        }
     }
 
     private static int GetBoxWidth() => Math.Clamp(Console.WindowWidth - 2, 20, 100);
+
+    /// <summary>Rows a <see cref="StageBox"/>'s <see cref="Panel"/> chrome (top border, bottom border,
+    /// footer row) always costs beyond its body -- used together with <see cref="GetSafeBoxHeight"/> to
+    /// decide when a still-growing box needs to seal early.</summary>
+    private const int PanelChromeLines = 3;
+
+    /// <summary>How tall a live-redrawn box is allowed to get before it's sealed and a same-stage
+    /// continuation box opens in its place, instead of letting <see cref="AnsiConsole.Live"/>'s default
+    /// overflow handling crop it. Spectre's <c>Live</c> region defaults to
+    /// <c>VerticalOverflow.Ellipsis</c>/<c>VerticalOverflowCropping.Top</c>: once a live-redrawn panel's
+    /// height exceeds the console's row count, it silently drops the top lines and shows only the tail --
+    /// those dropped lines are never written to the terminal at all while the box is still live (Spectre
+    /// only force-writes the full content once, when the <c>Live</c> region closes). That means scrolling
+    /// up past a still-streaming box's on-screen footprint shows whatever was already there before it (the
+    /// previous box), not the current box's earlier content, since the current box never actually grew
+    /// into that screen space yet. Staying comfortably under the console's height (a few rows of margin,
+    /// floor of 6 for very short windows) means every box lands fully in real, permanent scrollback as
+    /// it's sealed, and Spectre's crop path never needs to trigger.</summary>
+    private static int GetSafeBoxHeight() => Math.Max(6, Console.WindowHeight - 3);
 
     private static void PrintBoxTopBorder(int width, string label, Color color)
     {
