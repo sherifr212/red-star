@@ -1,5 +1,21 @@
+using System.Text;
 using RedStar.Cli.Commands;
 using Spectre.Console.Cli;
+
+// Windows consoles default to the system codepage (rarely UTF-8), so the box-drawing characters used
+// throughout the chat UI (╭ ╮ ╰ ╯ │ ─) come out as literal '?'. Guarded because the setter throws
+// IOException when there's no real console attached (piped/redirected output, some debuggers) --
+// see the similar Console.IsOutputRedirected guard around AnsiConsole.Live in ChatCommandHandler.
+if (!Console.IsOutputRedirected)
+{
+    try
+    {
+        Console.OutputEncoding = Encoding.UTF8;
+    }
+    catch (IOException)
+    {
+    }
+}
 
 using var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>
