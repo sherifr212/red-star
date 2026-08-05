@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using System.Net;
 using RedStar.Base;
+using RedStar.Base.Telemetry;
 using RedStar.UnitTest.Fakes;
 
 namespace RedStar.UnitTest;
@@ -46,6 +48,31 @@ public class ModelsClientTests
         Assert.True(models[0].Loaded);
         Assert.Equal("model-b", models[1].Id);
         Assert.False(models[1].Loaded);
+    }
+
+    [Fact]
+    public async Task ListAsync_RecordsModelIdsAndLoadedIds_InActivityTags()
+    {
+        var json = """{"data": [{"id": "model-a", "loaded": true}, {"id": "model-b", "loaded": false}]}""";
+        var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, json);
+        var options = new RedStarOptions { BaseUrl = "http://example.test/v1", ApiKey = "" };
+        using var client = new ModelsClient(options, handler);
+
+        Activity? capturedActivity = null;
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == RedStarTelemetry.ServiceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+            ActivityStopped = activity => capturedActivity = activity,
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        await client.ListAsync();
+
+        Assert.NotNull(capturedActivity);
+        Assert.Equal(2, capturedActivity!.GetTagItem("models.count"));
+        Assert.Equal("model-a, model-b", capturedActivity.GetTagItem("models.ids"));
+        Assert.Equal("model-a", capturedActivity.GetTagItem("models.loaded_ids"));
     }
 
     [Fact]

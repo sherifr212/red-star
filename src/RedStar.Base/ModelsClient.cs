@@ -38,9 +38,15 @@ public sealed class ModelsClient : IModelsClient, IDisposable
 
             var payload = await response.Content.ReadFromJsonAsync<ModelListResponse>(cancellationToken: cancellationToken);
             var models = payload?.Data ?? [];
+            var modelIds = string.Join(", ", models.Select(m => m.Id));
+            var loadedModelIds = string.Join(", ", models.Where(m => m.Loaded).Select(m => m.Id));
 
             activity?.SetTag("models.count", models.Count);
-            logger.LogInformation("Listed {ModelCount} models in {ElapsedMs}ms", models.Count, stopwatch.Elapsed.TotalMilliseconds);
+            activity?.SetTag("models.ids", modelIds);
+            activity?.SetTag("models.loaded_ids", loadedModelIds);
+            logger.LogInformation(
+                "Listed {ModelCount} models in {ElapsedMs}ms: {ModelIds} (loaded: {LoadedModelIds})",
+                models.Count, stopwatch.Elapsed.TotalMilliseconds, modelIds, loadedModelIds);
 
             return models;
         }
