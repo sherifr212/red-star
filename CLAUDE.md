@@ -147,11 +147,24 @@ to "fix" this by passing a null/empty credential to the SDK — it throws.
 hits `/v1/models` before building the chat client, whether or not `RedStarOptions.DefaultModel` is
 set, so a bad model id is caught here — with a clear error — instead of surfacing later as a
 misleading "the model returned no response" once the chat stream unexpectedly ends empty (Unsloth
-just silently drops the connection for an unloaded/nonexistent model rather than erroring). Given
-that list, resolution order is (1) `DefaultModel` if set and present in the server's list — returned
-even if not currently loaded, since Unsloth Studio can load a known model on demand, but `null`
-(hard failure) if the configured id isn't in the list at all — (2) the server's currently-loaded
-model, (3) the first model the server reports, (4) `null` if the server has none.
+just silently drops the connection for an unloaded/nonexistent model rather than erroring). Every
+outcome requires at least one model to be currently *loaded* — an id the server merely knows about
+but hasn't loaded isn't usable. Resolution, in order: (1) zero models loaded anywhere → hard
+failure (graceful error, `ChatCommandHandler` exits 1). (2) `DefaultModel` configured and non-blank
+→ it must be one of the currently-loaded models, or resolution fails even though some *other* model
+is loaded — silently substituting a different model than the one configured would be misleading, so
+there's no fallback here, only an error+exit (`ModelSelectionSource.Explicit` on success). (3) no
+`DefaultModel` configured and exactly one model is loaded → that model is used
+(`ModelSelectionSource.Implicit`), with an informational message surfaced at startup and in
+telemetry, since it wasn't asked for by name. (4) no `DefaultModel` configured and multiple models
+are loaded → ambiguous, hard failure. `ModelSelector.SelectDefault` returns a `ModelSelectionResult`
+(`Model`/`Source`/`InfoMessage` on success, `ErrorMessage` on failure) rather than a bare
+model/`null`, so callers can distinguish *why* resolution failed and which of the two success paths
+was taken. `ChatCommandHandler.PrintStartupInfoBox` prints a boxed summary of the run's effective
+configuration (endpoint, whether an API key is configured, the resolved model plus its
+implicit/explicit source, web search, telemetry export) once per run before any chat request goes
+out, and mirrors the same fields onto the run's OTel activity as `redstar.config.*` tags plus one
+structured log line, so the resolved configuration is recoverable from telemetry too.
 
 **Unsloth-specific request fields via `Patch`**: Unsloth's API extends OpenAI's chat-completions
 schema with fields the OpenAI SDK doesn't model (`enable_thinking`, `enable_tools`,

@@ -55,14 +55,24 @@ internal static class ChatCommandHandler
                 "--api-key, the RedStar__ApiKey environment variable, or appsettings.local.json.\n");
         }
 
-        var modelId = await ResolveModelAsync(options, cancellationToken, modelsClientFactory);
-        if (modelId is null)
+        var selection = await ResolveModelAsync(options, cancellationToken, modelsClientFactory);
+        if (!selection.Succeeded)
         {
-            logger.LogWarning("Run {RunId} aborted: model resolution failed", runId);
+            logger.LogWarning("Run {RunId} aborted: model resolution failed ({Reason})", runId, selection.ErrorMessage);
             return 1;
         }
 
-        logger.LogInformation("Run {RunId} resolved model {ModelId}", runId, modelId);
+        var modelId = selection.Model!.Id;
+        var modelSource = selection.Source!.Value;
+
+        if (selection.InfoMessage is not null)
+        {
+            ConsoleOutput.Error.MarkupLine($"[yellow]{Markup.Escape(selection.InfoMessage)}[/]");
+        }
+
+        logger.LogInformation("Run {RunId} resolved model {ModelId} via {ModelSource}", runId, modelId, modelSource);
+
+        PrintStartupInfoBox(options, runId, modelId, modelSource, activity, logger);
 
         AIAgent agent = agentFactory(options, modelId, systemPrompt);
         var session = new ChatSession(agent);
@@ -822,7 +832,7 @@ internal static class ChatCommandHandler
     /// misleading "the model returned no response" once the chat stream unexpectedly ends empty.
     /// See <see cref="ModelSelector.SelectDefault"/> for the resolution/trust rules.
     /// </summary>
-    private static async Task<string?> ResolveModelAsync(
+    private static async Task<ModelSelectionResult> ResolveModelAsync(
         RedStarOptions options, CancellationToken cancellationToken, Func<RedStarOptions, IModelsClient>? modelsClientFactory)
     {
         return await AnsiConsole.Status()
@@ -833,40 +843,74 @@ internal static class ChatCommandHandler
                 try
                 {
                     var models = await modelsClient.ListAsync(cancellationToken);
-                    var selected = ModelSelector.SelectDefault(models, options.DefaultModel);
-                    if (selected is null)
+                    var result = ModelSelector.SelectDefault(models, options.DefaultModel);
+                    if (!result.Succeeded)
                     {
-                        if (string.IsNullOrWhiteSpace(options.DefaultModel))
-                        {
-                            ConsoleOutput.Error.MarkupLine(
-                                "[red]No models are available on the server.[/] Load one in Unsloth Studio first.");
-                        }
-                        else
-                        {
-                            var available = models.Count > 0
-                                ? string.Join(", ", models.Select(m => m.Id))
-                                : "(none)";
-                            ConsoleOutput.Error.MarkupLine(
-                                $"[red]Model '{Markup.Escape(options.DefaultModel)}' was not found on the server.[/] " +
-                                $"Available models: {Markup.Escape(available)}. Run 'redstar models' for details.");
-                        }
-
-                        return null;
+                        ConsoleOutput.Error.MarkupLine($"[red]{Markup.Escape(result.ErrorMessage!)}[/]");
                     }
 
-                    return selected.Id;
+                    return result;
                 }
                 catch (Exception ex)
                 {
                     ConsoleOutput.Error.MarkupLine(
                         $"[red]Could not check available models ({Markup.Escape(ex.Message)}).[/] " +
                         "Check --endpoint/--api-key, or run 'redstar models'.");
-                    return null;
+                    return ModelSelectionResult.Fail($"Could not check available models: {ex.Message}");
                 }
                 finally
                 {
                     (modelsClient as IDisposable)?.Dispose();
                 }
             });
+    }
+
+    /// <summary>
+    /// Prints a boxed summary of this run's effective configuration -- endpoint, whether an API key is
+    /// configured, the resolved model plus whether it was picked implicitly or explicitly (see
+    /// <see cref="ModelSelectionSource"/>), web search, and telemetry export -- once per run, before any
+    /// chat request goes out. Mirrors the same fields onto <paramref name="activity"/>'s tags
+    /// (<c>redstar.config.*</c>) and one structured log line so this is recoverable from telemetry too, not
+    /// just from the terminal -- the box itself is stdout-only and gone once the terminal scrolls past it.
+    /// </summary>
+    private static void PrintStartupInfoBox(
+        RedStarOptions options, string runId, string modelId, ModelSelectionSource modelSource, Activity? activity, ILogger logger)
+    {
+        var apiKeyConfigured = !string.IsNullOrEmpty(options.ApiKey);
+        var modelSourceLabel = modelSource == ModelSelectionSource.Explicit ? "explicit (configured)" : "implicit (auto-detected)";
+
+        var table = new Table().Border(TableBorder.None).HideHeaders();
+        table.AddColumn(new TableColumn(string.Empty).NoWrap());
+        table.AddColumn(string.Empty);
+        table.AddRow("[grey]Run ID[/]", Markup.Escape(runId));
+        table.AddRow("[grey]Endpoint[/]", Markup.Escape(options.BaseUrl));
+        table.AddRow("[grey]API key[/]", apiKeyConfigured ? "[green]configured[/]" : "[yellow]not configured[/]");
+        table.AddRow("[grey]Model[/]", $"[green]{Markup.Escape(modelId)}[/] [grey]({modelSourceLabel})[/]");
+        table.AddRow("[grey]Web search[/]", options.WebSearchEnabled ? "[green]enabled[/]" : "disabled");
+        table.AddRow(
+            "[grey]Telemetry[/]",
+            options.Otel.Enabled ? $"[green]enabled[/] -> {Markup.Escape(options.Otel.Endpoint)}" : "disabled");
+
+        var panel = new Panel(table)
+            .Header("[bold]Startup configuration[/]")
+            .RoundedBorder()
+            .BorderColor(Color.Grey)
+            .Expand();
+        AnsiConsole.Write(panel);
+
+        activity?.SetTag("redstar.config.endpoint", options.BaseUrl);
+        activity?.SetTag("redstar.config.api_key_configured", apiKeyConfigured);
+        activity?.SetTag("redstar.config.model", modelId);
+        activity?.SetTag("redstar.config.model_source", modelSource.ToString());
+        activity?.SetTag("redstar.config.web_search_enabled", options.WebSearchEnabled);
+        activity?.SetTag("redstar.config.telemetry_enabled", options.Otel.Enabled);
+        activity?.SetTag("redstar.config.telemetry_endpoint", options.Otel.Endpoint);
+
+        logger.LogInformation(
+            "Startup configuration for run {RunId}: endpoint={Endpoint} apiKeyConfigured={ApiKeyConfigured} " +
+            "model={ModelId} modelSource={ModelSource} webSearchEnabled={WebSearchEnabled} " +
+            "telemetryEnabled={TelemetryEnabled} telemetryEndpoint={TelemetryEndpoint}",
+            runId, options.BaseUrl, apiKeyConfigured, modelId, modelSource, options.WebSearchEnabled,
+            options.Otel.Enabled, options.Otel.Endpoint);
     }
 }

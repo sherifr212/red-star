@@ -1,44 +1,69 @@
 namespace RedStar.Base;
 
 /// <summary>
-/// Picks which model a request should use when none was given explicitly for that call.
+/// Picks which model a startup should use. Every outcome requires at least one model to be
+/// currently loaded on the server -- an id the server merely knows about but hasn't loaded isn't
+/// usable, since Unsloth Studio serves requests against loaded models only.
 /// </summary>
 public static class ModelSelector
 {
     /// <summary>
-    /// Resolution order: an explicitly configured default model, if the server's model list
-    /// contains it (returned even when <see cref="ModelInfo.Loaded"/> is false, since Unsloth
-    /// Studio can load a known-but-unloaded model on demand); if a default is configured but
-    /// absent from the list entirely, resolution fails (<c>null</c>) rather than trusting an
-    /// unverifiable id -- otherwise whichever model the server reports as loaded; otherwise the
-    /// first model the server knows about; otherwise <c>null</c> if the server has no models at
-    /// all.
+    /// Resolution rules, checked in order:
+    /// <list type="bullet">
+    /// <item>No model is loaded at all -- fails.</item>
+    /// <item>A default model is configured -- it must be one of the currently loaded models, or
+    /// resolution fails even though something else happens to be loaded; silently substituting a
+    /// different model than the one the user configured would be misleading. Succeeds with
+    /// <see cref="ModelSelectionSource.Explicit"/>.</item>
+    /// <item>No default is configured and exactly one model is loaded -- that model is used,
+    /// succeeding with <see cref="ModelSelectionSource.Implicit"/> and an <see cref="ModelSelectionResult.InfoMessage"/>
+    /// since the caller didn't ask for it by name.</item>
+    /// <item>No default is configured and more than one model is loaded -- ambiguous, fails.</item>
+    /// </list>
     /// </summary>
-    public static ModelInfo? SelectDefault(IReadOnlyList<ModelInfo> models, string? configuredDefault)
+    public static ModelSelectionResult SelectDefault(IReadOnlyList<ModelInfo> models, string? configuredDefault)
     {
         ArgumentNullException.ThrowIfNull(models);
 
+        var loaded = models.Where(m => m.Loaded).ToList();
+
+        if (loaded.Count == 0)
+        {
+            return ModelSelectionResult.Fail(
+                "No models are currently loaded on the server. Load one in Unsloth Studio, then try again.");
+        }
+
         if (!string.IsNullOrWhiteSpace(configuredDefault))
         {
-            foreach (var model in models)
+            var match = loaded.FirstOrDefault(m => string.Equals(m.Id, configuredDefault, StringComparison.Ordinal));
+            if (match is not null)
             {
-                if (string.Equals(model.Id, configuredDefault, StringComparison.Ordinal))
-                {
-                    return model;
-                }
+                return ModelSelectionResult.Ok(match, ModelSelectionSource.Explicit);
             }
 
-            return null;
+            var loadedIds = string.Join(", ", loaded.Select(m => m.Id));
+            var knownButUnloaded = models.Any(m => string.Equals(m.Id, configuredDefault, StringComparison.Ordinal));
+            var reason = knownButUnloaded
+                ? "it is known to the server but not currently loaded"
+                : "it was not found on the server at all";
+            return ModelSelectionResult.Fail(
+                $"Configured default model '{configuredDefault}' can't be used: {reason}. " +
+                $"Currently loaded model(s): {loadedIds}. Load '{configuredDefault}' in Unsloth Studio, or point " +
+                "the configured model at one of the loaded ones instead.");
         }
 
-        foreach (var model in models)
+        if (loaded.Count == 1)
         {
-            if (model.Loaded)
-            {
-                return model;
-            }
+            var only = loaded[0];
+            return ModelSelectionResult.Ok(
+                only,
+                ModelSelectionSource.Implicit,
+                $"No default model is configured; using the only loaded model, '{only.Id}'.");
         }
 
-        return models.Count > 0 ? models[0] : null;
+        var ids = string.Join(", ", loaded.Select(m => m.Id));
+        return ModelSelectionResult.Fail(
+            $"Multiple models are loaded ({ids}) and no default model is configured, so the choice is " +
+            "ambiguous. Set a default model to one of them.");
     }
 }
