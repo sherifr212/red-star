@@ -261,6 +261,11 @@ internal static class ChatCommandHandler
     /// footer is "total time this request has taken so far," not "time this particular box has been open,"
     /// so it keeps counting up across stage transitions and only stops once the last box closes -- a box
     /// that finishes quickly shows the running total at that moment, not a misleadingly small "0m 0s".
+    /// <paramref name="turnStopwatch"/> doubles as the clock <see cref="RedStarTelemetry.StageDuration"/>
+    /// measurements are derived from: a stage occurrence's boundaries are `!isContinuation` transitions
+    /// (see the loop below), which only fire on a real stage change, not on a same-stage "(cont'd)" box
+    /// opened purely because the previous one hit <see cref="GetSafeBoxHeight"/> -- so a stage that gets
+    /// split across several boxes for rendering still records as one occurrence, not several.
     ///
     /// When stdout is redirected (no real console attached -- piped, `&gt; file`, a non-interactive
     /// debugger/CI runner), <see cref="AnsiConsole.Live"/> itself is unusable: it unconditionally toggles
@@ -281,6 +286,8 @@ internal static class ChatCommandHandler
         var lastStage = TurnStage.Other;
         string? chainCopyFilePath = null;
         var chainText = string.Empty;
+        var stageStartMs = 0L;
+        TurnStage? pendingStage = null;
 
         while (isFirstBox || next is not null || isContinuation)
         {
@@ -295,6 +302,18 @@ internal static class ChatCommandHandler
             }
 
             isFirstBox = false;
+
+            if (!isContinuation)
+            {
+                if (pendingStage is { } completedStage)
+                {
+                    RecordStageDuration(completedStage, turnStopwatch.ElapsedMilliseconds - stageStartMs);
+                }
+
+                stageStartMs = turnStopwatch.ElapsedMilliseconds;
+                pendingStage = stage;
+            }
+
             var splitForHeight = false;
 
             if (isLive)
@@ -366,7 +385,29 @@ internal static class ChatCommandHandler
             isContinuation = splitForHeight;
         }
 
+        if (pendingStage is { } finalStage)
+        {
+            RecordStageDuration(finalStage, turnStopwatch.ElapsedMilliseconds - stageStartMs);
+        }
+
         return hasResponseText;
+    }
+
+    /// <summary>
+    /// Records one <see cref="RedStarTelemetry.StageDuration"/> measurement for a completed stage
+    /// occurrence. <see cref="TurnStage.Other"/> is the initial "waiting for the first event" box, not a
+    /// generation stage the model itself performs, so it's excluded -- only <see cref="TurnStage.Reasoning"/>,
+    /// <see cref="TurnStage.Searching"/> (tool calling), and <see cref="TurnStage.Generating"/> (the final
+    /// answer) are recorded.
+    /// </summary>
+    private static void RecordStageDuration(TurnStage stage, long durationMs)
+    {
+        if (stage == TurnStage.Other)
+        {
+            return;
+        }
+
+        RedStarTelemetry.StageDuration.Record(durationMs, new KeyValuePair<string, object?>("stage", stage.ToString()));
     }
 
     /// <summary>Applies events to <paramref name="box"/> for as long as they belong to its stage, invoking
