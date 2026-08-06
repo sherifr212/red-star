@@ -119,4 +119,86 @@ public class ChatCommandHandlerTests
         yield return new ChatResponseUpdate(ChatRole.Assistant, "answer two");
         await Task.Yield();
     }
+
+    private static Func<RedStarOptions, string, string?, AIAgent> NeverCalledAgentFactory =>
+        (_, _, _) => throw new InvalidOperationException("Model resolution should have failed before the agent was built.");
+
+    [Fact]
+    public async Task RunAsync_FailsGracefully_WhenNoModelsAreLoaded()
+    {
+        Func<RedStarOptions, IModelsClient> modelsClientFactory = _ => new FakeModelsClient([new ModelInfo("test-model", Loaded: false)]);
+
+        var exitCode = await ChatCommandHandler.RunAsync(
+            Options,
+            oneShotPrompt: "hi",
+            systemPrompt: null,
+            CancellationToken.None,
+            agentFactory: NeverCalledAgentFactory,
+            modelsClientFactory: modelsClientFactory);
+
+        Assert.Equal(1, exitCode);
+    }
+
+    /// <summary>
+    /// The follow-up requirement from issue #7: a configured default model that isn't loaded must fail
+    /// loudly, even when a *different* model happens to be loaded -- silently substituting that other
+    /// model would be misleading.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_FailsGracefully_WhenConfiguredModelIsNotLoaded_EvenThoughAnotherModelIsLoaded()
+    {
+        Func<RedStarOptions, IModelsClient> modelsClientFactory = _ => new FakeModelsClient(
+            [new ModelInfo("test-model", Loaded: false), new ModelInfo("other-model", Loaded: true)]);
+
+        var exitCode = await ChatCommandHandler.RunAsync(
+            Options,
+            oneShotPrompt: "hi",
+            systemPrompt: null,
+            CancellationToken.None,
+            agentFactory: NeverCalledAgentFactory,
+            modelsClientFactory: modelsClientFactory);
+
+        Assert.Equal(1, exitCode);
+    }
+
+    [Fact]
+    public async Task RunAsync_FailsGracefully_WhenMultipleModelsAreLoadedAndNoneIsConfigured()
+    {
+        var noDefaultOptions = new RedStarOptions();
+        Func<RedStarOptions, IModelsClient> modelsClientFactory = _ => new FakeModelsClient(
+            [new ModelInfo("model-a", Loaded: true), new ModelInfo("model-b", Loaded: true)]);
+
+        var exitCode = await ChatCommandHandler.RunAsync(
+            noDefaultOptions,
+            oneShotPrompt: "hi",
+            systemPrompt: null,
+            CancellationToken.None,
+            agentFactory: NeverCalledAgentFactory,
+            modelsClientFactory: modelsClientFactory);
+
+        Assert.Equal(1, exitCode);
+    }
+
+    [Fact]
+    public async Task RunAsync_Succeeds_WhenOnlyOneModelIsLoadedAndNoneIsConfigured()
+    {
+        var noDefaultOptions = new RedStarOptions();
+        Func<RedStarOptions, IModelsClient> modelsClientFactory = _ => new FakeModelsClient([new ModelInfo("solo-model", Loaded: true)]);
+        Func<RedStarOptions, string, string?, AIAgent> agentFactory =
+            (_, modelId, instructions) =>
+            {
+                Assert.Equal("solo-model", modelId);
+                return new ChatClientAgent(new FakeChatClient("hi"), instructions: instructions);
+            };
+
+        var exitCode = await ChatCommandHandler.RunAsync(
+            noDefaultOptions,
+            oneShotPrompt: "hi",
+            systemPrompt: null,
+            CancellationToken.None,
+            agentFactory: agentFactory,
+            modelsClientFactory: modelsClientFactory);
+
+        Assert.Equal(0, exitCode);
+    }
 }
