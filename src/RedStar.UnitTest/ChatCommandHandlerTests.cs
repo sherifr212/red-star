@@ -1,5 +1,8 @@
+using System.Diagnostics.Metrics;
 using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
 using RedStar.Base;
+using RedStar.Base.Telemetry;
 using RedStar.Cli;
 using RedStar.UnitTest.Fakes;
 
@@ -54,5 +57,66 @@ public class ChatCommandHandlerTests
             modelsClientFactory: ModelsClientFactory());
 
         Assert.Equal(0, exitCode);
+    }
+
+    /// <summary>
+    /// The model can revisit the same stage more than once in a single turn (e.g. reason, then answer, then
+    /// reason again before finishing the answer). Each occurrence must record its own
+    /// <see cref="RedStarTelemetry.StageDuration"/> measurement -- tagged with the plain stage name every
+    /// time, never a "(2)"-style suffix -- rather than being merged/summed into one "Reasoning" total, and
+    /// the measurements must come out in the order the stages actually happened. The initial "waiting for
+    /// the first event" box (<c>TurnStage.Other</c>) isn't a stage the model itself performs, so it must not
+    /// be recorded at all.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_OneShot_RecordsOneStageDurationPerOccurrence_NotCompounded()
+    {
+        Func<RedStarOptions, string, string?, AIAgent> agentFactory =
+            (_, _, instructions) => new ChatClientAgent(new FakeChatClient(_ => MixedStageStream()), instructions: instructions);
+
+        var recordedStages = new List<string>();
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, l) =>
+        {
+            if (instrument.Meter.Name == RedStarTelemetry.ServiceName && instrument.Name == "redstar.stage.duration")
+            {
+                l.EnableMeasurementEvents(instrument);
+            }
+        };
+        listener.SetMeasurementEventCallback<double>((_, measurement, tags, _) =>
+        {
+            Assert.True(measurement >= 0);
+            var stage = tags.ToArray().First(t => t.Key == "stage").Value?.ToString();
+            lock (recordedStages)
+            {
+                recordedStages.Add(stage!);
+            }
+        });
+        listener.Start();
+
+        var exitCode = await ChatCommandHandler.RunAsync(
+            Options,
+            oneShotPrompt: "hi",
+            systemPrompt: null,
+            CancellationToken.None,
+            agentFactory: agentFactory,
+            modelsClientFactory: ModelsClientFactory());
+
+        listener.Dispose();
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(["Reasoning", "Generating", "Reasoning", "Generating"], recordedStages);
+    }
+
+    private static async IAsyncEnumerable<ChatResponseUpdate> MixedStageStream()
+    {
+        yield return new ChatResponseUpdate { Contents = [new TextReasoningContent("thinking one")] };
+        await Task.Yield();
+        yield return new ChatResponseUpdate(ChatRole.Assistant, "answer one ");
+        await Task.Yield();
+        yield return new ChatResponseUpdate { Contents = [new TextReasoningContent("thinking two")] };
+        await Task.Yield();
+        yield return new ChatResponseUpdate(ChatRole.Assistant, "answer two");
+        await Task.Yield();
     }
 }

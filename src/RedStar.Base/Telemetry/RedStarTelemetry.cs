@@ -28,6 +28,18 @@ public static class RedStarTelemetry
     public static readonly Histogram<double> RequestDuration =
         Meter.CreateHistogram<double>("redstar.request.duration", unit: "ms", description: "Duration of requests made to the LLM server.");
 
+    /// <summary>
+    /// Duration of one occurrence of a generation stage (reasoning, tool calling/searching, answer
+    /// generation), tagged by stage name (e.g. "Reasoning", "Searching", "Generating"). Recorded once per
+    /// contiguous occurrence of a stage within a turn, not once per turn overall -- if the model reasons,
+    /// then searches, then reasons again, that's two separate "Reasoning" measurements (in the order they
+    /// happened), not one combined/summed value. The stage name tag is never suffixed with a count (e.g.
+    /// never "Reasoning (2)") -- duplicate occurrences are distinguished by being separate measurements,
+    /// not by the tag value.
+    /// </summary>
+    public static readonly Histogram<double> StageDuration =
+        Meter.CreateHistogram<double>("redstar.stage.duration", unit: "ms", description: "Duration of one occurrence of a generation stage (reasoning, tool calling, answer generation).");
+
     public static ILoggerFactory LoggerFactory { get; set; } = NullLoggerFactory.Instance;
 
     public static ILogger CreateLogger(string categoryName) => LoggerFactory.CreateLogger(categoryName);
