@@ -1,0 +1,441 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2000" height="2050" viewBox="0 0 2000 2050">
+  <defs><linearGradient id="c1g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FF6A5E"/><stop offset="1" stop-color="#E1332D"/></linearGradient><linearGradient id="c2g" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#FF6A5E"/><stop offset="1" stop-color="#A81E19"/></linearGradient><linearGradient id="c4g" x1="0.1" y1="0" x2="0.9" y2="1">
+        <stop offset="0" stop-color="#FF6A5E"/><stop offset="0.55" stop-color="#E1332D"/><stop offset="1" stop-color="#A81E19"/></linearGradient>
+      <linearGradient id="c4h" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#FF6A5E"/><stop offset="1" stop-color="#E1332D"/></linearGradient><mask id="c5m">
+        <rect x="0" y="0" width="512" height="512" fill="#fff"/>
+        <circle cx="120" cy="120" r="92" fill="#000"/>
+      </mask><linearGradient id="c6t" x1="1" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#E1332D" stop-opacity="0.95"/>
+        <stop offset="1" stop-color="#E1332D" stop-opacity="0"/></linearGradient>
+      <linearGradient id="c6g" x1="0.2" y1="0" x2="0.9" y2="1">
+        <stop offset="0" stop-color="#FF6A5E"/><stop offset="1" stop-color="#E1332D"/></linearGradient></defs>
+  <rect width="2000" height="2050" fill="#0D0F12"/>
+  <text x="40" y="86" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="54" font-weight="600"
+        letter-spacing="-1"><tspan fill="#E1332D">RedStar</tspan><tspan fill="#F4F1EE"> — logo concepts</tspan></text>
+  <text x="42" y="128" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="22" font-weight="500"
+        letter-spacing="4" fill="#7C8698">SIX DIRECTIONS · MARK + LOCKUP · DARK AND LIGHT · MARK LEGIBILITY AT 64, 32 AND 20 PX</text>
+  
+    <g>
+      <rect x="0" y="190" width="1000" height="300" fill="#0D0F12"/>
+      <rect x="1000" y="190" width="1000" height="300" fill="#FFFFFF"/>
+      <line x1="0" y1="190" x2="1000" y2="190" stroke="#3A424E" stroke-width="2"/>
+      <line x1="1000" y1="190" x2="2000" y2="190" stroke="#D8DCE2" stroke-width="2"/>
+      <text x="34" y="236" font-family="'Cascadia Mono','Consolas',monospace" font-size="22"
+            font-weight="700" fill="#E1332D">01</text>
+      <text x="74" y="236" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="24"
+            font-weight="600" letter-spacing="3" fill="#F4F1EE">PROMPT STAR</text>
+      <g transform="translate(44 272) scale(0.328)">
+    <rect x="0" y="0" width="512" height="512" rx="116" fill="#15181E"/>
+    <rect x="3" y="3" width="506" height="506" rx="113" fill="none" stroke="#2A3038" stroke-width="6"/>
+    <polyline points="152,190 224,258 152,326" fill="none" stroke="#F4F1EE" stroke-width="34"
+              stroke-linecap="round" stroke-linejoin="round"/>
+    <polygon points="330,162 353.511,225.639 421.301,228.334 368.042,270.361 386.427,335.666 330,298 273.573,335.666 291.958,270.361 238.699,228.334 306.489,225.639" fill="url(#c1g)" stroke="url(#c1g)" stroke-width="14" stroke-linejoin="round"/>
+    <rect x="152" y="366" width="208" height="24" rx="12" fill="#E1332D" opacity="0.35"/></g>
+      <g transform="translate(262 348) scale(0.62)"><text x="0" y="0" font-family="'Cascadia Mono','Consolas',monospace" font-size="104" font-weight="700"
+      letter-spacing="-2"><tspan fill="#E1332D">red</tspan><tspan fill="#F4F1EE">star</tspan></text><rect x="430.563" y="-68.64" width="47.84" height="81.12" fill="#E1332D" opacity="0.85"/></g>
+      <text x="266" y="390" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="17"
+            font-weight="500" letter-spacing="4" fill="#7C8698">.NET CLI FOR SELF-HOSTED LLMS</text>
+      <g transform="translate(1044 272) scale(0.328)">
+    <rect x="0" y="0" width="512" height="512" rx="116" fill="#15181E"/>
+    <rect x="3" y="3" width="506" height="506" rx="113" fill="none" stroke="#2A3038" stroke-width="6"/>
+    <polyline points="152,190 224,258 152,326" fill="none" stroke="#F4F1EE" stroke-width="34"
+              stroke-linecap="round" stroke-linejoin="round"/>
+    <polygon points="330,162 353.511,225.639 421.301,228.334 368.042,270.361 386.427,335.666 330,298 273.573,335.666 291.958,270.361 238.699,228.334 306.489,225.639" fill="url(#c1g)" stroke="url(#c1g)" stroke-width="14" stroke-linejoin="round"/>
+    <rect x="152" y="366" width="208" height="24" rx="12" fill="#E1332D" opacity="0.35"/></g>
+      <g transform="translate(1262 348) scale(0.62)"><text x="0" y="0" font-family="'Cascadia Mono','Consolas',monospace" font-size="104" font-weight="700"
+      letter-spacing="-2"><tspan fill="#E1332D">red</tspan><tspan fill="#0D0F12">star</tspan></text><rect x="430.563" y="-68.64" width="47.84" height="81.12" fill="#E1332D" opacity="0.85"/></g>
+      <text x="1266" y="390" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="17"
+            font-weight="500" letter-spacing="4" fill="#6B7280">.NET CLI FOR SELF-HOSTED LLMS</text>
+      <text x="720" y="236" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="15"
+            font-weight="500" letter-spacing="3" fill="#7C8698">FAVICON CHECK</text>
+      <g transform="translate(720 272) scale(0.125)">
+    <rect x="0" y="0" width="512" height="512" rx="116" fill="#15181E"/>
+    <rect x="3" y="3" width="506" height="506" rx="113" fill="none" stroke="#2A3038" stroke-width="6"/>
+    <polyline points="152,190 224,258 152,326" fill="none" stroke="#F4F1EE" stroke-width="34"
+              stroke-linecap="round" stroke-linejoin="round"/>
+    <polygon points="330,162 353.511,225.639 421.301,228.334 368.042,270.361 386.427,335.666 330,298 273.573,335.666 291.958,270.361 238.699,228.334 306.489,225.639" fill="url(#c1g)" stroke="url(#c1g)" stroke-width="14" stroke-linejoin="round"/>
+    <rect x="152" y="366" width="208" height="24" rx="12" fill="#E1332D" opacity="0.35"/></g>
+      <g transform="translate(820 290) scale(0.063)">
+    <rect x="0" y="0" width="512" height="512" rx="116" fill="#15181E"/>
+    <rect x="3" y="3" width="506" height="506" rx="113" fill="none" stroke="#2A3038" stroke-width="6"/>
+    <polyline points="152,190 224,258 152,326" fill="none" stroke="#F4F1EE" stroke-width="34"
+              stroke-linecap="round" stroke-linejoin="round"/>
+    <polygon points="330,162 353.511,225.639 421.301,228.334 368.042,270.361 386.427,335.666 330,298 273.573,335.666 291.958,270.361 238.699,228.334 306.489,225.639" fill="url(#c1g)" stroke="url(#c1g)" stroke-width="14" stroke-linejoin="round"/>
+    <rect x="152" y="366" width="208" height="24" rx="12" fill="#E1332D" opacity="0.35"/></g>
+      <g transform="translate(880 298) scale(0.039)">
+    <rect x="0" y="0" width="512" height="512" rx="116" fill="#15181E"/>
+    <rect x="3" y="3" width="506" height="506" rx="113" fill="none" stroke="#2A3038" stroke-width="6"/>
+    <polyline points="152,190 224,258 152,326" fill="none" stroke="#F4F1EE" stroke-width="34"
+              stroke-linecap="round" stroke-linejoin="round"/>
+    <polygon points="330,162 353.511,225.639 421.301,228.334 368.042,270.361 386.427,335.666 330,298 273.573,335.666 291.958,270.361 238.699,228.334 306.489,225.639" fill="url(#c1g)" stroke="url(#c1g)" stroke-width="14" stroke-linejoin="round"/>
+    <rect x="152" y="366" width="208" height="24" rx="12" fill="#E1332D" opacity="0.35"/></g>
+      <text x="1720" y="236" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="15"
+            font-weight="500" letter-spacing="3" fill="#6B7280">FAVICON CHECK</text>
+      <g transform="translate(1720 272) scale(0.125)">
+    <rect x="0" y="0" width="512" height="512" rx="116" fill="#15181E"/>
+    <rect x="3" y="3" width="506" height="506" rx="113" fill="none" stroke="#2A3038" stroke-width="6"/>
+    <polyline points="152,190 224,258 152,326" fill="none" stroke="#F4F1EE" stroke-width="34"
+              stroke-linecap="round" stroke-linejoin="round"/>
+    <polygon points="330,162 353.511,225.639 421.301,228.334 368.042,270.361 386.427,335.666 330,298 273.573,335.666 291.958,270.361 238.699,228.334 306.489,225.639" fill="url(#c1g)" stroke="url(#c1g)" stroke-width="14" stroke-linejoin="round"/>
+    <rect x="152" y="366" width="208" height="24" rx="12" fill="#E1332D" opacity="0.35"/></g>
+      <g transform="translate(1820 290) scale(0.063)">
+    <rect x="0" y="0" width="512" height="512" rx="116" fill="#15181E"/>
+    <rect x="3" y="3" width="506" height="506" rx="113" fill="none" stroke="#2A3038" stroke-width="6"/>
+    <polyline points="152,190 224,258 152,326" fill="none" stroke="#F4F1EE" stroke-width="34"
+              stroke-linecap="round" stroke-linejoin="round"/>
+    <polygon points="330,162 353.511,225.639 421.301,228.334 368.042,270.361 386.427,335.666 330,298 273.573,335.666 291.958,270.361 238.699,228.334 306.489,225.639" fill="url(#c1g)" stroke="url(#c1g)" stroke-width="14" stroke-linejoin="round"/>
+    <rect x="152" y="366" width="208" height="24" rx="12" fill="#E1332D" opacity="0.35"/></g>
+      <g transform="translate(1880 298) scale(0.039)">
+    <rect x="0" y="0" width="512" height="512" rx="116" fill="#15181E"/>
+    <rect x="3" y="3" width="506" height="506" rx="113" fill="none" stroke="#2A3038" stroke-width="6"/>
+    <polyline points="152,190 224,258 152,326" fill="none" stroke="#F4F1EE" stroke-width="34"
+              stroke-linecap="round" stroke-linejoin="round"/>
+    <polygon points="330,162 353.511,225.639 421.301,228.334 368.042,270.361 386.427,335.666 330,298 273.573,335.666 291.958,270.361 238.699,228.334 306.489,225.639" fill="url(#c1g)" stroke="url(#c1g)" stroke-width="14" stroke-linejoin="round"/>
+    <rect x="152" y="366" width="208" height="24" rx="12" fill="#E1332D" opacity="0.35"/></g>
+    </g>
+    <g>
+      <rect x="0" y="490" width="1000" height="300" fill="#0D0F12"/>
+      <rect x="1000" y="490" width="1000" height="300" fill="#FFFFFF"/>
+      <line x1="0" y1="490" x2="1000" y2="490" stroke="#3A424E" stroke-width="2"/>
+      <line x1="1000" y1="490" x2="2000" y2="490" stroke="#D8DCE2" stroke-width="2"/>
+      <text x="34" y="536" font-family="'Cascadia Mono','Consolas',monospace" font-size="22"
+            font-weight="700" fill="#E1332D">02</text>
+      <text x="74" y="536" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="24"
+            font-weight="600" letter-spacing="3" fill="#F4F1EE">ORBIT</text>
+      <g transform="translate(44 572) scale(0.328)">
+    <g transform="rotate(-24 256 256)">
+      <ellipse cx="256" cy="256" rx="238" ry="104" fill="none" stroke="#E1332D" stroke-width="11" opacity="0.42"/>
+      <ellipse cx="256" cy="256" rx="168" ry="72" fill="none" stroke="#E1332D" stroke-width="9" opacity="0.22"/>
+    </g>
+    <polygon points="256,138 284.801,216.358 368.225,219.536 302.602,271.142 325.359,351.464 256,305 186.641,351.464 209.398,271.142 143.775,219.536 227.199,216.358" fill="url(#c2g)" stroke="url(#c2g)" stroke-width="16" stroke-linejoin="round"/>
+    <g transform="rotate(-24 256 256)">
+      <circle cx="494" cy="256" r="26" fill="#E1332D"/>
+      <circle cx="18" cy="256" r="18" fill="#E1332D" opacity="0.75"/>
+      <circle cx="256" cy="184" r="15" fill="#FF6A5E" opacity="0.9"/>
+    </g></g>
+      <g transform="translate(262 648) scale(0.62)"><text x="0" y="0" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="116" font-weight="600"
+      letter-spacing="-1"><tspan fill="#E1332D">Red</tspan><tspan fill="#F4F1EE">Star</tspan></text></g>
+      <text x="266" y="690" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="17"
+            font-weight="500" letter-spacing="4" fill="#7C8698">.NET CLI FOR SELF-HOSTED LLMS</text>
+      <g transform="translate(1044 572) scale(0.328)">
+    <g transform="rotate(-24 256 256)">
+      <ellipse cx="256" cy="256" rx="238" ry="104" fill="none" stroke="#E1332D" stroke-width="11" opacity="0.42"/>
+      <ellipse cx="256" cy="256" rx="168" ry="72" fill="none" stroke="#E1332D" stroke-width="9" opacity="0.22"/>
+    </g>
+    <polygon points="256,138 284.801,216.358 368.225,219.536 302.602,271.142 325.359,351.464 256,305 186.641,351.464 209.398,271.142 143.775,219.536 227.199,216.358" fill="url(#c2g)" stroke="url(#c2g)" stroke-width="16" stroke-linejoin="round"/>
+    <g transform="rotate(-24 256 256)">
+      <circle cx="494" cy="256" r="26" fill="#E1332D"/>
+      <circle cx="18" cy="256" r="18" fill="#E1332D" opacity="0.75"/>
+      <circle cx="256" cy="184" r="15" fill="#FF6A5E" opacity="0.9"/>
+    </g></g>
+      <g transform="translate(1262 648) scale(0.62)"><text x="0" y="0" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="116" font-weight="600"
+      letter-spacing="-1"><tspan fill="#E1332D">Red</tspan><tspan fill="#0D0F12">Star</tspan></text></g>
+      <text x="1266" y="690" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="17"
+            font-weight="500" letter-spacing="4" fill="#6B7280">.NET CLI FOR SELF-HOSTED LLMS</text>
+      <text x="720" y="536" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="15"
+            font-weight="500" letter-spacing="3" fill="#7C8698">FAVICON CHECK</text>
+      <g transform="translate(720 572) scale(0.125)">
+    <g transform="rotate(-24 256 256)">
+      <ellipse cx="256" cy="256" rx="238" ry="104" fill="none" stroke="#E1332D" stroke-width="11" opacity="0.42"/>
+      <ellipse cx="256" cy="256" rx="168" ry="72" fill="none" stroke="#E1332D" stroke-width="9" opacity="0.22"/>
+    </g>
+    <polygon points="256,138 284.801,216.358 368.225,219.536 302.602,271.142 325.359,351.464 256,305 186.641,351.464 209.398,271.142 143.775,219.536 227.199,216.358" fill="url(#c2g)" stroke="url(#c2g)" stroke-width="16" stroke-linejoin="round"/>
+    <g transform="rotate(-24 256 256)">
+      <circle cx="494" cy="256" r="26" fill="#E1332D"/>
+      <circle cx="18" cy="256" r="18" fill="#E1332D" opacity="0.75"/>
+      <circle cx="256" cy="184" r="15" fill="#FF6A5E" opacity="0.9"/>
+    </g></g>
+      <g transform="translate(820 590) scale(0.063)">
+    <g transform="rotate(-24 256 256)">
+      <ellipse cx="256" cy="256" rx="238" ry="104" fill="none" stroke="#E1332D" stroke-width="11" opacity="0.42"/>
+      <ellipse cx="256" cy="256" rx="168" ry="72" fill="none" stroke="#E1332D" stroke-width="9" opacity="0.22"/>
+    </g>
+    <polygon points="256,138 284.801,216.358 368.225,219.536 302.602,271.142 325.359,351.464 256,305 186.641,351.464 209.398,271.142 143.775,219.536 227.199,216.358" fill="url(#c2g)" stroke="url(#c2g)" stroke-width="16" stroke-linejoin="round"/>
+    <g transform="rotate(-24 256 256)">
+      <circle cx="494" cy="256" r="26" fill="#E1332D"/>
+      <circle cx="18" cy="256" r="18" fill="#E1332D" opacity="0.75"/>
+      <circle cx="256" cy="184" r="15" fill="#FF6A5E" opacity="0.9"/>
+    </g></g>
+      <g transform="translate(880 598) scale(0.039)">
+    <g transform="rotate(-24 256 256)">
+      <ellipse cx="256" cy="256" rx="238" ry="104" fill="none" stroke="#E1332D" stroke-width="11" opacity="0.42"/>
+      <ellipse cx="256" cy="256" rx="168" ry="72" fill="none" stroke="#E1332D" stroke-width="9" opacity="0.22"/>
+    </g>
+    <polygon points="256,138 284.801,216.358 368.225,219.536 302.602,271.142 325.359,351.464 256,305 186.641,351.464 209.398,271.142 143.775,219.536 227.199,216.358" fill="url(#c2g)" stroke="url(#c2g)" stroke-width="16" stroke-linejoin="round"/>
+    <g transform="rotate(-24 256 256)">
+      <circle cx="494" cy="256" r="26" fill="#E1332D"/>
+      <circle cx="18" cy="256" r="18" fill="#E1332D" opacity="0.75"/>
+      <circle cx="256" cy="184" r="15" fill="#FF6A5E" opacity="0.9"/>
+    </g></g>
+      <text x="1720" y="536" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="15"
+            font-weight="500" letter-spacing="3" fill="#6B7280">FAVICON CHECK</text>
+      <g transform="translate(1720 572) scale(0.125)">
+    <g transform="rotate(-24 256 256)">
+      <ellipse cx="256" cy="256" rx="238" ry="104" fill="none" stroke="#E1332D" stroke-width="11" opacity="0.42"/>
+      <ellipse cx="256" cy="256" rx="168" ry="72" fill="none" stroke="#E1332D" stroke-width="9" opacity="0.22"/>
+    </g>
+    <polygon points="256,138 284.801,216.358 368.225,219.536 302.602,271.142 325.359,351.464 256,305 186.641,351.464 209.398,271.142 143.775,219.536 227.199,216.358" fill="url(#c2g)" stroke="url(#c2g)" stroke-width="16" stroke-linejoin="round"/>
+    <g transform="rotate(-24 256 256)">
+      <circle cx="494" cy="256" r="26" fill="#E1332D"/>
+      <circle cx="18" cy="256" r="18" fill="#E1332D" opacity="0.75"/>
+      <circle cx="256" cy="184" r="15" fill="#FF6A5E" opacity="0.9"/>
+    </g></g>
+      <g transform="translate(1820 590) scale(0.063)">
+    <g transform="rotate(-24 256 256)">
+      <ellipse cx="256" cy="256" rx="238" ry="104" fill="none" stroke="#E1332D" stroke-width="11" opacity="0.42"/>
+      <ellipse cx="256" cy="256" rx="168" ry="72" fill="none" stroke="#E1332D" stroke-width="9" opacity="0.22"/>
+    </g>
+    <polygon points="256,138 284.801,216.358 368.225,219.536 302.602,271.142 325.359,351.464 256,305 186.641,351.464 209.398,271.142 143.775,219.536 227.199,216.358" fill="url(#c2g)" stroke="url(#c2g)" stroke-width="16" stroke-linejoin="round"/>
+    <g transform="rotate(-24 256 256)">
+      <circle cx="494" cy="256" r="26" fill="#E1332D"/>
+      <circle cx="18" cy="256" r="18" fill="#E1332D" opacity="0.75"/>
+      <circle cx="256" cy="184" r="15" fill="#FF6A5E" opacity="0.9"/>
+    </g></g>
+      <g transform="translate(1880 598) scale(0.039)">
+    <g transform="rotate(-24 256 256)">
+      <ellipse cx="256" cy="256" rx="238" ry="104" fill="none" stroke="#E1332D" stroke-width="11" opacity="0.42"/>
+      <ellipse cx="256" cy="256" rx="168" ry="72" fill="none" stroke="#E1332D" stroke-width="9" opacity="0.22"/>
+    </g>
+    <polygon points="256,138 284.801,216.358 368.225,219.536 302.602,271.142 325.359,351.464 256,305 186.641,351.464 209.398,271.142 143.775,219.536 227.199,216.358" fill="url(#c2g)" stroke="url(#c2g)" stroke-width="16" stroke-linejoin="round"/>
+    <g transform="rotate(-24 256 256)">
+      <circle cx="494" cy="256" r="26" fill="#E1332D"/>
+      <circle cx="18" cy="256" r="18" fill="#E1332D" opacity="0.75"/>
+      <circle cx="256" cy="184" r="15" fill="#FF6A5E" opacity="0.9"/>
+    </g></g>
+    </g>
+    <g>
+      <rect x="0" y="790" width="1000" height="300" fill="#0D0F12"/>
+      <rect x="1000" y="790" width="1000" height="300" fill="#FFFFFF"/>
+      <line x1="0" y1="790" x2="1000" y2="790" stroke="#3A424E" stroke-width="2"/>
+      <line x1="1000" y1="790" x2="2000" y2="790" stroke="#D8DCE2" stroke-width="2"/>
+      <text x="34" y="836" font-family="'Cascadia Mono','Consolas',monospace" font-size="22"
+            font-weight="700" fill="#E1332D">03</text>
+      <text x="74" y="836" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="24"
+            font-weight="600" letter-spacing="3" fill="#F4F1EE">FACET STAR</text>
+      <g transform="translate(44 872) scale(0.328)"><g><polygon points="256,262 256,38 310.076,187.57" fill="#E1332D"/><polygon points="256,262 310.076,187.57 469.037,192.78" fill="#A81E19"/><polygon points="256,262 469.037,192.78 343.497,290.43" fill="#E1332D"/><polygon points="256,262 343.497,290.43 387.664,443.22" fill="#A81E19"/><polygon points="256,262 387.664,443.22 256,354" fill="#E1332D"/><polygon points="256,262 256,354 124.336,443.22" fill="#A81E19"/><polygon points="256,262 124.336,443.22 168.503,290.43" fill="#E1332D"/><polygon points="256,262 168.503,290.43 42.963,192.78" fill="#A81E19"/><polygon points="256,262 42.963,192.78 201.924,187.57" fill="#E1332D"/><polygon points="256,262 201.924,187.57 256,38" fill="#A81E19"/></g></g>
+      <g transform="translate(262 948) scale(0.62)"><text x="0" y="0" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="100" font-weight="700"
+      letter-spacing="9"><tspan fill="#E1332D">RED</tspan><tspan fill="#F4F1EE">STAR</tspan></text></g>
+      <text x="266" y="990" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="17"
+            font-weight="500" letter-spacing="4" fill="#7C8698">.NET CLI FOR SELF-HOSTED LLMS</text>
+      <g transform="translate(1044 872) scale(0.328)"><g><polygon points="256,262 256,38 310.076,187.57" fill="#E1332D"/><polygon points="256,262 310.076,187.57 469.037,192.78" fill="#A81E19"/><polygon points="256,262 469.037,192.78 343.497,290.43" fill="#E1332D"/><polygon points="256,262 343.497,290.43 387.664,443.22" fill="#A81E19"/><polygon points="256,262 387.664,443.22 256,354" fill="#E1332D"/><polygon points="256,262 256,354 124.336,443.22" fill="#A81E19"/><polygon points="256,262 124.336,443.22 168.503,290.43" fill="#E1332D"/><polygon points="256,262 168.503,290.43 42.963,192.78" fill="#A81E19"/><polygon points="256,262 42.963,192.78 201.924,187.57" fill="#E1332D"/><polygon points="256,262 201.924,187.57 256,38" fill="#A81E19"/></g></g>
+      <g transform="translate(1262 948) scale(0.62)"><text x="0" y="0" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="100" font-weight="700"
+      letter-spacing="9"><tspan fill="#E1332D">RED</tspan><tspan fill="#0D0F12">STAR</tspan></text></g>
+      <text x="1266" y="990" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="17"
+            font-weight="500" letter-spacing="4" fill="#6B7280">.NET CLI FOR SELF-HOSTED LLMS</text>
+      <text x="720" y="836" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="15"
+            font-weight="500" letter-spacing="3" fill="#7C8698">FAVICON CHECK</text>
+      <g transform="translate(720 872) scale(0.125)"><g><polygon points="256,262 256,38 310.076,187.57" fill="#E1332D"/><polygon points="256,262 310.076,187.57 469.037,192.78" fill="#A81E19"/><polygon points="256,262 469.037,192.78 343.497,290.43" fill="#E1332D"/><polygon points="256,262 343.497,290.43 387.664,443.22" fill="#A81E19"/><polygon points="256,262 387.664,443.22 256,354" fill="#E1332D"/><polygon points="256,262 256,354 124.336,443.22" fill="#A81E19"/><polygon points="256,262 124.336,443.22 168.503,290.43" fill="#E1332D"/><polygon points="256,262 168.503,290.43 42.963,192.78" fill="#A81E19"/><polygon points="256,262 42.963,192.78 201.924,187.57" fill="#E1332D"/><polygon points="256,262 201.924,187.57 256,38" fill="#A81E19"/></g></g>
+      <g transform="translate(820 890) scale(0.063)"><g><polygon points="256,262 256,38 310.076,187.57" fill="#E1332D"/><polygon points="256,262 310.076,187.57 469.037,192.78" fill="#A81E19"/><polygon points="256,262 469.037,192.78 343.497,290.43" fill="#E1332D"/><polygon points="256,262 343.497,290.43 387.664,443.22" fill="#A81E19"/><polygon points="256,262 387.664,443.22 256,354" fill="#E1332D"/><polygon points="256,262 256,354 124.336,443.22" fill="#A81E19"/><polygon points="256,262 124.336,443.22 168.503,290.43" fill="#E1332D"/><polygon points="256,262 168.503,290.43 42.963,192.78" fill="#A81E19"/><polygon points="256,262 42.963,192.78 201.924,187.57" fill="#E1332D"/><polygon points="256,262 201.924,187.57 256,38" fill="#A81E19"/></g></g>
+      <g transform="translate(880 898) scale(0.039)"><g><polygon points="256,262 256,38 310.076,187.57" fill="#E1332D"/><polygon points="256,262 310.076,187.57 469.037,192.78" fill="#A81E19"/><polygon points="256,262 469.037,192.78 343.497,290.43" fill="#E1332D"/><polygon points="256,262 343.497,290.43 387.664,443.22" fill="#A81E19"/><polygon points="256,262 387.664,443.22 256,354" fill="#E1332D"/><polygon points="256,262 256,354 124.336,443.22" fill="#A81E19"/><polygon points="256,262 124.336,443.22 168.503,290.43" fill="#E1332D"/><polygon points="256,262 168.503,290.43 42.963,192.78" fill="#A81E19"/><polygon points="256,262 42.963,192.78 201.924,187.57" fill="#E1332D"/><polygon points="256,262 201.924,187.57 256,38" fill="#A81E19"/></g></g>
+      <text x="1720" y="836" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="15"
+            font-weight="500" letter-spacing="3" fill="#6B7280">FAVICON CHECK</text>
+      <g transform="translate(1720 872) scale(0.125)"><g><polygon points="256,262 256,38 310.076,187.57" fill="#E1332D"/><polygon points="256,262 310.076,187.57 469.037,192.78" fill="#A81E19"/><polygon points="256,262 469.037,192.78 343.497,290.43" fill="#E1332D"/><polygon points="256,262 343.497,290.43 387.664,443.22" fill="#A81E19"/><polygon points="256,262 387.664,443.22 256,354" fill="#E1332D"/><polygon points="256,262 256,354 124.336,443.22" fill="#A81E19"/><polygon points="256,262 124.336,443.22 168.503,290.43" fill="#E1332D"/><polygon points="256,262 168.503,290.43 42.963,192.78" fill="#A81E19"/><polygon points="256,262 42.963,192.78 201.924,187.57" fill="#E1332D"/><polygon points="256,262 201.924,187.57 256,38" fill="#A81E19"/></g></g>
+      <g transform="translate(1820 890) scale(0.063)"><g><polygon points="256,262 256,38 310.076,187.57" fill="#E1332D"/><polygon points="256,262 310.076,187.57 469.037,192.78" fill="#A81E19"/><polygon points="256,262 469.037,192.78 343.497,290.43" fill="#E1332D"/><polygon points="256,262 343.497,290.43 387.664,443.22" fill="#A81E19"/><polygon points="256,262 387.664,443.22 256,354" fill="#E1332D"/><polygon points="256,262 256,354 124.336,443.22" fill="#A81E19"/><polygon points="256,262 124.336,443.22 168.503,290.43" fill="#E1332D"/><polygon points="256,262 168.503,290.43 42.963,192.78" fill="#A81E19"/><polygon points="256,262 42.963,192.78 201.924,187.57" fill="#E1332D"/><polygon points="256,262 201.924,187.57 256,38" fill="#A81E19"/></g></g>
+      <g transform="translate(1880 898) scale(0.039)"><g><polygon points="256,262 256,38 310.076,187.57" fill="#E1332D"/><polygon points="256,262 310.076,187.57 469.037,192.78" fill="#A81E19"/><polygon points="256,262 469.037,192.78 343.497,290.43" fill="#E1332D"/><polygon points="256,262 343.497,290.43 387.664,443.22" fill="#A81E19"/><polygon points="256,262 387.664,443.22 256,354" fill="#E1332D"/><polygon points="256,262 256,354 124.336,443.22" fill="#A81E19"/><polygon points="256,262 124.336,443.22 168.503,290.43" fill="#E1332D"/><polygon points="256,262 168.503,290.43 42.963,192.78" fill="#A81E19"/><polygon points="256,262 42.963,192.78 201.924,187.57" fill="#E1332D"/><polygon points="256,262 201.924,187.57 256,38" fill="#A81E19"/></g></g>
+    </g>
+    <g>
+      <rect x="0" y="1090" width="1000" height="300" fill="#0D0F12"/>
+      <rect x="1000" y="1090" width="1000" height="300" fill="#FFFFFF"/>
+      <line x1="0" y1="1090" x2="1000" y2="1090" stroke="#3A424E" stroke-width="2"/>
+      <line x1="1000" y1="1090" x2="2000" y2="1090" stroke="#D8DCE2" stroke-width="2"/>
+      <text x="34" y="1136" font-family="'Cascadia Mono','Consolas',monospace" font-size="22"
+            font-weight="700" fill="#E1332D">04</text>
+      <text x="74" y="1136" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="24"
+            font-weight="600" letter-spacing="3" fill="#F4F1EE">SPARKLE</text>
+      <g transform="translate(44 1172) scale(0.328)">
+    <path d="M 238 44 C 260.89 196.6 303.4 239.11 456 262 C 303.4 284.89 260.89 327.4 238 480 C 215.11 327.4 172.6 284.89 20 262 C 172.6 239.11 215.11 196.6 238 44 Z" fill="url(#c4g)"/>
+    <path d="M 430 30 C 438.736 83.04 454.96 99.264 508 108 C 454.96 116.736 438.736 132.96 430 186 C 421.264 132.96 405.04 116.736 352 108 C 405.04 99.264 421.264 83.04 430 30 Z" fill="url(#c4h)"/>
+    <path d="M 432 352 C 437.376 384.64 447.36 394.624 480 400 C 447.36 405.376 437.376 415.36 432 448 C 426.624 415.36 416.64 405.376 384 400 C 416.64 394.624 426.624 384.64 432 352 Z" fill="#E1332D" opacity="0.8"/></g>
+      <g transform="translate(262 1248) scale(0.62)"><text x="0" y="0" font-family="'Segoe UI','Arial',sans-serif" font-size="112" font-weight="700"
+      letter-spacing="-3"><tspan fill="#E1332D">Red</tspan><tspan fill="#F4F1EE">Star</tspan></text></g>
+      <text x="266" y="1290" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="17"
+            font-weight="500" letter-spacing="4" fill="#7C8698">.NET CLI FOR SELF-HOSTED LLMS</text>
+      <g transform="translate(1044 1172) scale(0.328)">
+    <path d="M 238 44 C 260.89 196.6 303.4 239.11 456 262 C 303.4 284.89 260.89 327.4 238 480 C 215.11 327.4 172.6 284.89 20 262 C 172.6 239.11 215.11 196.6 238 44 Z" fill="url(#c4g)"/>
+    <path d="M 430 30 C 438.736 83.04 454.96 99.264 508 108 C 454.96 116.736 438.736 132.96 430 186 C 421.264 132.96 405.04 116.736 352 108 C 405.04 99.264 421.264 83.04 430 30 Z" fill="url(#c4h)"/>
+    <path d="M 432 352 C 437.376 384.64 447.36 394.624 480 400 C 447.36 405.376 437.376 415.36 432 448 C 426.624 415.36 416.64 405.376 384 400 C 416.64 394.624 426.624 384.64 432 352 Z" fill="#E1332D" opacity="0.8"/></g>
+      <g transform="translate(1262 1248) scale(0.62)"><text x="0" y="0" font-family="'Segoe UI','Arial',sans-serif" font-size="112" font-weight="700"
+      letter-spacing="-3"><tspan fill="#E1332D">Red</tspan><tspan fill="#0D0F12">Star</tspan></text></g>
+      <text x="1266" y="1290" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="17"
+            font-weight="500" letter-spacing="4" fill="#6B7280">.NET CLI FOR SELF-HOSTED LLMS</text>
+      <text x="720" y="1136" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="15"
+            font-weight="500" letter-spacing="3" fill="#7C8698">FAVICON CHECK</text>
+      <g transform="translate(720 1172) scale(0.125)">
+    <path d="M 238 44 C 260.89 196.6 303.4 239.11 456 262 C 303.4 284.89 260.89 327.4 238 480 C 215.11 327.4 172.6 284.89 20 262 C 172.6 239.11 215.11 196.6 238 44 Z" fill="url(#c4g)"/>
+    <path d="M 430 30 C 438.736 83.04 454.96 99.264 508 108 C 454.96 116.736 438.736 132.96 430 186 C 421.264 132.96 405.04 116.736 352 108 C 405.04 99.264 421.264 83.04 430 30 Z" fill="url(#c4h)"/>
+    <path d="M 432 352 C 437.376 384.64 447.36 394.624 480 400 C 447.36 405.376 437.376 415.36 432 448 C 426.624 415.36 416.64 405.376 384 400 C 416.64 394.624 426.624 384.64 432 352 Z" fill="#E1332D" opacity="0.8"/></g>
+      <g transform="translate(820 1190) scale(0.063)">
+    <path d="M 238 44 C 260.89 196.6 303.4 239.11 456 262 C 303.4 284.89 260.89 327.4 238 480 C 215.11 327.4 172.6 284.89 20 262 C 172.6 239.11 215.11 196.6 238 44 Z" fill="url(#c4g)"/>
+    <path d="M 430 30 C 438.736 83.04 454.96 99.264 508 108 C 454.96 116.736 438.736 132.96 430 186 C 421.264 132.96 405.04 116.736 352 108 C 405.04 99.264 421.264 83.04 430 30 Z" fill="url(#c4h)"/>
+    <path d="M 432 352 C 437.376 384.64 447.36 394.624 480 400 C 447.36 405.376 437.376 415.36 432 448 C 426.624 415.36 416.64 405.376 384 400 C 416.64 394.624 426.624 384.64 432 352 Z" fill="#E1332D" opacity="0.8"/></g>
+      <g transform="translate(880 1198) scale(0.039)">
+    <path d="M 238 44 C 260.89 196.6 303.4 239.11 456 262 C 303.4 284.89 260.89 327.4 238 480 C 215.11 327.4 172.6 284.89 20 262 C 172.6 239.11 215.11 196.6 238 44 Z" fill="url(#c4g)"/>
+    <path d="M 430 30 C 438.736 83.04 454.96 99.264 508 108 C 454.96 116.736 438.736 132.96 430 186 C 421.264 132.96 405.04 116.736 352 108 C 405.04 99.264 421.264 83.04 430 30 Z" fill="url(#c4h)"/>
+    <path d="M 432 352 C 437.376 384.64 447.36 394.624 480 400 C 447.36 405.376 437.376 415.36 432 448 C 426.624 415.36 416.64 405.376 384 400 C 416.64 394.624 426.624 384.64 432 352 Z" fill="#E1332D" opacity="0.8"/></g>
+      <text x="1720" y="1136" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="15"
+            font-weight="500" letter-spacing="3" fill="#6B7280">FAVICON CHECK</text>
+      <g transform="translate(1720 1172) scale(0.125)">
+    <path d="M 238 44 C 260.89 196.6 303.4 239.11 456 262 C 303.4 284.89 260.89 327.4 238 480 C 215.11 327.4 172.6 284.89 20 262 C 172.6 239.11 215.11 196.6 238 44 Z" fill="url(#c4g)"/>
+    <path d="M 430 30 C 438.736 83.04 454.96 99.264 508 108 C 454.96 116.736 438.736 132.96 430 186 C 421.264 132.96 405.04 116.736 352 108 C 405.04 99.264 421.264 83.04 430 30 Z" fill="url(#c4h)"/>
+    <path d="M 432 352 C 437.376 384.64 447.36 394.624 480 400 C 447.36 405.376 437.376 415.36 432 448 C 426.624 415.36 416.64 405.376 384 400 C 416.64 394.624 426.624 384.64 432 352 Z" fill="#E1332D" opacity="0.8"/></g>
+      <g transform="translate(1820 1190) scale(0.063)">
+    <path d="M 238 44 C 260.89 196.6 303.4 239.11 456 262 C 303.4 284.89 260.89 327.4 238 480 C 215.11 327.4 172.6 284.89 20 262 C 172.6 239.11 215.11 196.6 238 44 Z" fill="url(#c4g)"/>
+    <path d="M 430 30 C 438.736 83.04 454.96 99.264 508 108 C 454.96 116.736 438.736 132.96 430 186 C 421.264 132.96 405.04 116.736 352 108 C 405.04 99.264 421.264 83.04 430 30 Z" fill="url(#c4h)"/>
+    <path d="M 432 352 C 437.376 384.64 447.36 394.624 480 400 C 447.36 405.376 437.376 415.36 432 448 C 426.624 415.36 416.64 405.376 384 400 C 416.64 394.624 426.624 384.64 432 352 Z" fill="#E1332D" opacity="0.8"/></g>
+      <g transform="translate(1880 1198) scale(0.039)">
+    <path d="M 238 44 C 260.89 196.6 303.4 239.11 456 262 C 303.4 284.89 260.89 327.4 238 480 C 215.11 327.4 172.6 284.89 20 262 C 172.6 239.11 215.11 196.6 238 44 Z" fill="url(#c4g)"/>
+    <path d="M 430 30 C 438.736 83.04 454.96 99.264 508 108 C 454.96 116.736 438.736 132.96 430 186 C 421.264 132.96 405.04 116.736 352 108 C 405.04 99.264 421.264 83.04 430 30 Z" fill="url(#c4h)"/>
+    <path d="M 432 352 C 437.376 384.64 447.36 394.624 480 400 C 447.36 405.376 437.376 415.36 432 448 C 426.624 415.36 416.64 405.376 384 400 C 416.64 394.624 426.624 384.64 432 352 Z" fill="#E1332D" opacity="0.8"/></g>
+    </g>
+    <g>
+      <rect x="0" y="1390" width="1000" height="300" fill="#0D0F12"/>
+      <rect x="1000" y="1390" width="1000" height="300" fill="#FFFFFF"/>
+      <line x1="0" y1="1390" x2="1000" y2="1390" stroke="#3A424E" stroke-width="2"/>
+      <line x1="1000" y1="1390" x2="2000" y2="1390" stroke="#D8DCE2" stroke-width="2"/>
+      <text x="34" y="1436" font-family="'Cascadia Mono','Consolas',monospace" font-size="22"
+            font-weight="700" fill="#E1332D">05</text>
+      <text x="74" y="1436" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="24"
+            font-weight="600" letter-spacing="3" fill="#F4F1EE">PANEL</text>
+      <g transform="translate(44 1472) scale(0.328)">
+    <rect x="48" y="48" width="416" height="416" rx="72" fill="none" stroke="#E1332D" stroke-width="16" mask="url(#c5m)"/>
+    <polygon points="120,54 135.87,98.157 182.77,99.605 145.679,128.343 158.794,173.395 120,147 81.206,173.395 94.321,128.343 57.23,99.605 104.13,98.157" fill="#E1332D" stroke="#E1332D" stroke-width="12" stroke-linejoin="round"/>
+    <rect x="140" y="236" width="252" height="26" rx="13" fill="#E1332D" opacity="0.85"/>
+    <rect x="140" y="300" width="196" height="26" rx="13" fill="#E1332D" opacity="0.55"/>
+    <rect x="140" y="364" width="118" height="26" rx="13" fill="#E1332D" opacity="0.30"/></g>
+      <g transform="translate(262 1548) scale(0.62)"><text x="0" y="0" font-family="'Cascadia Mono','Consolas',monospace" font-size="100" font-weight="700"
+      letter-spacing="-2"><tspan fill="#E1332D">Red</tspan><tspan fill="#F4F1EE">Star</tspan></text></g>
+      <text x="266" y="1590" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="17"
+            font-weight="500" letter-spacing="4" fill="#7C8698">.NET CLI FOR SELF-HOSTED LLMS</text>
+      <g transform="translate(1044 1472) scale(0.328)">
+    <rect x="48" y="48" width="416" height="416" rx="72" fill="none" stroke="#E1332D" stroke-width="16" mask="url(#c5m)"/>
+    <polygon points="120,54 135.87,98.157 182.77,99.605 145.679,128.343 158.794,173.395 120,147 81.206,173.395 94.321,128.343 57.23,99.605 104.13,98.157" fill="#E1332D" stroke="#E1332D" stroke-width="12" stroke-linejoin="round"/>
+    <rect x="140" y="236" width="252" height="26" rx="13" fill="#E1332D" opacity="0.85"/>
+    <rect x="140" y="300" width="196" height="26" rx="13" fill="#E1332D" opacity="0.55"/>
+    <rect x="140" y="364" width="118" height="26" rx="13" fill="#E1332D" opacity="0.30"/></g>
+      <g transform="translate(1262 1548) scale(0.62)"><text x="0" y="0" font-family="'Cascadia Mono','Consolas',monospace" font-size="100" font-weight="700"
+      letter-spacing="-2"><tspan fill="#E1332D">Red</tspan><tspan fill="#0D0F12">Star</tspan></text></g>
+      <text x="1266" y="1590" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="17"
+            font-weight="500" letter-spacing="4" fill="#6B7280">.NET CLI FOR SELF-HOSTED LLMS</text>
+      <text x="720" y="1436" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="15"
+            font-weight="500" letter-spacing="3" fill="#7C8698">FAVICON CHECK</text>
+      <g transform="translate(720 1472) scale(0.125)">
+    <rect x="48" y="48" width="416" height="416" rx="72" fill="none" stroke="#E1332D" stroke-width="16" mask="url(#c5m)"/>
+    <polygon points="120,54 135.87,98.157 182.77,99.605 145.679,128.343 158.794,173.395 120,147 81.206,173.395 94.321,128.343 57.23,99.605 104.13,98.157" fill="#E1332D" stroke="#E1332D" stroke-width="12" stroke-linejoin="round"/>
+    <rect x="140" y="236" width="252" height="26" rx="13" fill="#E1332D" opacity="0.85"/>
+    <rect x="140" y="300" width="196" height="26" rx="13" fill="#E1332D" opacity="0.55"/>
+    <rect x="140" y="364" width="118" height="26" rx="13" fill="#E1332D" opacity="0.30"/></g>
+      <g transform="translate(820 1490) scale(0.063)">
+    <rect x="48" y="48" width="416" height="416" rx="72" fill="none" stroke="#E1332D" stroke-width="16" mask="url(#c5m)"/>
+    <polygon points="120,54 135.87,98.157 182.77,99.605 145.679,128.343 158.794,173.395 120,147 81.206,173.395 94.321,128.343 57.23,99.605 104.13,98.157" fill="#E1332D" stroke="#E1332D" stroke-width="12" stroke-linejoin="round"/>
+    <rect x="140" y="236" width="252" height="26" rx="13" fill="#E1332D" opacity="0.85"/>
+    <rect x="140" y="300" width="196" height="26" rx="13" fill="#E1332D" opacity="0.55"/>
+    <rect x="140" y="364" width="118" height="26" rx="13" fill="#E1332D" opacity="0.30"/></g>
+      <g transform="translate(880 1498) scale(0.039)">
+    <rect x="48" y="48" width="416" height="416" rx="72" fill="none" stroke="#E1332D" stroke-width="16" mask="url(#c5m)"/>
+    <polygon points="120,54 135.87,98.157 182.77,99.605 145.679,128.343 158.794,173.395 120,147 81.206,173.395 94.321,128.343 57.23,99.605 104.13,98.157" fill="#E1332D" stroke="#E1332D" stroke-width="12" stroke-linejoin="round"/>
+    <rect x="140" y="236" width="252" height="26" rx="13" fill="#E1332D" opacity="0.85"/>
+    <rect x="140" y="300" width="196" height="26" rx="13" fill="#E1332D" opacity="0.55"/>
+    <rect x="140" y="364" width="118" height="26" rx="13" fill="#E1332D" opacity="0.30"/></g>
+      <text x="1720" y="1436" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="15"
+            font-weight="500" letter-spacing="3" fill="#6B7280">FAVICON CHECK</text>
+      <g transform="translate(1720 1472) scale(0.125)">
+    <rect x="48" y="48" width="416" height="416" rx="72" fill="none" stroke="#E1332D" stroke-width="16" mask="url(#c5m)"/>
+    <polygon points="120,54 135.87,98.157 182.77,99.605 145.679,128.343 158.794,173.395 120,147 81.206,173.395 94.321,128.343 57.23,99.605 104.13,98.157" fill="#E1332D" stroke="#E1332D" stroke-width="12" stroke-linejoin="round"/>
+    <rect x="140" y="236" width="252" height="26" rx="13" fill="#E1332D" opacity="0.85"/>
+    <rect x="140" y="300" width="196" height="26" rx="13" fill="#E1332D" opacity="0.55"/>
+    <rect x="140" y="364" width="118" height="26" rx="13" fill="#E1332D" opacity="0.30"/></g>
+      <g transform="translate(1820 1490) scale(0.063)">
+    <rect x="48" y="48" width="416" height="416" rx="72" fill="none" stroke="#E1332D" stroke-width="16" mask="url(#c5m)"/>
+    <polygon points="120,54 135.87,98.157 182.77,99.605 145.679,128.343 158.794,173.395 120,147 81.206,173.395 94.321,128.343 57.23,99.605 104.13,98.157" fill="#E1332D" stroke="#E1332D" stroke-width="12" stroke-linejoin="round"/>
+    <rect x="140" y="236" width="252" height="26" rx="13" fill="#E1332D" opacity="0.85"/>
+    <rect x="140" y="300" width="196" height="26" rx="13" fill="#E1332D" opacity="0.55"/>
+    <rect x="140" y="364" width="118" height="26" rx="13" fill="#E1332D" opacity="0.30"/></g>
+      <g transform="translate(1880 1498) scale(0.039)">
+    <rect x="48" y="48" width="416" height="416" rx="72" fill="none" stroke="#E1332D" stroke-width="16" mask="url(#c5m)"/>
+    <polygon points="120,54 135.87,98.157 182.77,99.605 145.679,128.343 158.794,173.395 120,147 81.206,173.395 94.321,128.343 57.23,99.605 104.13,98.157" fill="#E1332D" stroke="#E1332D" stroke-width="12" stroke-linejoin="round"/>
+    <rect x="140" y="236" width="252" height="26" rx="13" fill="#E1332D" opacity="0.85"/>
+    <rect x="140" y="300" width="196" height="26" rx="13" fill="#E1332D" opacity="0.55"/>
+    <rect x="140" y="364" width="118" height="26" rx="13" fill="#E1332D" opacity="0.30"/></g>
+    </g>
+    <g>
+      <rect x="0" y="1690" width="1000" height="300" fill="#0D0F12"/>
+      <rect x="1000" y="1690" width="1000" height="300" fill="#FFFFFF"/>
+      <line x1="0" y1="1690" x2="1000" y2="1690" stroke="#3A424E" stroke-width="2"/>
+      <line x1="1000" y1="1690" x2="2000" y2="1690" stroke="#D8DCE2" stroke-width="2"/>
+      <text x="34" y="1736" font-family="'Cascadia Mono','Consolas',monospace" font-size="22"
+            font-weight="700" fill="#E1332D">06</text>
+      <text x="74" y="1736" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="24"
+            font-weight="600" letter-spacing="3" fill="#F4F1EE">COMET</text>
+      <g transform="translate(44 1772) scale(0.328)">
+    <g stroke="url(#c6t)" stroke-linecap="round" fill="none">
+      <path d="M 250 262 L 66 446" stroke-width="46"/>
+      <path d="M 318 344 L 210 452" stroke-width="26"/>
+      <path d="M 168 224 L 74 318" stroke-width="20"/>
+    </g>
+    <polygon points="330,56 361.74,142.313 453.637,145.828 381.357,202.687 406.412,291.172 330,240 253.588,291.172 278.643,202.687 206.363,145.828 298.26,142.313" fill="url(#c6g)" stroke="url(#c6g)" stroke-width="16" stroke-linejoin="round"/></g>
+      <g transform="translate(262 1848) scale(0.62)"><text x="0" y="0" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="116" font-weight="600"
+      letter-spacing="-1"><tspan fill="#E1332D">Red</tspan><tspan fill="#F4F1EE">Star</tspan></text></g>
+      <text x="266" y="1890" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="17"
+            font-weight="500" letter-spacing="4" fill="#7C8698">.NET CLI FOR SELF-HOSTED LLMS</text>
+      <g transform="translate(1044 1772) scale(0.328)">
+    <g stroke="url(#c6t)" stroke-linecap="round" fill="none">
+      <path d="M 250 262 L 66 446" stroke-width="46"/>
+      <path d="M 318 344 L 210 452" stroke-width="26"/>
+      <path d="M 168 224 L 74 318" stroke-width="20"/>
+    </g>
+    <polygon points="330,56 361.74,142.313 453.637,145.828 381.357,202.687 406.412,291.172 330,240 253.588,291.172 278.643,202.687 206.363,145.828 298.26,142.313" fill="url(#c6g)" stroke="url(#c6g)" stroke-width="16" stroke-linejoin="round"/></g>
+      <g transform="translate(1262 1848) scale(0.62)"><text x="0" y="0" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="116" font-weight="600"
+      letter-spacing="-1"><tspan fill="#E1332D">Red</tspan><tspan fill="#0D0F12">Star</tspan></text></g>
+      <text x="1266" y="1890" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="17"
+            font-weight="500" letter-spacing="4" fill="#6B7280">.NET CLI FOR SELF-HOSTED LLMS</text>
+      <text x="720" y="1736" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="15"
+            font-weight="500" letter-spacing="3" fill="#7C8698">FAVICON CHECK</text>
+      <g transform="translate(720 1772) scale(0.125)">
+    <g stroke="url(#c6t)" stroke-linecap="round" fill="none">
+      <path d="M 250 262 L 66 446" stroke-width="46"/>
+      <path d="M 318 344 L 210 452" stroke-width="26"/>
+      <path d="M 168 224 L 74 318" stroke-width="20"/>
+    </g>
+    <polygon points="330,56 361.74,142.313 453.637,145.828 381.357,202.687 406.412,291.172 330,240 253.588,291.172 278.643,202.687 206.363,145.828 298.26,142.313" fill="url(#c6g)" stroke="url(#c6g)" stroke-width="16" stroke-linejoin="round"/></g>
+      <g transform="translate(820 1790) scale(0.063)">
+    <g stroke="url(#c6t)" stroke-linecap="round" fill="none">
+      <path d="M 250 262 L 66 446" stroke-width="46"/>
+      <path d="M 318 344 L 210 452" stroke-width="26"/>
+      <path d="M 168 224 L 74 318" stroke-width="20"/>
+    </g>
+    <polygon points="330,56 361.74,142.313 453.637,145.828 381.357,202.687 406.412,291.172 330,240 253.588,291.172 278.643,202.687 206.363,145.828 298.26,142.313" fill="url(#c6g)" stroke="url(#c6g)" stroke-width="16" stroke-linejoin="round"/></g>
+      <g transform="translate(880 1798) scale(0.039)">
+    <g stroke="url(#c6t)" stroke-linecap="round" fill="none">
+      <path d="M 250 262 L 66 446" stroke-width="46"/>
+      <path d="M 318 344 L 210 452" stroke-width="26"/>
+      <path d="M 168 224 L 74 318" stroke-width="20"/>
+    </g>
+    <polygon points="330,56 361.74,142.313 453.637,145.828 381.357,202.687 406.412,291.172 330,240 253.588,291.172 278.643,202.687 206.363,145.828 298.26,142.313" fill="url(#c6g)" stroke="url(#c6g)" stroke-width="16" stroke-linejoin="round"/></g>
+      <text x="1720" y="1736" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="15"
+            font-weight="500" letter-spacing="3" fill="#6B7280">FAVICON CHECK</text>
+      <g transform="translate(1720 1772) scale(0.125)">
+    <g stroke="url(#c6t)" stroke-linecap="round" fill="none">
+      <path d="M 250 262 L 66 446" stroke-width="46"/>
+      <path d="M 318 344 L 210 452" stroke-width="26"/>
+      <path d="M 168 224 L 74 318" stroke-width="20"/>
+    </g>
+    <polygon points="330,56 361.74,142.313 453.637,145.828 381.357,202.687 406.412,291.172 330,240 253.588,291.172 278.643,202.687 206.363,145.828 298.26,142.313" fill="url(#c6g)" stroke="url(#c6g)" stroke-width="16" stroke-linejoin="round"/></g>
+      <g transform="translate(1820 1790) scale(0.063)">
+    <g stroke="url(#c6t)" stroke-linecap="round" fill="none">
+      <path d="M 250 262 L 66 446" stroke-width="46"/>
+      <path d="M 318 344 L 210 452" stroke-width="26"/>
+      <path d="M 168 224 L 74 318" stroke-width="20"/>
+    </g>
+    <polygon points="330,56 361.74,142.313 453.637,145.828 381.357,202.687 406.412,291.172 330,240 253.588,291.172 278.643,202.687 206.363,145.828 298.26,142.313" fill="url(#c6g)" stroke="url(#c6g)" stroke-width="16" stroke-linejoin="round"/></g>
+      <g transform="translate(1880 1798) scale(0.039)">
+    <g stroke="url(#c6t)" stroke-linecap="round" fill="none">
+      <path d="M 250 262 L 66 446" stroke-width="46"/>
+      <path d="M 318 344 L 210 452" stroke-width="26"/>
+      <path d="M 168 224 L 74 318" stroke-width="20"/>
+    </g>
+    <polygon points="330,56 361.74,142.313 453.637,145.828 381.357,202.687 406.412,291.172 330,240 253.588,291.172 278.643,202.687 206.363,145.828 298.26,142.313" fill="url(#c6g)" stroke="url(#c6g)" stroke-width="16" stroke-linejoin="round"/></g>
+    </g>
+</svg>

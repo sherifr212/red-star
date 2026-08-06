@@ -1,0 +1,116 @@
+[
+  {
+    "name": "01-prompt-star-mark.svg",
+    "w": 512,
+    "h": 512,
+    "transparent": true
+  },
+  {
+    "name": "01-prompt-star-lockup-dark.svg",
+    "w": 1085,
+    "h": 420,
+    "transparent": false
+  },
+  {
+    "name": "01-prompt-star-lockup-light.svg",
+    "w": 1085,
+    "h": 420,
+    "transparent": false
+  },
+  {
+    "name": "02-orbit-mark.svg",
+    "w": 512,
+    "h": 512,
+    "transparent": true
+  },
+  {
+    "name": "02-orbit-lockup-dark.svg",
+    "w": 1085,
+    "h": 420,
+    "transparent": false
+  },
+  {
+    "name": "02-orbit-lockup-light.svg",
+    "w": 1085,
+    "h": 420,
+    "transparent": false
+  },
+  {
+    "name": "03-facet-star-mark.svg",
+    "w": 512,
+    "h": 512,
+    "transparent": true
+  },
+  {
+    "name": "03-facet-star-lockup-dark.svg",
+    "w": 1085,
+    "h": 420,
+    "transparent": false
+  },
+  {
+    "name": "03-facet-star-lockup-light.svg",
+    "w": 1085,
+    "h": 420,
+    "transparent": false
+  },
+  {
+    "name": "04-sparkle-mark.svg",
+    "w": 512,
+    "h": 512,
+    "transparent": true
+  },
+  {
+    "name": "04-sparkle-lockup-dark.svg",
+    "w": 1085,
+    "h": 420,
+    "transparent": false
+  },
+  {
+    "name": "04-sparkle-lockup-light.svg",
+    "w": 1085,
+    "h": 420,
+    "transparent": false
+  },
+  {
+    "name": "05-panel-mark.svg",
+    "w": 512,
+    "h": 512,
+    "transparent": true
+  },
+  {
+    "name": "05-panel-lockup-dark.svg",
+    "w": 1085,
+    "h": 420,
+    "transparent": false
+  },
+  {
+    "name": "05-panel-lockup-light.svg",
+    "w": 1085,
+    "h": 420,
+    "transparent": false
+  },
+  {
+    "name": "06-comet-mark.svg",
+    "w": 512,
+    "h": 512,
+    "transparent": true
+  },
+  {
+    "name": "06-comet-lockup-dark.svg",
+    "w": 1085,
+    "h": 420,
+    "transparent": false
+  },
+  {
+    "name": "06-comet-lockup-light.svg",
+    "w": 1085,
+    "h": 420,
+    "transparent": false
+  },
+  {
+    "name": "contact-sheet.svg",
+    "w": 2000,
+    "h": 2050,
+    "transparent": false
+  }
+]

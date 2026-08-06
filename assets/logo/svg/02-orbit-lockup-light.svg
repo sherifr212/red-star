@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1085" height="420" viewBox="0 0 1085 420">
+  <defs><linearGradient id="c2g" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#FF6A5E"/><stop offset="1" stop-color="#A81E19"/></linearGradient></defs>
+  <rect width="1085" height="420" fill="#FFFFFF"/>
+  <g transform="translate(96 102) scale(0.422)">
+    <g transform="rotate(-24 256 256)">
+      <ellipse cx="256" cy="256" rx="238" ry="104" fill="none" stroke="#E1332D" stroke-width="11" opacity="0.42"/>
+      <ellipse cx="256" cy="256" rx="168" ry="72" fill="none" stroke="#E1332D" stroke-width="9" opacity="0.22"/>
+    </g>
+    <polygon points="256,138 284.801,216.358 368.225,219.536 302.602,271.142 325.359,351.464 256,305 186.641,351.464 209.398,271.142 143.775,219.536 227.199,216.358" fill="url(#c2g)" stroke="url(#c2g)" stroke-width="16" stroke-linejoin="round"/>
+    <g transform="rotate(-24 256 256)">
+      <circle cx="494" cy="256" r="26" fill="#E1332D"/>
+      <circle cx="18" cy="256" r="18" fill="#E1332D" opacity="0.75"/>
+      <circle cx="256" cy="184" r="15" fill="#FF6A5E" opacity="0.9"/>
+    </g></g>
+  <g transform="translate(380 226)"><text x="0" y="0" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="116" font-weight="600"
+      letter-spacing="-1"><tspan fill="#E1332D">Red</tspan><tspan fill="#0D0F12">Star</tspan></text></g>
+  <text x="384" y="286" font-family="'Bahnschrift','Segoe UI',sans-serif" font-size="27"
+        font-weight="500" letter-spacing="6.5" fill="#6B7280">.NET CLI FOR SELF-HOSTED LLMS</text>
+</svg>
