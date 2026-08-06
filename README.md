@@ -48,9 +48,13 @@ Configure how RedStar reaches your server. The quickest way is `src/RedStar.Cli/
 ```json
 {
   "RedStar": {
-    "BaseUrl": "http://127.0.0.1:8888/v1",
-    "ApiKey": "",
-    "DefaultModel": ""
+    "Agents": {
+      "Unsloth": {
+        "BaseUrl": "http://127.0.0.1:8888/v1",
+        "ApiKey": "",
+        "DefaultModel": ""
+      }
+    }
   }
 }
 ```
@@ -100,15 +104,21 @@ Options bind from the `RedStar` section and are layered, each overriding the las
 1. `appsettings.json` — checked-in template listing every key with its default.
 2. `appsettings.local.json` — local overrides (e.g. your real API key/model). Git-tracked, so
    double-check its contents before committing/pushing if you've put a real key in it.
-3. Environment variables, prefixed `RedStar__` (e.g. `RedStar__ApiKey`, `RedStar__DefaultModel`).
+3. Environment variables, prefixed `RedStar__` (e.g. `RedStar__Agents__Unsloth__ApiKey`,
+   `RedStar__Agents__Unsloth__DefaultModel`).
 4. CLI flags (`--endpoint`, `--api-key`, `--model`) — take precedence over everything else.
+
+RedStar treats `RedStar.Base` as a home for multiple agents, so agent-specific settings live under
+their own agent's section rather than flat at the top level — `RedStar:Agents:Unsloth:*` for
+Unsloth's connection/behavior settings today, with room for a sibling `RedStar:Agents:<AgentName>`
+section per future agent. Settings that are genuinely agent-agnostic, like telemetry, stay top-level.
 
 | Key | Default | Description |
 |---|---|---|
-| `RedStar:BaseUrl` | `http://127.0.0.1:8888/v1` | Base URL of the OpenAI-compatible API. |
-| `RedStar:ApiKey` | *(empty)* | Bearer API key. Empty means "talk to a server with no auth." |
-| `RedStar:DefaultModel` | *(empty)* | Model to use when none is specified. If left empty, the currently loaded model is auto-detected (fails if zero or more than one model is loaded). |
-| `RedStar:WebSearchEnabled` | `false` | Enables Unsloth's server-side web search tool. Config/env-only, no CLI flag. |
+| `RedStar:Agents:Unsloth:BaseUrl` | `http://127.0.0.1:8888/v1` | Base URL of the OpenAI-compatible API. |
+| `RedStar:Agents:Unsloth:ApiKey` | *(empty)* | Bearer API key. Empty means "talk to a server with no auth." |
+| `RedStar:Agents:Unsloth:DefaultModel` | *(empty)* | Model to use when none is specified. If left empty, the currently loaded model is auto-detected (fails if zero or more than one model is loaded). |
+| `RedStar:Agents:Unsloth:WebSearchEnabled` | `false` | Enables Unsloth's server-side web search tool. Config/env-only, no CLI flag. |
 | `RedStar:Otel:Enabled` | `true` | Enables OpenTelemetry export. |
 | `RedStar:Otel:Endpoint` | `http://localhost:4317` | OTLP gRPC endpoint traces/metrics/logs export to. |
 
@@ -131,13 +141,18 @@ redirecting stdin — the one-shot chat path and model-resolution logic are.
 
 ```
 src/
-├── RedStar.Base/      # Client library: chat session, model resolution, telemetry, config
+├── RedStar.Base/      # Client library: agents, chat session, model resolution, telemetry, config
+│   └── Agents/
+│       └── Unsloth/    # Unsloth-specific agent construction (UnslothAgentFactory)
 ├── RedStar.Cli/        # `redstar` executable: Spectre.Console.Cli commands, console rendering
 └── RedStar.UnitTest/   # xUnit tests for RedStar.Base and RedStar.Cli
 ```
 
-- **`RedStar.Base`** wraps the OpenAI SDK's chat completions behind `Microsoft.Agents.AI`'s
-  `AIAgent`, resolves which model to use, and forwards traces/metrics/logs to an OTLP collector.
+- **`RedStar.Base`** is a host for multiple agents, not just Unsloth. Agent-specific code lives
+  under `RedStar.Base/Agents/<AgentName>/` (e.g. `Agents/Unsloth/UnslothAgentFactory.cs`, which
+  wraps the OpenAI SDK's chat completions behind `Microsoft.Agents.AI`'s `AIAgent`); everything
+  agent-agnostic — `ChatSession`, model resolution, config, telemetry — stays in the top-level
+  `RedStar.Base` namespace.
 - **`RedStar.Cli`** is thin Spectre.Console.Cli glue over `RedStar.Base`, plus the multi-box
   streaming console UI that renders reasoning, tool status, and answer text as they arrive.
 

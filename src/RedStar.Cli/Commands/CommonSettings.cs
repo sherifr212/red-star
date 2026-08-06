@@ -11,7 +11,7 @@ public class CommonSettings : CommandSettings
     public string? Endpoint { get; set; }
 
     [CommandOption("--api-key")]
-    [Description("Bearer API key for the server. Falls back to RedStar__ApiKey env var or appsettings.local.json.")]
+    [Description("Bearer API key for the server. Falls back to RedStar__Agents__Unsloth__ApiKey env var or appsettings.local.json.")]
     public string? ApiKey { get; set; }
 
     [CommandOption("--run-id")]

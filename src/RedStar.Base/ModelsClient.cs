@@ -16,11 +16,12 @@ public sealed class ModelsClient : IModelsClient, IDisposable
     {
         ArgumentNullException.ThrowIfNull(options);
 
+        var unsloth = options.Agents.Unsloth;
         _httpClient = handler is null ? new HttpClient() : new HttpClient(handler);
-        _httpClient.BaseAddress = new Uri(EnsureTrailingSlash(options.BaseUrl));
-        if (!string.IsNullOrEmpty(options.ApiKey))
+        _httpClient.BaseAddress = new Uri(EnsureTrailingSlash(unsloth.BaseUrl));
+        if (!string.IsNullOrEmpty(unsloth.ApiKey))
         {
-            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", options.ApiKey);
+            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", unsloth.ApiKey);
         }
     }
 

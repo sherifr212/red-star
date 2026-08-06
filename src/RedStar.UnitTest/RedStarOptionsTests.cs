@@ -6,9 +6,15 @@ public class RedStarOptionsTests
 {
     private static RedStarOptions Original() => new()
     {
-        BaseUrl = "http://original/v1",
-        ApiKey = "original-key",
-        DefaultModel = "original-model",
+        Agents = new AgentsOptions
+        {
+            Unsloth = new UnslothAgentOptions
+            {
+                BaseUrl = "http://original/v1",
+                ApiKey = "original-key",
+                DefaultModel = "original-model",
+            },
+        },
     };
 
     [Fact]
@@ -19,9 +25,9 @@ public class RedStarOptionsTests
             apiKey: "override-key",
             defaultModel: "override-model");
 
-        Assert.Equal("http://override/v1", result.BaseUrl);
-        Assert.Equal("override-key", result.ApiKey);
-        Assert.Equal("override-model", result.DefaultModel);
+        Assert.Equal("http://override/v1", result.Agents.Unsloth.BaseUrl);
+        Assert.Equal("override-key", result.Agents.Unsloth.ApiKey);
+        Assert.Equal("override-model", result.Agents.Unsloth.DefaultModel);
     }
 
     [Fact]
@@ -31,9 +37,9 @@ public class RedStarOptionsTests
 
         var result = original.ApplyOverrides(baseUrl: null, apiKey: null, defaultModel: null);
 
-        Assert.Equal(original.BaseUrl, result.BaseUrl);
-        Assert.Equal(original.ApiKey, result.ApiKey);
-        Assert.Equal(original.DefaultModel, result.DefaultModel);
+        Assert.Equal(original.Agents.Unsloth.BaseUrl, result.Agents.Unsloth.BaseUrl);
+        Assert.Equal(original.Agents.Unsloth.ApiKey, result.Agents.Unsloth.ApiKey);
+        Assert.Equal(original.Agents.Unsloth.DefaultModel, result.Agents.Unsloth.DefaultModel);
     }
 
     [Theory]
@@ -45,9 +51,9 @@ public class RedStarOptionsTests
 
         var result = original.ApplyOverrides(baseUrl: blank, apiKey: blank, defaultModel: blank);
 
-        Assert.Equal(original.BaseUrl, result.BaseUrl);
-        Assert.Equal(original.ApiKey, result.ApiKey);
-        Assert.Equal(original.DefaultModel, result.DefaultModel);
+        Assert.Equal(original.Agents.Unsloth.BaseUrl, result.Agents.Unsloth.BaseUrl);
+        Assert.Equal(original.Agents.Unsloth.ApiKey, result.Agents.Unsloth.ApiKey);
+        Assert.Equal(original.Agents.Unsloth.DefaultModel, result.Agents.Unsloth.DefaultModel);
     }
 
     [Fact]
@@ -57,27 +63,27 @@ public class RedStarOptionsTests
 
         var result = original.ApplyOverrides(defaultModel: "just-the-model");
 
-        Assert.Equal(original.BaseUrl, result.BaseUrl);
-        Assert.Equal(original.ApiKey, result.ApiKey);
-        Assert.Equal("just-the-model", result.DefaultModel);
+        Assert.Equal(original.Agents.Unsloth.BaseUrl, result.Agents.Unsloth.BaseUrl);
+        Assert.Equal(original.Agents.Unsloth.ApiKey, result.Agents.Unsloth.ApiKey);
+        Assert.Equal("just-the-model", result.Agents.Unsloth.DefaultModel);
     }
 
     [Fact]
     public void WebSearchEnabled_DefaultsToFalse()
     {
-        Assert.False(new RedStarOptions().WebSearchEnabled);
+        Assert.False(new RedStarOptions().Agents.Unsloth.WebSearchEnabled);
     }
 
     [Fact]
     public void ApplyOverrides_PreservesWebSearchEnabled_WhichHasNoCliOverride()
     {
         var original = Original();
-        original.WebSearchEnabled = true;
+        original.Agents.Unsloth.WebSearchEnabled = true;
 
         var result = original.ApplyOverrides(
             baseUrl: "http://override/v1", apiKey: "override-key", defaultModel: "override-model");
 
-        Assert.True(result.WebSearchEnabled);
+        Assert.True(result.Agents.Unsloth.WebSearchEnabled);
     }
 
     [Fact]
@@ -104,9 +110,10 @@ public class RedStarOptionsTests
 
     /// <summary>
     /// Guards against regressing to a field-by-field <c>ApplyOverrides</c> implementation that silently drops
-    /// any property with no corresponding CLI override (the bug that dropped <see cref="RedStarOptions.WebSearchEnabled"/>).
-    /// Walks every public settable property via reflection instead of naming them, so a future property added
-    /// to <see cref="RedStarOptions"/> is covered automatically without anyone remembering to update this test.
+    /// any property with no corresponding CLI override (the bug that dropped
+    /// <see cref="UnslothAgentOptions.WebSearchEnabled"/>). Walks every public settable property via
+    /// reflection instead of naming them, so a future property added to <see cref="RedStarOptions"/> is
+    /// covered automatically without anyone remembering to update this test.
     /// </summary>
     [Fact]
     public void ApplyOverrides_PreservesEveryProperty_WhenCalledWithNoOverrides()
@@ -125,9 +132,20 @@ public class RedStarOptionsTests
                     ? $"sample-{property.Name}"
                     : property.PropertyType == typeof(OtelOptions)
                         ? new OtelOptions { Enabled = false, Endpoint = "http://sample-otel" }
-                        : throw new NotSupportedException(
-                            $"Add a sample value for new {nameof(RedStarOptions)} property '{property.Name}' " +
-                            $"of type {property.PropertyType} in this test.");
+                        : property.PropertyType == typeof(AgentsOptions)
+                            ? new AgentsOptions
+                            {
+                                Unsloth = new UnslothAgentOptions
+                                {
+                                    BaseUrl = "http://sample-unsloth",
+                                    ApiKey = "sample-key",
+                                    DefaultModel = "sample-model",
+                                    WebSearchEnabled = true,
+                                },
+                            }
+                            : throw new NotSupportedException(
+                                $"Add a sample value for new {nameof(RedStarOptions)} property '{property.Name}' " +
+                                $"of type {property.PropertyType} in this test.");
             property.SetValue(original, sampleValue);
         }
 
@@ -146,8 +164,8 @@ public class RedStarOptionsTests
 
         original.ApplyOverrides(baseUrl: "http://override/v1", apiKey: "override-key", defaultModel: "override-model");
 
-        Assert.Equal("http://original/v1", original.BaseUrl);
-        Assert.Equal("original-key", original.ApiKey);
-        Assert.Equal("original-model", original.DefaultModel);
+        Assert.Equal("http://original/v1", original.Agents.Unsloth.BaseUrl);
+        Assert.Equal("original-key", original.Agents.Unsloth.ApiKey);
+        Assert.Equal("original-model", original.Agents.Unsloth.DefaultModel);
     }
 }

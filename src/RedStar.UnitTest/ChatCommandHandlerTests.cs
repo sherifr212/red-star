@@ -10,7 +10,8 @@ namespace RedStar.UnitTest;
 
 public class ChatCommandHandlerTests
 {
-    private static readonly RedStarOptions Options = new() { DefaultModel = "test-model" };
+    private static readonly RedStarOptions Options =
+        new() { Agents = new AgentsOptions { Unsloth = new UnslothAgentOptions { DefaultModel = "test-model" } } };
 
     private static Func<RedStarOptions, IModelsClient> ModelsClientFactory(bool loaded = true) =>
         _ => new FakeModelsClient([new ModelInfo("test-model", loaded)]);
