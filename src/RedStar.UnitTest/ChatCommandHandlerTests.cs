@@ -15,6 +15,68 @@ public class ChatCommandHandlerTests
     private static Func<RedStarOptions, IModelsClient> ModelsClientFactory(bool loaded = true) =>
         _ => new FakeModelsClient([new ModelInfo("test-model", loaded)]);
 
+    /// <summary>Per the "Startup changes" requirements, no loaded models at all is a hard failure --
+    /// there's nothing on-demand-loadable to fall back to anymore, even though "test-model" is known to
+    /// the server and matches the configured default.</summary>
+    [Fact]
+    public async Task RunAsync_Fails_WhenNoModelIsLoaded()
+    {
+        Func<RedStarOptions, string, string?, AIAgent> agentFactory =
+            (_, _, instructions) => new ChatClientAgent(new FakeChatClient("unused"), instructions: instructions);
+
+        var exitCode = await ChatCommandHandler.RunAsync(
+            Options,
+            oneShotPrompt: "hi",
+            systemPrompt: null,
+            CancellationToken.None,
+            agentFactory: agentFactory,
+            modelsClientFactory: ModelsClientFactory(loaded: false));
+
+        Assert.Equal(1, exitCode);
+    }
+
+    /// <summary>With more than one model loaded, an unconfigured/mismatched default is ambiguous and must
+    /// fail rather than silently picking one.</summary>
+    [Fact]
+    public async Task RunAsync_Fails_WhenMultipleModelsAreLoadedAndConfiguredDefaultIsNotAmongThem()
+    {
+        Func<RedStarOptions, string, string?, AIAgent> agentFactory =
+            (_, _, instructions) => new ChatClientAgent(new FakeChatClient("unused"), instructions: instructions);
+        Func<RedStarOptions, IModelsClient> modelsClientFactory =
+            _ => new FakeModelsClient([new ModelInfo("other-model-1", true), new ModelInfo("other-model-2", true)]);
+
+        var exitCode = await ChatCommandHandler.RunAsync(
+            Options,
+            oneShotPrompt: "hi",
+            systemPrompt: null,
+            CancellationToken.None,
+            agentFactory: agentFactory,
+            modelsClientFactory: modelsClientFactory);
+
+        Assert.Equal(1, exitCode);
+    }
+
+    /// <summary>Exactly one loaded model wins even when it disagrees with the configured default -- the
+    /// turn should still go through successfully against that one loaded model.</summary>
+    [Fact]
+    public async Task RunAsync_Succeeds_UsingTheOnlyLoadedModel_EvenWhenItDiffersFromTheConfiguredDefault()
+    {
+        Func<RedStarOptions, string, string?, AIAgent> agentFactory =
+            (_, _, instructions) => new ChatClientAgent(new FakeChatClient("hi there"), instructions: instructions);
+        Func<RedStarOptions, IModelsClient> modelsClientFactory =
+            _ => new FakeModelsClient([new ModelInfo("a-different-model", true)]);
+
+        var exitCode = await ChatCommandHandler.RunAsync(
+            Options,
+            oneShotPrompt: "hi",
+            systemPrompt: null,
+            CancellationToken.None,
+            agentFactory: agentFactory,
+            modelsClientFactory: modelsClientFactory);
+
+        Assert.Equal(0, exitCode);
+    }
+
     /// <summary>
     /// BoxOfYellow.ConsoleMarkdownRenderer.Spectre (0.12.3) throws a <see cref="NullReferenceException"/>
     /// when asked to render a fenced code block that never closes/never gets any content -- confirmed by

@@ -55,14 +55,23 @@ internal static class ChatCommandHandler
                 "--api-key, the RedStar__ApiKey environment variable, or appsettings.local.json.\n");
         }
 
-        var modelId = await ResolveModelAsync(options, cancellationToken, modelsClientFactory);
-        if (modelId is null)
+        var modelResult = await ResolveModelAsync(options, cancellationToken, modelsClientFactory);
+        if (modelResult is null)
         {
             logger.LogWarning("Run {RunId} aborted: model resolution failed", runId);
             return 1;
         }
 
-        logger.LogInformation("Run {RunId} resolved model {ModelId}", runId, modelId);
+        var modelId = modelResult.Model!.Id;
+        logger.LogInformation(
+            "Run {RunId} resolved model {ModelId} ({Source})", runId, modelId, modelResult.Source);
+
+        if (modelResult.Message is not null)
+        {
+            AnsiConsole.MarkupLine($"[yellow]{Markup.Escape(modelResult.Message)}[/]");
+        }
+
+        PrintStartupInfoBox(options, modelResult, systemPrompt, oneShotPrompt, runId, activity, logger);
 
         AIAgent agent = agentFactory(options, modelId, systemPrompt);
         var session = new ChatSession(agent);
@@ -815,14 +824,15 @@ internal static class ChatCommandHandler
         AnsiConsole.MarkupLine($"[{color.ToMarkup()}]╰{new string('─', width - 2)}╯[/]");
 
     /// <summary>
-    /// Resolves and validates the model to chat with by checking it against the server's
-    /// <c>/v1/models</c> list before any chat request is made -- this always makes the call
-    /// (whether or not <see cref="RedStarOptions.DefaultModel"/> is set) so an unloaded or
-    /// nonexistent model is caught here, with a clear message, instead of surfacing later as a
-    /// misleading "the model returned no response" once the chat stream unexpectedly ends empty.
-    /// See <see cref="ModelSelector.SelectDefault"/> for the resolution/trust rules.
+    /// Resolves and validates the model to chat with by checking the server's <c>/v1/models</c> list
+    /// before any chat request is made -- this always makes the call (whether or not
+    /// <see cref="RedStarOptions.DefaultModel"/> is set) so an unloaded or nonexistent model is caught
+    /// here, with a clear message, instead of surfacing later as a misleading "the model returned no
+    /// response" once the chat stream unexpectedly ends empty. Returns null (having already printed the
+    /// error) when <see cref="ModelSelector.SelectDefault"/> fails or the models call itself throws --
+    /// see its remarks for the resolution rules.
     /// </summary>
-    private static async Task<string?> ResolveModelAsync(
+    private static async Task<ModelSelectionResult?> ResolveModelAsync(
         RedStarOptions options, CancellationToken cancellationToken, Func<RedStarOptions, IModelsClient>? modelsClientFactory)
     {
         return await AnsiConsole.Status()
@@ -833,28 +843,14 @@ internal static class ChatCommandHandler
                 try
                 {
                     var models = await modelsClient.ListAsync(cancellationToken);
-                    var selected = ModelSelector.SelectDefault(models, options.DefaultModel);
-                    if (selected is null)
+                    var result = ModelSelector.SelectDefault(models, options.DefaultModel);
+                    if (!result.IsSuccess)
                     {
-                        if (string.IsNullOrWhiteSpace(options.DefaultModel))
-                        {
-                            ConsoleOutput.Error.MarkupLine(
-                                "[red]No models are available on the server.[/] Load one in Unsloth Studio first.");
-                        }
-                        else
-                        {
-                            var available = models.Count > 0
-                                ? string.Join(", ", models.Select(m => m.Id))
-                                : "(none)";
-                            ConsoleOutput.Error.MarkupLine(
-                                $"[red]Model '{Markup.Escape(options.DefaultModel)}' was not found on the server.[/] " +
-                                $"Available models: {Markup.Escape(available)}. Run 'redstar models' for details.");
-                        }
-
+                        ConsoleOutput.Error.MarkupLine($"[red]{Markup.Escape(result.ErrorMessage!)}[/]");
                         return null;
                     }
 
-                    return selected.Id;
+                    return result;
                 }
                 catch (Exception ex)
                 {
@@ -868,5 +864,67 @@ internal static class ChatCommandHandler
                     (modelsClient as IDisposable)?.Dispose();
                 }
             });
+    }
+
+    /// <summary>
+    /// Prints a panel summarizing every setting in effect for this run -- endpoint, whether an API key is
+    /// configured, the resolved model and whether it was picked implicitly (auto-detected because it's the
+    /// server's only loaded model) or explicitly (matched the configured default among several loaded
+    /// models -- see <see cref="ModelSelectionSource"/>), web search, and telemetry export -- once at the
+    /// start of every run, before any request is sent. The same fields are mirrored onto <paramref name="activity"/>
+    /// (this run's root OTel span) as tags and logged as one structured line, so the effective configuration
+    /// is recoverable from telemetry even when nobody was watching the console when the run started.
+    /// </summary>
+    private static void PrintStartupInfoBox(
+        RedStarOptions options,
+        ModelSelectionResult modelResult,
+        string? systemPrompt,
+        string? oneShotPrompt,
+        string runId,
+        Activity? activity,
+        ILogger logger)
+    {
+        var apiKeyConfigured = !string.IsNullOrEmpty(options.ApiKey);
+        var modelSourceLabel = modelResult.Source == ModelSelectionSource.Implicit
+            ? "implicit - auto-detected"
+            : "explicit - configured";
+        var systemPromptSet = !string.IsNullOrWhiteSpace(systemPrompt);
+        var mode = string.IsNullOrWhiteSpace(oneShotPrompt) ? "interactive" : "one-shot";
+
+        var grid = new Grid().AddColumn().AddColumn();
+        grid.AddRow("[bold]Endpoint[/]", Markup.Escape(options.BaseUrl));
+        grid.AddRow("[bold]API key[/]", apiKeyConfigured ? "configured" : "[yellow]none (no auth)[/]");
+        grid.AddRow("[bold]Model[/]", $"[green]{Markup.Escape(modelResult.Model!.Id)}[/] ({modelSourceLabel})");
+        grid.AddRow("[bold]Web search[/]", options.WebSearchEnabled ? "enabled" : "disabled");
+        grid.AddRow(
+            "[bold]Telemetry[/]",
+            options.Otel.Enabled ? $"enabled -> {Markup.Escape(options.Otel.Endpoint)}" : "disabled");
+        grid.AddRow("[bold]System prompt[/]", systemPromptSet ? "custom" : "(none)");
+        grid.AddRow("[bold]Mode[/]", mode);
+        grid.AddRow("[bold]Run ID[/]", Markup.Escape(runId));
+
+        var panel = new Panel(grid)
+            .Header("[bold]Startup configuration[/]")
+            .RoundedBorder()
+            .BorderColor(Color.Grey)
+            .Expand();
+        AnsiConsole.Write(panel);
+
+        activity?.SetTag("redstar.config.endpoint", options.BaseUrl);
+        activity?.SetTag("redstar.config.api_key_configured", apiKeyConfigured);
+        activity?.SetTag("redstar.config.model", modelResult.Model.Id);
+        activity?.SetTag("redstar.config.model_source", modelResult.Source.ToString());
+        activity?.SetTag("redstar.config.web_search_enabled", options.WebSearchEnabled);
+        activity?.SetTag("redstar.config.otel_enabled", options.Otel.Enabled);
+        activity?.SetTag("redstar.config.otel_endpoint", options.Otel.Endpoint);
+        activity?.SetTag("redstar.config.system_prompt_set", systemPromptSet);
+        activity?.SetTag("redstar.config.mode", mode);
+
+        logger.LogInformation(
+            "Startup configuration for run {RunId}: endpoint={Endpoint}, apiKeyConfigured={ApiKeyConfigured}, " +
+            "model={Model} ({ModelSource}), webSearchEnabled={WebSearchEnabled}, otelEnabled={OtelEnabled}, " +
+            "otelEndpoint={OtelEndpoint}, systemPromptSet={SystemPromptSet}, mode={Mode}",
+            runId, options.BaseUrl, apiKeyConfigured, modelResult.Model.Id, modelResult.Source,
+            options.WebSearchEnabled, options.Otel.Enabled, options.Otel.Endpoint, systemPromptSet, mode);
     }
 }

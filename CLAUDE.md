@@ -147,11 +147,21 @@ to "fix" this by passing a null/empty credential to the SDK — it throws.
 hits `/v1/models` before building the chat client, whether or not `RedStarOptions.DefaultModel` is
 set, so a bad model id is caught here — with a clear error — instead of surfacing later as a
 misleading "the model returned no response" once the chat stream unexpectedly ends empty (Unsloth
-just silently drops the connection for an unloaded/nonexistent model rather than erroring). Given
-that list, resolution order is (1) `DefaultModel` if set and present in the server's list — returned
-even if not currently loaded, since Unsloth Studio can load a known model on demand, but `null`
-(hard failure) if the configured id isn't in the list at all — (2) the server's currently-loaded
-model, (3) the first model the server reports, (4) `null` if the server has none.
+just silently drops the connection for an unloaded/nonexistent model rather than erroring).
+Resolution only ever considers models the server reports as currently *loaded* — a model merely
+known to the server but not loaded is never selected, even if it matches `DefaultModel` (no more
+"Unsloth can load it on demand" leniency). Returns a `ModelSelectionResult`, not a bare model: zero
+loaded models is always a hard failure; exactly one loaded model wins unconditionally
+(`ModelSelectionSource.Implicit`), overriding a `DefaultModel` that disagrees with it — with an
+informational message surfaced both to the console and telemetry when it does; more than one loaded
+model requires `DefaultModel` to name one of them (`ModelSelectionSource.Explicit`) — hard failure if
+it's unset or names a model that isn't currently loaded, since there'd otherwise be no way to
+disambiguate. `ChatCommandHandler.PrintStartupInfoBox` prints a panel of the run's effective
+configuration (endpoint, whether an API key is configured, the resolved model plus its
+`ModelSelectionSource`, web search, telemetry export, whether a system prompt was given, one-shot vs.
+interactive) once per run, right after model resolution — the same fields are mirrored onto the
+run's root `Activity` as `redstar.config.*` tags and logged as one structured line, so they're
+recoverable from telemetry even when nobody was watching the console when the run started.
 
 **Unsloth-specific request fields via `Patch`**: Unsloth's API extends OpenAI's chat-completions
 schema with fields the OpenAI SDK doesn't model (`enable_thinking`, `enable_tools`,
