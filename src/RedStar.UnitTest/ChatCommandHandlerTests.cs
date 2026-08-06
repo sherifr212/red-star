@@ -11,10 +11,24 @@ namespace RedStar.UnitTest;
 public class ChatCommandHandlerTests
 {
     private static readonly RedStarOptions Options =
-        new() { Agents = new AgentsOptions { Unsloth = new UnslothAgentOptions { DefaultModel = "test-model" } } };
+        new()
+        {
+            Agents = new AgentsOptions
+            {
+                Unsloth = new UnslothAgentOptions { ApiKey = "test-key", DefaultModel = "test-model" },
+            },
+        };
 
     private static Func<RedStarOptions, IModelsClient> ModelsClientFactory(bool loaded = true) =>
         _ => new FakeModelsClient([new ModelInfo("test-model", loaded)]);
+
+    /// <summary>
+    /// An options instance with no <c>DefaultModel</c> configured (the thing these tests actually exercise),
+    /// but with an <c>ApiKey</c> set so <see cref="ChatCommandHandler.RunAsync"/> doesn't print its "no API
+    /// key configured" warning to the console as a side effect of an unrelated test.
+    /// </summary>
+    private static RedStarOptions NoDefaultModelOptions() =>
+        new() { Agents = new AgentsOptions { Unsloth = new UnslothAgentOptions { ApiKey = "test-key" } } };
 
     /// <summary>
     /// BoxOfYellow.ConsoleMarkdownRenderer.Spectre (0.12.3) throws a <see cref="NullReferenceException"/>
@@ -165,7 +179,7 @@ public class ChatCommandHandlerTests
     [Fact]
     public async Task RunAsync_FailsGracefully_WhenMultipleModelsAreLoadedAndNoneIsConfigured()
     {
-        var noDefaultOptions = new RedStarOptions();
+        var noDefaultOptions = NoDefaultModelOptions();
         Func<RedStarOptions, IModelsClient> modelsClientFactory = _ => new FakeModelsClient(
             [new ModelInfo("model-a", Loaded: true), new ModelInfo("model-b", Loaded: true)]);
 
@@ -183,7 +197,7 @@ public class ChatCommandHandlerTests
     [Fact]
     public async Task RunAsync_Succeeds_WhenOnlyOneModelIsLoadedAndNoneIsConfigured()
     {
-        var noDefaultOptions = new RedStarOptions();
+        var noDefaultOptions = NoDefaultModelOptions();
         Func<RedStarOptions, IModelsClient> modelsClientFactory = _ => new FakeModelsClient([new ModelInfo("solo-model", Loaded: true)]);
         Func<RedStarOptions, string, string?, AIAgent> agentFactory =
             (_, modelId, instructions) =>
