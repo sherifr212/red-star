@@ -7,7 +7,7 @@ public sealed class ChatSettings : CommonSettings
 {
     [CommandOption("-m|--model")]
     [Description("Model id to use for this call. Overrides the configured default model " +
-                 "(RedStar__DefaultModel) and auto-detection.")]
+                 "(RedStar__Agents__Unsloth__DefaultModel) and auto-detection.")]
     public string? Model { get; set; }
 
     [CommandOption("-p|--prompt")]

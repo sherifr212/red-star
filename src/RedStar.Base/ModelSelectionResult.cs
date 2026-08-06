@@ -3,7 +3,7 @@ namespace RedStar.Base;
 /// <summary>How a <see cref="ModelSelectionResult"/>'s model was picked.</summary>
 public enum ModelSelectionSource
 {
-    /// <summary>Came from <see cref="RedStarOptions.DefaultModel"/>, verified to be loaded.</summary>
+    /// <summary>Came from <see cref="UnslothAgentOptions.DefaultModel"/>, verified to be loaded.</summary>
     Explicit,
 
     /// <summary>No default was configured; the server's single loaded model was used instead.</summary>

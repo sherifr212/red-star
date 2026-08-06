@@ -29,7 +29,7 @@ Test project is xUnit (`RedStar.UnitTest`), referencing both `RedStar.Base` and 
 are `internal`, exposed to the test project via `[assembly: InternalsVisibleTo("RedStar.UnitTest")]`
 in `RedStar.Cli/AssemblyInfo.cs`. `ChatCommandHandler.RunAsync`/`ModelsCommandHandler.RunAsync` take
 optional trailing factory delegates (`agentFactory`, `modelsClientFactory`) that default to their real
-production construction (`RedStarChatClientFactory.Create`, `new ModelsClient(options)`) — tests
+production construction (`UnslothAgentFactory.Create`, `new ModelsClient(options)`) — tests
 substitute `FakeChatClient`/`FakeModelsClient` there instead. This only covers the one-shot path and
 model-resolution branching; the interactive REPL loop (`Console.ReadLine`-driven) has no tests, since
 it isn't cheaply testable without redirecting stdin. One consequence worth knowing: referencing
@@ -55,7 +55,14 @@ default).
 ## Architecture
 
 **Project layout** (`src/`): `RedStar.Base` (client library) ← `RedStar.Cli` (Spectre.Console.Cli
-entry point) and `RedStar.UnitTest` both depend on it.
+entry point) and `RedStar.UnitTest` both depend on it. `RedStar.Base` is meant to host multiple
+agents over time, not just Unsloth — agent-specific code lives under
+`RedStar.Base/Agents/<AgentName>/` (e.g. `RedStar.Base/Agents/Unsloth/UnslothAgentFactory.cs`,
+namespace `RedStar.Base.Agents.Unsloth`), while `ChatSession`/`RedStarOptions`/telemetry stay in the
+top-level `RedStar.Base` namespace since they're agent-agnostic (they only know about `AIAgent`,
+never about any one agent's specifics). There's still only one concrete agent (Unsloth), so a
+generic pluggable-agent interface/registry is intentionally not built yet — that's a follow-up once
+a second agent exists to design it against.
 
 **`RedStar.Cli` structure**: `Program.cs` wires a Spectre.Console.Cli `CommandApp<ChatCommand>` —
 `ChatCommand` (`Commands/ChatCommand.cs`) is both the app's default command and the `chat`
@@ -112,11 +119,21 @@ checked-in template listing every key with its default; `appsettings.local.json`
 API key/model for local dev. Only `appsettings.Production.json` is git-ignored — `appsettings.json`
 and `appsettings.local.json` are both tracked, so double-check `appsettings.local.json`'s contents
 before any commit/push that touches it; it currently holds a live Unsloth API key.
-`RedStarOptions.ApplyOverrides` implements the CLI-flags-win-if-non-blank step; `WebSearchEnabled`
-has no CLI flag (config/env-only), but `ApplyOverrides` must still carry its value through into the
-new instance it returns — it was dropped (silently reset to `false`) for a while because the method
-only copied the three overridable fields, and every CLI run rebuilds `RedStarOptions` via
-`ApplyOverrides`. See the `ApplyOverrides_PreservesWebSearchEnabled_WhichHasNoCliOverride` test.
+`RedStarOptions` is treated as a "mega project" config root rather than a flat bag of Unsloth
+settings: agent-specific settings (`BaseUrl`, `ApiKey`, `DefaultModel`, `WebSearchEnabled`) are
+nested under `RedStarOptions.Agents.Unsloth` (a `UnslothAgentOptions` record, config key
+`RedStar:Agents:Unsloth:*`, env var `RedStar__Agents__Unsloth__*`) instead of living flat on
+`RedStarOptions` as if they were global — a second agent's settings would get its own
+`RedStarOptions.Agents.<AgentName>` sibling rather than colliding with Unsloth's. `Otel` stays
+top-level (`RedStarOptions.Otel`) since telemetry export is genuinely agent-agnostic, not specific
+to any one agent. `AgentsOptions`/`UnslothAgentOptions` are `record`s (not classes) specifically so
+`RedStarOptions.ApplyOverrides` can rebuild them with `with` expressions rather than a deep-clone by
+hand. `RedStarOptions.ApplyOverrides` implements the CLI-flags-win-if-non-blank step against
+`Agents.Unsloth`'s three overridable fields; `WebSearchEnabled` has no CLI flag (config/env-only),
+but `ApplyOverrides` must still carry its value through into the new instance it returns — it was
+dropped (silently reset to `false`) for a while because the method only copied the three overridable
+fields, and every CLI run rebuilds `RedStarOptions` via `ApplyOverrides`. See the
+`ApplyOverrides_PreservesWebSearchEnabled_WhichHasNoCliOverride` test.
 
 **Telemetry** (`RedStarTelemetry` in `RedStar.Base`, `TelemetryBootstrapper` in `RedStar.Cli`):
 OpenTelemetry traces, metrics, and structured logs export to an OTLP collector (e.g. the standalone
@@ -137,28 +154,29 @@ the `--run-id` value) tagged `run.correlation.id` — from `--run-id`, else the 
 else a generated GUID — so every child span/log for that invocation (chat turns, outbound HTTP calls
 via `AddHttpClientInstrumentation`) shares one trace ID.
 
-**No-auth mode**: `RedStarOptions.ApiKey` empty means "talk to a server with no auth" — but the
-OpenAI SDK requires a non-empty credential object, so `RedStarChatClientFactory.Create` always
+**No-auth mode**: `RedStarOptions.Agents.Unsloth.ApiKey` empty means "talk to a server with no auth"
+— but the OpenAI SDK requires a non-empty credential object, so `UnslothAgentFactory.Create` always
 passes a placeholder credential and relies on `ConditionalAuthHandler` (a `DelegatingHandler`) to
 strip the `Authorization` header from outgoing requests when no real key is configured. Don't try
 to "fix" this by passing a null/empty credential to the SDK — it throws.
 
 **Model resolution** (`ModelSelector.SelectDefault`): `ChatCommandHandler.ResolveModelAsync` always
-hits `/v1/models` before building the chat client, whether or not `RedStarOptions.DefaultModel` is
-set, so a bad model id is caught here — with a clear error — instead of surfacing later as a
+hits `/v1/models` before building the chat client, whether or not
+`RedStarOptions.Agents.Unsloth.DefaultModel` is set, so a bad model id is caught here — with a clear
+error — instead of surfacing later as a
 misleading "the model returned no response" once the chat stream unexpectedly ends empty (Unsloth
 just silently drops the connection for an unloaded/nonexistent model rather than erroring). Every
 outcome requires at least one model to be currently *loaded* — an id the server merely knows about
 but hasn't loaded isn't usable. Resolution, in order: (1) zero models loaded anywhere → hard
-failure (graceful error, `ChatCommandHandler` exits 1). (2) `DefaultModel` configured and non-blank
-→ it must be one of the currently-loaded models, or resolution fails even though some *other* model
-is loaded — silently substituting a different model than the one configured would be misleading, so
-there's no fallback here, only an error+exit (`ModelSelectionSource.Explicit` on success). (3) no
-`DefaultModel` configured and exactly one model is loaded → that model is used
-(`ModelSelectionSource.Implicit`), with an informational message surfaced at startup and in
-telemetry, since it wasn't asked for by name. (4) no `DefaultModel` configured and multiple models
-are loaded → ambiguous, hard failure. `ModelSelector.SelectDefault` returns a `ModelSelectionResult`
-(`Model`/`Source`/`InfoMessage` on success, `ErrorMessage` on failure) rather than a bare
+failure (graceful error, `ChatCommandHandler` exits 1). (2) `Agents.Unsloth.DefaultModel` configured
+and non-blank → it must be one of the currently-loaded models, or resolution fails even though some
+*other* model is loaded — silently substituting a different model than the one configured would be
+misleading, so there's no fallback here, only an error+exit (`ModelSelectionSource.Explicit` on
+success). (3) no `Agents.Unsloth.DefaultModel` configured and exactly one model is loaded → that
+model is used (`ModelSelectionSource.Implicit`), with an informational message surfaced at startup
+and in telemetry, since it wasn't asked for by name. (4) no `Agents.Unsloth.DefaultModel` configured
+and multiple models are loaded → ambiguous, hard failure. `ModelSelector.SelectDefault` returns a
+`ModelSelectionResult` (`Model`/`Source`/`InfoMessage` on success, `ErrorMessage` on failure) rather than a bare
 model/`null`, so callers can distinguish *why* resolution failed and which of the two success paths
 was taken. `ChatCommandHandler.PrintStartupInfoBox` prints a boxed summary of the run's effective
 configuration (endpoint, whether an API key is configured, the resolved model plus its
@@ -172,10 +190,10 @@ schema with fields the OpenAI SDK doesn't model (`enable_thinking`, `enable_tool
 experimental `Patch` property (`System.ClientModel.Primitives.JsonPatch`, gated behind diagnostic
 `SCME0001` — suppress locally with a scoped `#pragma`, don't blanket-suppress project-wide), then
 handed to `Microsoft.Extensions.AI` via `ChatOptions.RawRepresentationFactory`. See
-`RedStarChatClientFactory.CreateChatOptions` for the current example (toggles Unsloth's server-side
-`web_search` tool from `RedStarOptions.WebSearchEnabled`). `Create` composes that `ChatOptions` as
-the built agent's *default* `ChatOptions` (via `ChatClientAgentOptions`), so it applies to every
-run automatically instead of every call site having to remember to pass it alongside `SendAsync`.
+`UnslothAgentFactory.CreateChatOptions` for the current example (toggles Unsloth's server-side
+`web_search` tool from `RedStarOptions.Agents.Unsloth.WebSearchEnabled`). `Create` composes that
+`ChatOptions` as the built agent's *default* `ChatOptions` (via `ChatClientAgentOptions`), so it
+applies to every run automatically instead of every call site having to remember to pass it alongside `SendAsync`.
 Extending to other Unsloth-specific fields follows the same pattern: build/extend the
 `ChatCompletionOptions` inside `CreateChatOptions`, not inside `ChatSession`, which stays
 agent-agnostic (it only knows about `AIAgent`, never about Unsloth or HTTP).
@@ -183,7 +201,7 @@ agent-agnostic (it only knows about `AIAgent`, never about Unsloth or HTTP).
 **Two HTTP paths, not one**: `ModelsClient` (`GET /v1/models`) is a plain hand-rolled
 `HttpClient`/`System.Text.Json` client — it does not go through the OpenAI SDK or `IChatClient`,
 because model listing isn't part of that abstraction. Chat completions go through
-`RedStarChatClientFactory` → OpenAI SDK → `IChatClient` → `AIAgent`. Keep that split in mind when
+`UnslothAgentFactory` → OpenAI SDK → `IChatClient` → `AIAgent`. Keep that split in mind when
 adding features: "does this belong on the models endpoint or the chat endpoint" determines which
 client it touches.
 
@@ -192,7 +210,7 @@ conversation with it. It lazily creates the framework's `AgentSession` on the fi
 call and lets the agent's chat history provider (`InMemoryChatHistoryProvider` by default) own
 message history — `ChatSession` no longer tracks messages itself; `Messages` reads them back via
 `AgentSessionExtensions.TryGetInMemoryChatHistory`. The system prompt is no longer a runtime
-`ChatSession` call: it's supplied once as `instructions` to `RedStarChatClientFactory.Create`,
+`ChatSession` call: it's supplied once as `instructions` to `UnslothAgentFactory.Create`,
 which becomes the agent's `Instructions` and is merged into `ChatOptions.Instructions` on every
 run by `ChatClientAgent` — it is *not* injected as a `ChatRole.System` message. History is only
 committed after a successful response (nothing is persisted, on either side of the turn, if the

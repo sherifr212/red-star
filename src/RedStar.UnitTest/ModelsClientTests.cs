@@ -8,11 +8,14 @@ namespace RedStar.UnitTest;
 
 public class ModelsClientTests
 {
+    private static RedStarOptions WithBaseUrlAndApiKey(string baseUrl, string apiKey) =>
+        new() { Agents = new AgentsOptions { Unsloth = new UnslothAgentOptions { BaseUrl = baseUrl, ApiKey = apiKey } } };
+
     [Fact]
     public async Task ListAsync_SendsNoAuthorizationHeader_WhenApiKeyIsEmpty()
     {
         var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, """{"data": []}""");
-        var options = new RedStarOptions { BaseUrl = "http://example.test/v1", ApiKey = "" };
+        var options = WithBaseUrlAndApiKey("http://example.test/v1", "");
         using var client = new ModelsClient(options, handler);
 
         await client.ListAsync();
@@ -24,7 +27,7 @@ public class ModelsClientTests
     public async Task ListAsync_SendsBearerHeader_WhenApiKeyIsConfigured()
     {
         var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, """{"data": []}""");
-        var options = new RedStarOptions { BaseUrl = "http://example.test/v1", ApiKey = "secret-key" };
+        var options = WithBaseUrlAndApiKey("http://example.test/v1", "secret-key");
         using var client = new ModelsClient(options, handler);
 
         await client.ListAsync();
@@ -38,7 +41,7 @@ public class ModelsClientTests
     {
         var json = """{"data": [{"id": "model-a", "loaded": true}, {"id": "model-b", "loaded": false}]}""";
         var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, json);
-        var options = new RedStarOptions { BaseUrl = "http://example.test/v1", ApiKey = "" };
+        var options = WithBaseUrlAndApiKey("http://example.test/v1", "");
         using var client = new ModelsClient(options, handler);
 
         var models = await client.ListAsync();
@@ -55,7 +58,7 @@ public class ModelsClientTests
     {
         var json = """{"data": [{"id": "model-a", "loaded": true}, {"id": "model-b", "loaded": false}]}""";
         var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, json);
-        var options = new RedStarOptions { BaseUrl = "http://example.test/v1", ApiKey = "" };
+        var options = WithBaseUrlAndApiKey("http://example.test/v1", "");
         using var client = new ModelsClient(options, handler);
 
         Activity? capturedActivity = null;
@@ -79,7 +82,7 @@ public class ModelsClientTests
     public async Task ListAsync_ReturnsEmptyList_WhenResponseHasNoDataField()
     {
         var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, "{}");
-        var options = new RedStarOptions { BaseUrl = "http://example.test/v1", ApiKey = "" };
+        var options = WithBaseUrlAndApiKey("http://example.test/v1", "");
         using var client = new ModelsClient(options, handler);
 
         var models = await client.ListAsync();
@@ -91,7 +94,7 @@ public class ModelsClientTests
     public async Task ListAsync_Throws_OnNonSuccessStatusCode()
     {
         var handler = new FakeHttpMessageHandler(HttpStatusCode.Unauthorized, """{"detail": "no"}""");
-        var options = new RedStarOptions { BaseUrl = "http://example.test/v1", ApiKey = "" };
+        var options = WithBaseUrlAndApiKey("http://example.test/v1", "");
         using var client = new ModelsClient(options, handler);
 
         await Assert.ThrowsAsync<HttpRequestException>(() => client.ListAsync());
@@ -103,7 +106,7 @@ public class ModelsClientTests
     public async Task ListAsync_RequestsModelsEndpoint_RegardlessOfBaseUrlTrailingSlash(string baseUrl)
     {
         var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, """{"data": []}""");
-        var options = new RedStarOptions { BaseUrl = baseUrl, ApiKey = "" };
+        var options = WithBaseUrlAndApiKey(baseUrl, "");
         using var client = new ModelsClient(options, handler);
 
         await client.ListAsync();

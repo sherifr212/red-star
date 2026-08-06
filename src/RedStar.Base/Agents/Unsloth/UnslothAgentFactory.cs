@@ -8,9 +8,9 @@ using OpenAI;
 using OpenAI.Chat;
 using RedStar.Base.Telemetry;
 
-namespace RedStar.Base;
+namespace RedStar.Base.Agents.Unsloth;
 
-public static class RedStarChatClientFactory
+public static class UnslothAgentFactory
 {
     /// <summary>
     /// Builds an <see cref="AIAgent"/> backed by the Unsloth Studio server. <paramref name="instructions"/>
@@ -22,19 +22,20 @@ public static class RedStarChatClientFactory
         ArgumentNullException.ThrowIfNull(options);
         ArgumentException.ThrowIfNullOrEmpty(modelId);
 
-        RedStarTelemetry.CreateLogger("RedStar.RedStarChatClientFactory")
+        RedStarTelemetry.CreateLogger("RedStar.Base.Agents.Unsloth.UnslothAgentFactory")
             .LogInformation("Building chat agent for model {ModelId}", modelId);
 
-        var hasApiKey = !string.IsNullOrEmpty(options.ApiKey);
+        var unsloth = options.Agents.Unsloth;
+        var hasApiKey = !string.IsNullOrEmpty(unsloth.ApiKey);
 
         var httpClient = new HttpClient(new ConditionalAuthHandler(stripAuthHeader: !hasApiKey));
         var clientOptions = new OpenAIClientOptions
         {
-            Endpoint = new Uri(options.BaseUrl),
+            Endpoint = new Uri(unsloth.BaseUrl),
             Transport = new HttpClientPipelineTransport(httpClient),
         };
 
-        var credential = new ApiKeyCredential(hasApiKey ? options.ApiKey : "not-needed");
+        var credential = new ApiKeyCredential(hasApiKey ? unsloth.ApiKey : "not-needed");
         var openAiClient = new OpenAIClient(credential, clientOptions);
 
         var chatOptions = CreateChatOptions(options) ?? new ChatOptions();
@@ -52,7 +53,7 @@ public static class RedStarChatClientFactory
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        if (!options.WebSearchEnabled)
+        if (!options.Agents.Unsloth.WebSearchEnabled)
         {
             return null;
         }

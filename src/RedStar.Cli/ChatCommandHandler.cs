@@ -6,6 +6,7 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using RedStar.Base;
+using RedStar.Base.Agents.Unsloth;
 using RedStar.Base.Telemetry;
 using Spectre.Console;
 using Spectre.Console.Rendering;
@@ -16,7 +17,7 @@ internal static class ChatCommandHandler
 {
     /// <param name="agentFactory">
     /// Builds the <see cref="AIAgent"/> to chat with, given (options, modelId, instructions). Defaults to
-    /// <see cref="RedStarChatClientFactory.Create"/>; tests can substitute a fake here without touching the
+    /// <see cref="UnslothAgentFactory.Create"/>; tests can substitute a fake here without touching the
     /// network.
     /// </param>
     /// <param name="modelsClientFactory">
@@ -45,14 +46,14 @@ internal static class ChatCommandHandler
         var logger = RedStarTelemetry.CreateLogger("RedStar.Cli.ChatCommandHandler");
         logger.LogInformation("Starting redstar chat run {RunId}", runId);
 
-        agentFactory ??= static (opts, modelId, instructions) => RedStarChatClientFactory.Create(opts, modelId, instructions);
+        agentFactory ??= static (opts, modelId, instructions) => UnslothAgentFactory.Create(opts, modelId, instructions);
 
-        if (string.IsNullOrEmpty(options.ApiKey))
+        if (string.IsNullOrEmpty(options.Agents.Unsloth.ApiKey))
         {
             ConsoleOutput.Error.MarkupLine(
                 "[yellow]Warning: no API key configured.[/] Unsloth Studio requires a bearer token for /v1 calls.\n" +
                 "Generate one from the Unsloth Studio UI (Settings -> API Keys), then set it via\n" +
-                "--api-key, the RedStar__ApiKey environment variable, or appsettings.local.json.\n");
+                "--api-key, the RedStar__Agents__Unsloth__ApiKey environment variable, or appsettings.local.json.\n");
         }
 
         var selection = await ResolveModelAsync(options, cancellationToken, modelsClientFactory);
@@ -209,7 +210,7 @@ internal static class ChatCommandHandler
     /// <summary>
     /// Drives the streamed turn and translates it into <see cref="StageEvent"/>s on <paramref name="writer"/>:
     /// reasoning text from <see cref="TextReasoningContent"/>, Unsloth tool-status labels and completed
-    /// web-search hit lists via <see cref="RedStarChatClientFactory"/>'s raw-JSON extractors, and the final
+    /// web-search hit lists via <see cref="UnslothAgentFactory"/>'s raw-JSON extractors, and the final
     /// answer's text chunks. Runs concurrently with <see cref="RenderStageBoxesAsync"/> so the UI can start
     /// drawing a stage's box as soon as that stage's first event lands, rather than after the whole turn
     /// completes. Completes the channel (successfully or with the caught exception) when
@@ -234,13 +235,13 @@ internal static class ChatCommandHandler
                         }
                     }
 
-                    var status = RedStarChatClientFactory.TryGetToolStatus(update);
+                    var status = UnslothAgentFactory.TryGetToolStatus(update);
                     if (status is not null)
                     {
                         writer.TryWrite(new StageEvent(TurnStage.Searching, status, null));
                     }
 
-                    var sites = RedStarChatClientFactory.TryGetWebSearchResults(update);
+                    var sites = UnslothAgentFactory.TryGetWebSearchResults(update);
                     if (sites is { Count: > 0 })
                     {
                         writer.TryWrite(new StageEvent(TurnStage.Searching, null, sites));
@@ -827,7 +828,7 @@ internal static class ChatCommandHandler
     /// <summary>
     /// Resolves and validates the model to chat with by checking it against the server's
     /// <c>/v1/models</c> list before any chat request is made -- this always makes the call
-    /// (whether or not <see cref="RedStarOptions.DefaultModel"/> is set) so an unloaded or
+    /// (whether or not <see cref="UnslothAgentOptions.DefaultModel"/> is set) so an unloaded or
     /// nonexistent model is caught here, with a clear message, instead of surfacing later as a
     /// misleading "the model returned no response" once the chat stream unexpectedly ends empty.
     /// See <see cref="ModelSelector.SelectDefault"/> for the resolution/trust rules.
@@ -843,7 +844,7 @@ internal static class ChatCommandHandler
                 try
                 {
                     var models = await modelsClient.ListAsync(cancellationToken);
-                    var result = ModelSelector.SelectDefault(models, options.DefaultModel);
+                    var result = ModelSelector.SelectDefault(models, options.Agents.Unsloth.DefaultModel);
                     if (!result.Succeeded)
                     {
                         ConsoleOutput.Error.MarkupLine($"[red]{Markup.Escape(result.ErrorMessage!)}[/]");
@@ -876,17 +877,18 @@ internal static class ChatCommandHandler
     private static void PrintStartupInfoBox(
         RedStarOptions options, string runId, string modelId, ModelSelectionSource modelSource, Activity? activity, ILogger logger)
     {
-        var apiKeyConfigured = !string.IsNullOrEmpty(options.ApiKey);
+        var unsloth = options.Agents.Unsloth;
+        var apiKeyConfigured = !string.IsNullOrEmpty(unsloth.ApiKey);
         var modelSourceLabel = modelSource == ModelSelectionSource.Explicit ? "explicit (configured)" : "implicit (auto-detected)";
 
         var table = new Table().Border(TableBorder.None).HideHeaders();
         table.AddColumn(new TableColumn(string.Empty).NoWrap());
         table.AddColumn(string.Empty);
         table.AddRow("[grey]Run ID[/]", Markup.Escape(runId));
-        table.AddRow("[grey]Endpoint[/]", Markup.Escape(options.BaseUrl));
+        table.AddRow("[grey]Endpoint[/]", Markup.Escape(unsloth.BaseUrl));
         table.AddRow("[grey]API key[/]", apiKeyConfigured ? "[green]configured[/]" : "[yellow]not configured[/]");
         table.AddRow("[grey]Model[/]", $"[green]{Markup.Escape(modelId)}[/] [grey]({modelSourceLabel})[/]");
-        table.AddRow("[grey]Web search[/]", options.WebSearchEnabled ? "[green]enabled[/]" : "disabled");
+        table.AddRow("[grey]Web search[/]", unsloth.WebSearchEnabled ? "[green]enabled[/]" : "disabled");
         table.AddRow(
             "[grey]Telemetry[/]",
             options.Otel.Enabled ? $"[green]enabled[/] -> {Markup.Escape(options.Otel.Endpoint)}" : "disabled");
@@ -898,11 +900,11 @@ internal static class ChatCommandHandler
             .Expand();
         AnsiConsole.Write(panel);
 
-        activity?.SetTag("redstar.config.endpoint", options.BaseUrl);
+        activity?.SetTag("redstar.config.endpoint", unsloth.BaseUrl);
         activity?.SetTag("redstar.config.api_key_configured", apiKeyConfigured);
         activity?.SetTag("redstar.config.model", modelId);
         activity?.SetTag("redstar.config.model_source", modelSource.ToString());
-        activity?.SetTag("redstar.config.web_search_enabled", options.WebSearchEnabled);
+        activity?.SetTag("redstar.config.web_search_enabled", unsloth.WebSearchEnabled);
         activity?.SetTag("redstar.config.telemetry_enabled", options.Otel.Enabled);
         activity?.SetTag("redstar.config.telemetry_endpoint", options.Otel.Endpoint);
 
@@ -910,7 +912,7 @@ internal static class ChatCommandHandler
             "Startup configuration for run {RunId}: endpoint={Endpoint} apiKeyConfigured={ApiKeyConfigured} " +
             "model={ModelId} modelSource={ModelSource} webSearchEnabled={WebSearchEnabled} " +
             "telemetryEnabled={TelemetryEnabled} telemetryEndpoint={TelemetryEndpoint}",
-            runId, options.BaseUrl, apiKeyConfigured, modelId, modelSource, options.WebSearchEnabled,
+            runId, unsloth.BaseUrl, apiKeyConfigured, modelId, modelSource, unsloth.WebSearchEnabled,
             options.Otel.Enabled, options.Otel.Endpoint);
     }
 }
