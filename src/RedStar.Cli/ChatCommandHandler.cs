@@ -6,6 +6,7 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using RedStar.Base;
+using RedStar.Base.Agents.Unsloth;
 using RedStar.Base.Telemetry;
 using Spectre.Console;
 using Spectre.Console.Rendering;
@@ -16,7 +17,7 @@ internal static class ChatCommandHandler
 {
     /// <param name="agentFactory">
     /// Builds the <see cref="AIAgent"/> to chat with, given (options, modelId, instructions). Defaults to
-    /// <see cref="RedStarChatClientFactory.Create"/>; tests can substitute a fake here without touching the
+    /// <see cref="UnslothAgentFactory.Create"/>; tests can substitute a fake here without touching the
     /// network.
     /// </param>
     /// <param name="modelsClientFactory">
@@ -45,7 +46,7 @@ internal static class ChatCommandHandler
         var logger = RedStarTelemetry.CreateLogger("RedStar.Cli.ChatCommandHandler");
         logger.LogInformation("Starting redstar chat run {RunId}", runId);
 
-        agentFactory ??= static (opts, modelId, instructions) => RedStarChatClientFactory.Create(opts, modelId, instructions);
+        agentFactory ??= static (opts, modelId, instructions) => UnslothAgentFactory.Create(opts, modelId, instructions);
 
         if (string.IsNullOrEmpty(options.ApiKey))
         {
@@ -209,7 +210,7 @@ internal static class ChatCommandHandler
     /// <summary>
     /// Drives the streamed turn and translates it into <see cref="StageEvent"/>s on <paramref name="writer"/>:
     /// reasoning text from <see cref="TextReasoningContent"/>, Unsloth tool-status labels and completed
-    /// web-search hit lists via <see cref="RedStarChatClientFactory"/>'s raw-JSON extractors, and the final
+    /// web-search hit lists via <see cref="UnslothAgentFactory"/>'s raw-JSON extractors, and the final
     /// answer's text chunks. Runs concurrently with <see cref="RenderStageBoxesAsync"/> so the UI can start
     /// drawing a stage's box as soon as that stage's first event lands, rather than after the whole turn
     /// completes. Completes the channel (successfully or with the caught exception) when
@@ -234,13 +235,13 @@ internal static class ChatCommandHandler
                         }
                     }
 
-                    var status = RedStarChatClientFactory.TryGetToolStatus(update);
+                    var status = UnslothAgentFactory.TryGetToolStatus(update);
                     if (status is not null)
                     {
                         writer.TryWrite(new StageEvent(TurnStage.Searching, status, null));
                     }
 
-                    var sites = RedStarChatClientFactory.TryGetWebSearchResults(update);
+                    var sites = UnslothAgentFactory.TryGetWebSearchResults(update);
                     if (sites is { Count: > 0 })
                     {
                         writer.TryWrite(new StageEvent(TurnStage.Searching, null, sites));

@@ -7,27 +7,28 @@ using Microsoft.Extensions.AI;
 using OpenAI;
 using OpenAI.Chat;
 using RedStar.Base;
+using RedStar.Base.Agents.Unsloth;
 
 namespace RedStar.UnitTest;
 
-public class RedStarChatClientFactoryTests
+public class UnslothAgentFactoryTests
 {
     [Fact]
     public void Create_Throws_WhenOptionsIsNull()
     {
-        Assert.Throws<ArgumentNullException>(() => RedStarChatClientFactory.Create(null!, "model"));
+        Assert.Throws<ArgumentNullException>(() => UnslothAgentFactory.Create(null!, "model"));
     }
 
     [Fact]
     public void Create_Throws_WhenModelIdIsNullOrEmpty()
     {
-        Assert.Throws<ArgumentException>(() => RedStarChatClientFactory.Create(new RedStarOptions(), ""));
+        Assert.Throws<ArgumentException>(() => UnslothAgentFactory.Create(new RedStarOptions(), ""));
     }
 
     [Fact]
     public void Create_ReturnsAgent_WithInstructionsSetFromParameter()
     {
-        var agent = RedStarChatClientFactory.Create(new RedStarOptions(), "m", "be terse");
+        var agent = UnslothAgentFactory.Create(new RedStarOptions(), "m", "be terse");
 
         var chatClientAgent = Assert.IsType<ChatClientAgent>(agent);
         Assert.Equal("be terse", chatClientAgent.Instructions);
@@ -36,7 +37,7 @@ public class RedStarChatClientFactoryTests
     [Fact]
     public void Create_ReturnsAgent_WithNullInstructions_WhenNoneProvided()
     {
-        var agent = RedStarChatClientFactory.Create(new RedStarOptions(), "m");
+        var agent = UnslothAgentFactory.Create(new RedStarOptions(), "m");
 
         var chatClientAgent = Assert.IsType<ChatClientAgent>(agent);
         Assert.Null(chatClientAgent.Instructions);
@@ -47,7 +48,7 @@ public class RedStarChatClientFactoryTests
     {
         var options = new RedStarOptions { WebSearchEnabled = false };
 
-        var chatOptions = RedStarChatClientFactory.CreateChatOptions(options);
+        var chatOptions = UnslothAgentFactory.CreateChatOptions(options);
 
         Assert.Null(chatOptions);
     }
@@ -57,7 +58,7 @@ public class RedStarChatClientFactoryTests
     {
         var options = new RedStarOptions { WebSearchEnabled = true };
 
-        var chatOptions = RedStarChatClientFactory.CreateChatOptions(options);
+        var chatOptions = UnslothAgentFactory.CreateChatOptions(options);
 
         Assert.NotNull(chatOptions);
         Assert.NotNull(chatOptions!.RawRepresentationFactory);
@@ -67,7 +68,7 @@ public class RedStarChatClientFactoryTests
     public void CreateChatOptions_RawRepresentation_IsChatCompletionOptionsWithOnlyWebSearchEnabled()
     {
         var options = new RedStarOptions { WebSearchEnabled = true };
-        var chatOptions = RedStarChatClientFactory.CreateChatOptions(options);
+        var chatOptions = UnslothAgentFactory.CreateChatOptions(options);
 
         var raw = chatOptions!.RawRepresentationFactory!(null!);
         var completionOptions = Assert.IsType<ChatCompletionOptions>(raw);
@@ -81,7 +82,7 @@ public class RedStarChatClientFactoryTests
     [Fact]
     public void CreateChatOptions_Throws_WhenOptionsIsNull()
     {
-        Assert.Throws<ArgumentNullException>(() => RedStarChatClientFactory.CreateChatOptions(null!));
+        Assert.Throws<ArgumentNullException>(() => UnslothAgentFactory.CreateChatOptions(null!));
     }
 
     /// <summary>
@@ -103,7 +104,7 @@ public class RedStarChatClientFactoryTests
         var openAiClient = new OpenAIClient(new ApiKeyCredential("test"), clientOptions);
         IChatClient chatClient = openAiClient.GetChatClient("m").AsIChatClient();
 
-        var chatOptions = RedStarChatClientFactory.CreateChatOptions(new RedStarOptions { WebSearchEnabled = true });
+        var chatOptions = UnslothAgentFactory.CreateChatOptions(new RedStarOptions { WebSearchEnabled = true });
 
         await chatClient.GetResponseAsync(
             [new Microsoft.Extensions.AI.ChatMessage(ChatRole.User, "hi")], chatOptions);
@@ -114,7 +115,7 @@ public class RedStarChatClientFactoryTests
     }
 
     /// <summary>
-    /// Proves the same Patch fields survive when composed the way <see cref="RedStarChatClientFactory.Create"/>
+    /// Proves the same Patch fields survive when composed the way <see cref="UnslothAgentFactory.Create"/>
     /// actually composes them: as the agent's default <c>ChatOptions</c> via <c>AsAIAgent</c>/
     /// <see cref="ChatClientAgentOptions"/>, rather than passed alongside a raw <c>IChatClient</c> call.
     /// </summary>
@@ -130,7 +131,7 @@ public class RedStarChatClientFactoryTests
         };
         var openAiClient = new OpenAIClient(new ApiKeyCredential("test"), clientOptions);
 
-        var chatOptions = RedStarChatClientFactory.CreateChatOptions(new RedStarOptions { WebSearchEnabled = true })!;
+        var chatOptions = UnslothAgentFactory.CreateChatOptions(new RedStarOptions { WebSearchEnabled = true })!;
         AIAgent agent = openAiClient.GetChatClient("m").AsAIAgent(new ChatClientAgentOptions { ChatOptions = chatOptions });
 
         await agent.RunAsync("hi");

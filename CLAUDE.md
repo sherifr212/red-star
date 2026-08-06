@@ -29,7 +29,7 @@ Test project is xUnit (`RedStar.UnitTest`), referencing both `RedStar.Base` and 
 are `internal`, exposed to the test project via `[assembly: InternalsVisibleTo("RedStar.UnitTest")]`
 in `RedStar.Cli/AssemblyInfo.cs`. `ChatCommandHandler.RunAsync`/`ModelsCommandHandler.RunAsync` take
 optional trailing factory delegates (`agentFactory`, `modelsClientFactory`) that default to their real
-production construction (`RedStarChatClientFactory.Create`, `new ModelsClient(options)`) — tests
+production construction (`UnslothAgentFactory.Create`, `new ModelsClient(options)`) — tests
 substitute `FakeChatClient`/`FakeModelsClient` there instead. This only covers the one-shot path and
 model-resolution branching; the interactive REPL loop (`Console.ReadLine`-driven) has no tests, since
 it isn't cheaply testable without redirecting stdin. One consequence worth knowing: referencing
@@ -55,7 +55,13 @@ default).
 ## Architecture
 
 **Project layout** (`src/`): `RedStar.Base` (client library) ← `RedStar.Cli` (Spectre.Console.Cli
-entry point) and `RedStar.UnitTest` both depend on it.
+entry point) and `RedStar.UnitTest` both depend on it. Backend-specific agent code lives under
+`RedStar.Base/Agents/<AgentName>/` — e.g. `RedStar.Base/Agents/Unsloth/UnslothAgentFactory.cs` —
+so `RedStar.Base`'s top-level namespace stays reserved for agent-agnostic pieces (`ChatSession`,
+`RedStarOptions`, telemetry) that only know about the `AIAgent` abstraction, never about a specific
+backend. There's only one agent (Unsloth) today; a shared `IRedStarAgent`-style interface and
+config-level namespacing (e.g. `RedStar:Agents:Unsloth:*`) are deliberately not designed yet since
+there's no second agent to validate that abstraction against.
 
 **`RedStar.Cli` structure**: `Program.cs` wires a Spectre.Console.Cli `CommandApp<ChatCommand>` —
 `ChatCommand` (`Commands/ChatCommand.cs`) is both the app's default command and the `chat`
@@ -138,7 +144,7 @@ else a generated GUID — so every child span/log for that invocation (chat turn
 via `AddHttpClientInstrumentation`) shares one trace ID.
 
 **No-auth mode**: `RedStarOptions.ApiKey` empty means "talk to a server with no auth" — but the
-OpenAI SDK requires a non-empty credential object, so `RedStarChatClientFactory.Create` always
+OpenAI SDK requires a non-empty credential object, so `UnslothAgentFactory.Create` always
 passes a placeholder credential and relies on `ConditionalAuthHandler` (a `DelegatingHandler`) to
 strip the `Authorization` header from outgoing requests when no real key is configured. Don't try
 to "fix" this by passing a null/empty credential to the SDK — it throws.
@@ -172,7 +178,7 @@ schema with fields the OpenAI SDK doesn't model (`enable_thinking`, `enable_tool
 experimental `Patch` property (`System.ClientModel.Primitives.JsonPatch`, gated behind diagnostic
 `SCME0001` — suppress locally with a scoped `#pragma`, don't blanket-suppress project-wide), then
 handed to `Microsoft.Extensions.AI` via `ChatOptions.RawRepresentationFactory`. See
-`RedStarChatClientFactory.CreateChatOptions` for the current example (toggles Unsloth's server-side
+`UnslothAgentFactory.CreateChatOptions` for the current example (toggles Unsloth's server-side
 `web_search` tool from `RedStarOptions.WebSearchEnabled`). `Create` composes that `ChatOptions` as
 the built agent's *default* `ChatOptions` (via `ChatClientAgentOptions`), so it applies to every
 run automatically instead of every call site having to remember to pass it alongside `SendAsync`.
@@ -183,7 +189,7 @@ agent-agnostic (it only knows about `AIAgent`, never about Unsloth or HTTP).
 **Two HTTP paths, not one**: `ModelsClient` (`GET /v1/models`) is a plain hand-rolled
 `HttpClient`/`System.Text.Json` client — it does not go through the OpenAI SDK or `IChatClient`,
 because model listing isn't part of that abstraction. Chat completions go through
-`RedStarChatClientFactory` → OpenAI SDK → `IChatClient` → `AIAgent`. Keep that split in mind when
+`UnslothAgentFactory` → OpenAI SDK → `IChatClient` → `AIAgent`. Keep that split in mind when
 adding features: "does this belong on the models endpoint or the chat endpoint" determines which
 client it touches.
 
@@ -192,7 +198,7 @@ conversation with it. It lazily creates the framework's `AgentSession` on the fi
 call and lets the agent's chat history provider (`InMemoryChatHistoryProvider` by default) own
 message history — `ChatSession` no longer tracks messages itself; `Messages` reads them back via
 `AgentSessionExtensions.TryGetInMemoryChatHistory`. The system prompt is no longer a runtime
-`ChatSession` call: it's supplied once as `instructions` to `RedStarChatClientFactory.Create`,
+`ChatSession` call: it's supplied once as `instructions` to `UnslothAgentFactory.Create`,
 which becomes the agent's `Instructions` and is merged into `ChatOptions.Instructions` on every
 run by `ChatClientAgent` — it is *not* injected as a `ChatRole.System` message. History is only
 committed after a successful response (nothing is persisted, on either side of the turn, if the

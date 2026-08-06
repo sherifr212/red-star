@@ -8,9 +8,9 @@ using OpenAI;
 using OpenAI.Chat;
 using RedStar.Base.Telemetry;
 
-namespace RedStar.Base;
+namespace RedStar.Base.Agents.Unsloth;
 
-public static class RedStarChatClientFactory
+public static class UnslothAgentFactory
 {
     /// <summary>
     /// Builds an <see cref="AIAgent"/> backed by the Unsloth Studio server. <paramref name="instructions"/>
@@ -22,7 +22,7 @@ public static class RedStarChatClientFactory
         ArgumentNullException.ThrowIfNull(options);
         ArgumentException.ThrowIfNullOrEmpty(modelId);
 
-        RedStarTelemetry.CreateLogger("RedStar.RedStarChatClientFactory")
+        RedStarTelemetry.CreateLogger("RedStar.UnslothAgentFactory")
             .LogInformation("Building chat agent for model {ModelId}", modelId);
 
         var hasApiKey = !string.IsNullOrEmpty(options.ApiKey);

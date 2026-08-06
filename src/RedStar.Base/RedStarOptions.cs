@@ -15,7 +15,8 @@ public sealed class RedStarOptions
 
     /// <summary>
     /// When true, requests opt into Unsloth's server-side web search tool
-    /// (sent as <c>enabled_tools: ["web_search"]</c>). See <see cref="RedStarChatClientFactory.CreateChatOptions"/>.
+    /// (sent as <c>enabled_tools: ["web_search"]</c>). See
+    /// <see cref="RedStar.Base.Agents.Unsloth.UnslothAgentFactory.CreateChatOptions"/>.
     /// </summary>
     public bool WebSearchEnabled { get; set; }
 
