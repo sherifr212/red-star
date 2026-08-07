@@ -144,23 +144,26 @@ internal static class ChatCommandHandler
     }
 
     /// <summary>
-    /// One leg of a turn's lifecycle. Each is its own sealed-in-place box once the turn moves past it --
-    /// see the "Multi-box rendering" remarks on <see cref="RenderStageBoxesAsync"/>. <see cref="Other"/> is
-    /// the initial "nothing has happened yet" box every turn opens with, and doubles as the fallback for any
-    /// future update shape this switch doesn't recognize; it never appears for a reason a user would
-    /// otherwise see labeled, which is why it gets the deliberately-odd grey rather than one of the other
-    /// three's saturated colors.
+    /// Well-known stage identifiers for one leg of a turn's lifecycle. A stage is a plain string, not a
+    /// closed C# enum: <see cref="StageEvent"/>, <see cref="StageBox"/>, and the <c>redstar.stage.duration</c>
+    /// telemetry tag all carry whatever string a producer hands them, so a future producer (a different
+    /// agent under <c>RedStar.Base/Agents/&lt;AgentName&gt;</c>, or a new kind of Unsloth server event) can
+    /// introduce its own stage label without a shared enum in this file having to grow a member for it first.
+    /// <see cref="Other"/> is the initial "nothing has happened yet" box every turn opens with, and doubles
+    /// as the fallback for any stage <see cref="StageBox.StageStyle"/> doesn't have specific styling for; it
+    /// never appears for a reason a user would otherwise see labeled, which is why it gets the
+    /// deliberately-odd grey rather than one of the other three's saturated colors.
     /// </summary>
-    private enum TurnStage
+    private static class TurnStage
     {
-        Other,
-        Reasoning,
-        Searching,
-        Generating,
+        public const string Other = "Other";
+        public const string Reasoning = "Reasoning";
+        public const string Searching = "Searching";
+        public const string Generating = "Generating";
     }
 
     /// <summary>One piece of one stage's content: either a text delta to append, or a completed site list.</summary>
-    private readonly record struct StageEvent(TurnStage Stage, string? TextDelta, IReadOnlyList<WebSearchResult>? Sites);
+    private readonly record struct StageEvent(string Stage, string? TextDelta, IReadOnlyList<WebSearchResult>? Sites);
 
     /// <summary>Result of draining one stage's events until either a differently-staged event arrives
     /// (<see cref="NextEvent"/> set, <see cref="SplitForHeight"/> false) or the current box's estimated
@@ -298,7 +301,7 @@ internal static class ChatCommandHandler
         string? chainCopyFilePath = null;
         var chainText = string.Empty;
         var stageStartMs = 0L;
-        TurnStage? pendingStage = null;
+        string? pendingStage = null;
 
         while (isFirstBox || next is not null || isContinuation)
         {
@@ -411,14 +414,14 @@ internal static class ChatCommandHandler
     /// <see cref="TurnStage.Searching"/> (tool calling), and <see cref="TurnStage.Generating"/> (the final
     /// answer) are recorded.
     /// </summary>
-    private static void RecordStageDuration(TurnStage stage, long durationMs)
+    private static void RecordStageDuration(string stage, long durationMs)
     {
         if (stage == TurnStage.Other)
         {
             return;
         }
 
-        RedStarTelemetry.StageDuration.Record(durationMs, new KeyValuePair<string, object?>("stage", stage.ToString()));
+        RedStarTelemetry.StageDuration.Record(durationMs, new KeyValuePair<string, object?>("stage", stage));
     }
 
     /// <summary>Applies events to <paramref name="box"/> for as long as they belong to its stage, invoking
@@ -566,7 +569,7 @@ internal static class ChatCommandHandler
         /// continuation chain -- concatenated with this box's own text when (re)writing the shared copy
         /// file. Empty for a non-continuation (first-in-chain) box.</param>
         public StageBox(
-            TurnStage stage, Stopwatch turnStopwatch, bool isContinuation = false,
+            string stage, Stopwatch turnStopwatch, bool isContinuation = false,
             string? sharedCopyFilePath = null, string priorChainText = "")
         {
             Stage = stage;
@@ -576,7 +579,7 @@ internal static class ChatCommandHandler
             _priorChainText = priorChainText;
         }
 
-        public TurnStage Stage { get; }
+        public string Stage { get; }
 
         public bool HasText => _text.Length > 0;
 
@@ -772,7 +775,7 @@ internal static class ChatCommandHandler
             return lines;
         }
 
-        private static (string Header, Color Color) StageStyle(TurnStage stage, bool isContinuation)
+        private static (string Header, Color Color) StageStyle(string stage, bool isContinuation)
         {
             var (label, markupColor, color) = stage switch
             {
