@@ -44,10 +44,9 @@ public class LMStudioAgentFactoryTests
     }
 
     /// <summary>
-    /// Proves a built agent's outgoing request actually reaches the configured endpoint/model with no
-    /// unexpected extra fields on the wire -- unlike Unsloth, LM Studio needs no <c>Patch</c>-based request
-    /// customization, so there's nothing analogous to <c>UnslothAgentFactoryTests</c>'s
-    /// <c>enable_tools</c>/<c>enabled_tools</c> assertions to make here.
+    /// Proves a built agent's outgoing request actually reaches the configured endpoint/model, and carries
+    /// <c>stream_options.include_usage</c> (see <see cref="LMStudioAgentFactory.CreateChatOptions"/>) but no
+    /// Unsloth-only fields.
     /// </summary>
     [Fact]
     public async Task Create_BuiltAgent_SendsRequestToConfiguredEndpointAndModel()
@@ -61,14 +60,15 @@ public class LMStudioAgentFactoryTests
         // LMStudioAgentFactory.Create builds its own real HttpClient internally, so this test swaps in the
         // capturing transport the same way UnslothAgentFactoryTests does for its own request-capture test:
         // by composing the OpenAI SDK client directly with CapturingHandler, using the same ChatOptions
-        // LMStudioAgentFactory.Create would build (Instructions only -- no Patch fields for LM Studio).
+        // LMStudioAgentFactory.Create would build.
         var clientOptions = new OpenAIClientOptions
         {
             Endpoint = new Uri(options.Agents.LMStudio.BaseUrl),
             Transport = new HttpClientPipelineTransport(new HttpClient(handler)),
         };
         var openAiClient = new OpenAIClient(new ApiKeyCredential("not-needed"), clientOptions);
-        var chatOptions = new ChatOptions { Instructions = "be terse" };
+        var chatOptions = LMStudioAgentFactory.CreateChatOptions();
+        chatOptions.Instructions = "be terse";
         AIAgent agent = openAiClient.GetChatClient("my-model").AsAIAgent(new ChatClientAgentOptions { ChatOptions = chatOptions });
 
         await agent.RunAsync("hi");
@@ -77,6 +77,8 @@ public class LMStudioAgentFactoryTests
         Assert.EndsWith("/v1/chat/completions", handler.CapturedRequestUri!.ToString());
         Assert.NotNull(handler.CapturedRequestBody);
         Assert.Contains("\"model\":\"my-model\"", handler.CapturedRequestBody);
+        Assert.Contains("\"stream_options\":{\"include_usage\":true}", handler.CapturedRequestBody);
+        Assert.DoesNotContain("enable_tools", handler.CapturedRequestBody);
     }
 
     private sealed class CapturingHandler : HttpMessageHandler

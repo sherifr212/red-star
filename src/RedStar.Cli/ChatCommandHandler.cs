@@ -101,7 +101,7 @@ internal static class ChatCommandHandler
         if (!string.IsNullOrWhiteSpace(oneShotPrompt))
         {
             PrintUserMessageBox(oneShotPrompt);
-            return await SendAndPrintAsync(session, oneShotPrompt, responseExtractor, cancellationToken);
+            return await SendAndPrintAsync(session, oneShotPrompt, responseExtractor, logger, cancellationToken);
         }
 
         AnsiConsole.MarkupLine(
@@ -127,7 +127,7 @@ internal static class ChatCommandHandler
                 continue;
             }
 
-            var exitCode = await SendAndPrintAsync(session, line, responseExtractor, cancellationToken);
+            var exitCode = await SendAndPrintAsync(session, line, responseExtractor, logger, cancellationToken);
             if (exitCode != 0)
             {
                 return exitCode;
@@ -182,8 +182,11 @@ internal static class ChatCommandHandler
         public const string Generating = "Generating";
     }
 
-    /// <summary>One piece of one stage's content: either a text delta to append, or a completed site list.</summary>
-    private readonly record struct StageEvent(string Stage, string? TextDelta, IReadOnlyList<WebSearchResult>? Sites);
+    /// <summary>One piece of one stage's content: a text delta to append, a completed site list, or a
+    /// final output-token count (see <see cref="ProduceStageEventsAsync"/>'s <c>UsageContent</c> handling).
+    /// </summary>
+    private readonly record struct StageEvent(
+        string Stage, string? TextDelta, IReadOnlyList<WebSearchResult>? Sites, int? OutputTokenCount = null);
 
     /// <summary>Result of draining one stage's events until either a differently-staged event arrives
     /// (<see cref="NextEvent"/> set, <see cref="SplitForHeight"/> false) or the current box's estimated
@@ -194,7 +197,8 @@ internal static class ChatCommandHandler
     private readonly record struct DrainResult(StageEvent? NextEvent, bool SplitForHeight);
 
     private static async Task<int> SendAndPrintAsync(
-        ChatSession session, string userText, IAgentResponseExtractor responseExtractor, CancellationToken cancellationToken)
+        ChatSession session, string userText, IAgentResponseExtractor responseExtractor, ILogger logger,
+        CancellationToken cancellationToken)
     {
         var channel = Channel.CreateUnbounded<StageEvent>(new UnboundedChannelOptions
         {
@@ -207,7 +211,7 @@ internal static class ChatCommandHandler
 
         try
         {
-            var hasResponseText = await RenderStageBoxesAsync(channel.Reader, turnStopwatch, cancellationToken);
+            var hasResponseText = await RenderStageBoxesAsync(channel.Reader, turnStopwatch, logger, cancellationToken);
             await producer; // never faults -- ProduceStageEventsAsync catches everything -- just observed for hygiene.
 
             AnsiConsole.WriteLine();
@@ -224,7 +228,7 @@ internal static class ChatCommandHandler
         }
         catch (Exception ex)
         {
-            RedStarTelemetry.CreateLogger("RedStar.Cli.ChatCommandHandler").LogError(ex, "Error calling the model");
+            logger.LogError(ex, "Error calling the model");
             ConsoleOutput.Error.MarkupLine($"\n[red]Error calling the model:[/]\n{Markup.Escape(ex.ToString())}\n");
             return 1;
         }
@@ -233,9 +237,15 @@ internal static class ChatCommandHandler
     /// <summary>
     /// Drives the streamed turn and translates it into <see cref="StageEvent"/>s on <paramref name="writer"/>:
     /// reasoning text from <see cref="TextReasoningContent"/>, tool-status labels and completed web-search
-    /// hit lists via <paramref name="responseExtractor"/>, and the final answer's text chunks. Runs
-    /// concurrently with <see cref="RenderStageBoxesAsync"/> so the UI can start drawing a stage's box as
-    /// soon as that stage's first event lands, rather than after the whole turn completes. Completes the
+    /// hit lists via <paramref name="responseExtractor"/>, the final answer's text chunks, and a trailing
+    /// <see cref="UsageContent"/> update (when the server reports one -- see <c>UnslothAgentFactory</c>/
+    /// <c>LMStudioAgentFactory</c>'s <c>stream_options.include_usage</c> request field) carrying the whole
+    /// turn's output token count. That usage update arrives once, after every other event, with no stage of
+    /// its own -- <paramref name="writer"/> tags it with <paramref name="lastStage"/>'s current value (the
+    /// stage of whatever box happens to still be open), which is how the final box's footer in
+    /// <see cref="StageBox"/> ends up with the total tokens/speed and every earlier box in the turn does not.
+    /// Runs concurrently with <see cref="RenderStageBoxesAsync"/> so the UI can start drawing a stage's box
+    /// as soon as that stage's first event lands, rather than after the whole turn completes. Completes the
     /// channel (successfully or with the caught exception) when <see cref="ChatSession.SendAsync"/> returns
     /// or throws, which is how the reader side learns the turn is over.
     /// </summary>
@@ -243,30 +253,43 @@ internal static class ChatCommandHandler
         ChatSession session, string userText, IAgentResponseExtractor responseExtractor,
         ChannelWriter<StageEvent> writer, CancellationToken cancellationToken)
     {
+        var lastStage = TurnStage.Other;
+
         try
         {
             await session.SendAsync(
                 userText,
-                onTextChunk: chunk => writer.TryWrite(new StageEvent(TurnStage.Generating, chunk, null)),
+                onTextChunk: chunk =>
+                {
+                    lastStage = TurnStage.Generating;
+                    writer.TryWrite(new StageEvent(TurnStage.Generating, chunk, null));
+                },
                 onUpdate: update =>
                 {
                     foreach (var content in update.Contents)
                     {
                         if (content is TextReasoningContent { Text.Length: > 0 } reasoning)
                         {
+                            lastStage = TurnStage.Reasoning;
                             writer.TryWrite(new StageEvent(TurnStage.Reasoning, reasoning.Text, null));
+                        }
+                        else if (content is UsageContent { Details.OutputTokenCount: { } outputTokens })
+                        {
+                            writer.TryWrite(new StageEvent(lastStage, null, null, (int)outputTokens));
                         }
                     }
 
                     var status = responseExtractor.TryGetToolStatus(update);
                     if (status is not null)
                     {
+                        lastStage = TurnStage.Searching;
                         writer.TryWrite(new StageEvent(TurnStage.Searching, status, null));
                     }
 
                     var sites = responseExtractor.TryGetWebSearchResults(update);
                     if (sites is { Count: > 0 })
                     {
+                        lastStage = TurnStage.Searching;
                         writer.TryWrite(new StageEvent(TurnStage.Searching, null, sites));
                     }
                 },
@@ -310,7 +333,7 @@ internal static class ChatCommandHandler
     /// after it gets overwritten.
     /// </summary>
     private static async Task<bool> RenderStageBoxesAsync(
-        ChannelReader<StageEvent> reader, Stopwatch turnStopwatch, CancellationToken cancellationToken)
+        ChannelReader<StageEvent> reader, Stopwatch turnStopwatch, ILogger logger, CancellationToken cancellationToken)
     {
         var isLive = !Console.IsOutputRedirected;
         var hasResponseText = false;
@@ -341,7 +364,7 @@ internal static class ChatCommandHandler
             {
                 if (pendingStage is { } completedStage)
                 {
-                    RecordStageDuration(completedStage, turnStopwatch.ElapsedMilliseconds - stageStartMs);
+                    RecordStageDuration(completedStage, turnStopwatch.ElapsedMilliseconds - stageStartMs, logger);
                 }
 
                 stageStartMs = turnStopwatch.ElapsedMilliseconds;
@@ -404,6 +427,11 @@ internal static class ChatCommandHandler
                 hasResponseText = true;
             }
 
+            if (box.OutputTokenCount is { } outputTokens)
+            {
+                LogTokenUsage(outputTokens, turnStopwatch.Elapsed, logger);
+            }
+
             if (splitForHeight)
             {
                 chainCopyFilePath = box.CopyFilePath;
@@ -421,7 +449,7 @@ internal static class ChatCommandHandler
 
         if (pendingStage is { } finalStage)
         {
-            RecordStageDuration(finalStage, turnStopwatch.ElapsedMilliseconds - stageStartMs);
+            RecordStageDuration(finalStage, turnStopwatch.ElapsedMilliseconds - stageStartMs, logger);
         }
 
         return hasResponseText;
@@ -429,12 +457,14 @@ internal static class ChatCommandHandler
 
     /// <summary>
     /// Records one <see cref="RedStarTelemetry.StageDuration"/> measurement for a completed stage
-    /// occurrence. <see cref="TurnStage.Other"/> is the initial "waiting for the first event" box, not a
-    /// generation stage the model itself performs, so it's excluded -- only <see cref="TurnStage.Reasoning"/>,
+    /// occurrence, and logs it as a structured line so it also shows up in the OTEL logs view (the metric
+    /// alone only surfaces in a dashboard's metrics/histogram view, not its logs view). <see
+    /// cref="TurnStage.Other"/> is the initial "waiting for the first event" box, not a generation stage the
+    /// model itself performs, so it's excluded from both -- only <see cref="TurnStage.Reasoning"/>,
     /// <see cref="TurnStage.Searching"/> (tool calling), and <see cref="TurnStage.Generating"/> (the final
-    /// answer) are recorded.
+    /// answer) are recorded/logged.
     /// </summary>
-    private static void RecordStageDuration(string stage, long durationMs)
+    private static void RecordStageDuration(string stage, long durationMs, ILogger logger)
     {
         if (stage == TurnStage.Other)
         {
@@ -442,6 +472,24 @@ internal static class ChatCommandHandler
         }
 
         RedStarTelemetry.StageDuration.Record(durationMs, new KeyValuePair<string, object?>("stage", stage));
+        logger.LogInformation("Stage {Stage} completed in {StageDurationMs}ms", stage, durationMs);
+    }
+
+    /// <summary>
+    /// Logs the whole turn's output-token count and average tokens/second once a <c>UsageContent</c> update
+    /// has arrived (see <see cref="ProduceStageEventsAsync"/> and <see cref="StageBox.OutputTokenCount"/>) --
+    /// a structured log line rather than only the <see cref="StageBox"/> footer, so the number is also
+    /// recoverable from the OTEL logs, not just the terminal. <paramref name="elapsed"/> is the shared
+    /// turn-wide stopwatch, matching the same total used for the footer's speed figure -- the token count is
+    /// a whole-turn total, not this one box's share of it, so pairing it with anything narrower would be
+    /// meaningless.
+    /// </summary>
+    private static void LogTokenUsage(int outputTokenCount, TimeSpan elapsed, ILogger logger)
+    {
+        var tokensPerSecond = elapsed.TotalSeconds > 0 ? outputTokenCount / elapsed.TotalSeconds : 0;
+        logger.LogInformation(
+            "Turn produced {OutputTokenCount} output tokens in {ElapsedMs}ms ({TokensPerSecond:0.0} tok/s)",
+            outputTokenCount, elapsed.TotalMilliseconds, tokensPerSecond);
     }
 
     /// <summary>Applies events to <paramref name="box"/> for as long as they belong to its stage, invoking
@@ -578,6 +626,7 @@ internal static class ChatCommandHandler
         private IReadOnlyList<WebSearchResult>? _sites;
         private int _frame;
         private string? _copyFilePath;
+        private int? _outputTokenCount;
 
         /// <param name="sharedCopyFilePath">
         /// The previous box's <see cref="CopyFilePath"/> when this box is a same-stage "(cont'd)"
@@ -613,6 +662,14 @@ internal static class ChatCommandHandler
         /// next same-stage continuation box as <c>sharedCopyFilePath</c>.</summary>
         public string? CopyFilePath => _copyFilePath;
 
+        /// <summary>The whole turn's output-token count once a <c>UsageContent</c> update has landed on this
+        /// box (see <see cref="ChatCommandHandler.ProduceStageEventsAsync"/>), else null. Read by the caller
+        /// once this box seals, to log it via <see cref="ChatCommandHandler.LogTokenUsage"/> regardless of
+        /// whether this box itself is the one that renders it in its footer -- see
+        /// <see cref="TokensAndSpeedLabel"/>'s "(cont'd)" exclusion, which only governs the footer, not
+        /// telemetry.</summary>
+        public int? OutputTokenCount => _outputTokenCount;
+
         public void Tick() => _frame++;
 
         public void Apply(StageEvent evt)
@@ -630,6 +687,11 @@ internal static class ChatCommandHandler
             if (evt.Sites is { Count: > 0 })
             {
                 _sites = evt.Sites;
+            }
+
+            if (evt.OutputTokenCount is { } tokens)
+            {
+                _outputTokenCount = tokens;
             }
         }
 
@@ -661,9 +723,18 @@ internal static class ChatCommandHandler
                 body = new Markup(string.Join("\n\n", NonGeneratingBlocks()));
             }
 
-            var footerMarkup = final && HasText
-                ? $"[grey]{Markup.Escape(ElapsedLabel())}[/]  [link={EnsureCopyFileUri()}]Copy[/]"
-                : $"[grey]{Markup.Escape(ElapsedLabel())}[/]";
+            var footerMarkup = $"[grey]{Markup.Escape(ElapsedLabel())}[/]";
+            if (final && HasText)
+            {
+                var tokensLabel = TokensAndSpeedLabel();
+                if (tokensLabel is not null)
+                {
+                    footerMarkup = $"[grey]{Markup.Escape(tokensLabel)}[/]  {footerMarkup}";
+                }
+
+                footerMarkup += $"  [link={EnsureCopyFileUri()}]Copy[/]";
+            }
+
             var footer = Align.Right(new Markup(footerMarkup));
             var (header, color) = StageStyle(Stage, _isContinuation);
             return new Panel(new Rows(body, footer))
@@ -743,6 +814,28 @@ internal static class ChatCommandHandler
         {
             var elapsed = _stopwatch.Elapsed;
             return $"{(int)elapsed.TotalMinutes}m {elapsed.Seconds}s";
+        }
+
+        /// <summary>
+        /// The whole turn's output-token count and average tokens/second, or null when neither applies.
+        /// Null for a same-stage "(cont'd)" continuation box (<see cref="_isContinuation"/>) even once the
+        /// chain's later box carries the count -- the count/speed describes the entire turn, not this one
+        /// fragment's share of it, so it's only ever shown on a box that was never split for height. Null
+        /// also whenever no <c>UsageContent</c> update ever arrived (see <see cref="ProduceStageEventsAsync"/>),
+        /// which happens when the server doesn't report usage. Speed divides by <see cref="_stopwatch"/>'s
+        /// elapsed time (shared across the whole turn, not just this box) since the token count itself is a
+        /// whole-turn total, not this box's own.
+        /// </summary>
+        private string? TokensAndSpeedLabel()
+        {
+            if (_isContinuation || _outputTokenCount is not { } tokens)
+            {
+                return null;
+            }
+
+            var elapsedSeconds = _stopwatch.Elapsed.TotalSeconds;
+            var speed = elapsedSeconds > 0 ? tokens / elapsedSeconds : 0;
+            return $"{tokens} tok, {speed:0.0} tok/s";
         }
 
         /// <summary>

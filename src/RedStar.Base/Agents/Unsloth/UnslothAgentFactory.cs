@@ -37,30 +37,33 @@ public static class UnslothAgentFactory
         var credential = new ApiKeyCredential(hasApiKey ? unsloth.ApiKey : "not-needed");
         var openAiClient = new OpenAIClient(credential, clientOptions);
 
-        var chatOptions = CreateChatOptions(options) ?? new ChatOptions();
+        var chatOptions = CreateChatOptions(options);
         chatOptions.Instructions = instructions;
 
         return openAiClient.GetChatClient(modelId).AsAIAgent(new ChatClientAgentOptions { ChatOptions = chatOptions });
     }
 
     /// <summary>
-    /// Builds the <see cref="ChatOptions"/> to pass alongside each request, applying
-    /// Unsloth-specific fields (not modeled by the OpenAI SDK) via <see cref="ChatCompletionOptions.Patch"/>.
-    /// Returns null when no such fields are needed.
+    /// Builds the <see cref="ChatOptions"/> to pass alongside each request. Always requests
+    /// <c>stream_options.include_usage</c> via <see cref="ChatCompletionOptions.Patch"/> (the OpenAI SDK's
+    /// <c>StreamOptions</c> property is internal, not modeled for external callers, same reason
+    /// Unsloth's own fields below go through <c>Patch</c>) so a final <c>UsageContent</c> update carries the
+    /// turn's output token count -- see <see cref="RedStar.Cli.ChatCommandHandler"/>'s per-block token/speed
+    /// footer. Also applies Unsloth-specific fields via <c>Patch</c> when web search is enabled.
     /// </summary>
-    public static ChatOptions? CreateChatOptions(RedStarOptions options)
+    public static ChatOptions CreateChatOptions(RedStarOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        if (!options.Agents.Unsloth.WebSearchEnabled)
-        {
-            return null;
-        }
-
         var completionOptions = new ChatCompletionOptions();
 #pragma warning disable SCME0001 // Patch is an evaluation-only OpenAI SDK API for fields it doesn't model yet.
-        completionOptions.Patch.Set("$.enable_tools"u8, true);
-        completionOptions.Patch.Set("$.enabled_tools"u8, BinaryData.FromString("""["web_search"]"""));
+        completionOptions.Patch.Set("$.stream_options.include_usage"u8, true);
+
+        if (options.Agents.Unsloth.WebSearchEnabled)
+        {
+            completionOptions.Patch.Set("$.enable_tools"u8, true);
+            completionOptions.Patch.Set("$.enabled_tools"u8, BinaryData.FromString("""["web_search"]"""));
+        }
 #pragma warning restore SCME0001
 
         return new ChatOptions { RawRepresentationFactory = _ => completionOptions };
