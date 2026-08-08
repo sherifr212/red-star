@@ -32,6 +32,8 @@ and wraps it one layer higher instead of consuming it directly.
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
 - An OpenAI-compatible LLM server reachable over HTTP (e.g. Unsloth Studio running locally)
+- Node.js (current Active LTS) — only needed for `RedStar.WebApp`; see
+  [`RedStar.WebApp/GETTING_STARTED.md`](src/RedStar.WebApp/GETTING_STARTED.md) for setup
 
 ## Getting started
 
@@ -145,7 +147,8 @@ src/
 │   └── Agents/
 │       └── Unsloth/    # Unsloth-specific agent construction (UnslothAgentFactory)
 ├── RedStar.Cli/        # `redstar` executable: Spectre.Console.Cli commands, console rendering
-└── RedStar.UnitTest/   # xUnit tests for RedStar.Base and RedStar.Cli
+├── RedStar.UnitTest/   # xUnit tests for RedStar.Base and RedStar.Cli
+└── RedStar.WebApp/     # ASP.NET Core MVC web frontend: Lit + Vite + Tailwind, references RedStar.Base
 ```
 
 - **`RedStar.Base`** is a host for multiple agents, not just Unsloth. Agent-specific code lives
@@ -155,6 +158,11 @@ src/
   `RedStar.Base` namespace.
 - **`RedStar.Cli`** is thin Spectre.Console.Cli glue over `RedStar.Base`, plus the multi-box
   streaming console UI that renders reasoning, tool status, and answer text as they arrive.
+- **`RedStar.WebApp`** hosts multiple pages, each client-rendered by TypeScript (Lit web components)
+  with a plain static navbar — no SPA router. See
+  [`RedStar.WebApp/CLAUDE.md`](src/RedStar.WebApp/CLAUDE.md) for its architecture and
+  [`RedStar.WebApp/GETTING_STARTED.md`](src/RedStar.WebApp/GETTING_STARTED.md) for setup, commands,
+  and troubleshooting.
 
 See [`CLAUDE.md`](CLAUDE.md) for a deeper architectural walkthrough.
 

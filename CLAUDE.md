@@ -26,6 +26,7 @@ dotnet test RedStar.slnx --filter "FullyQualifiedName~ChatSessionTests"   # sing
 dotnet test RedStar.slnx --filter "FullyQualifiedName~SendAsync_MergesInstructions_IntoChatOptions"  # single test
 dotnet run --project RedStar.Cli -- chat -p "hello"                      # one-shot prompt
 dotnet run --project RedStar.Cli -- models                               # list models on the server
+dotnet watch run --project RedStar.WebApp                                # web frontend, live-reloading
 ```
 
 `chat` (and the root command, which behaves identically) accepts every shared flag; `models` only
@@ -73,6 +74,11 @@ while `ChatSession`/`RedStarOptions`/telemetry stay in the top-level `RedStar.Ba
 they're agent-agnostic (they only know about `AIAgent`, never about any one agent's specifics).
 There's still only one concrete agent (Unsloth), so a generic pluggable-agent interface/registry is
 intentionally not built yet — that's a follow-up once a second agent exists to design it against.
+
+`RedStar.WebApp/` is an ASP.NET Core MVC web frontend (Lit + Vite + Tailwind, referencing
+`RedStar.Base`) — see `RedStar.WebApp/CLAUDE.md` for its architecture and
+`RedStar.WebApp/GETTING_STARTED.md` for setup, commands, and troubleshooting; both are nested inside
+that project rather than covered here.
 
 ### `RedStar.Cli` structure
 

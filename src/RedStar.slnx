@@ -2,4 +2,5 @@
   <Project Path="RedStar.Base/RedStar.Base.csproj" />
   <Project Path="RedStar.Cli/RedStar.Cli.csproj" />
   <Project Path="RedStar.UnitTest/RedStar.UnitTest.csproj" />
+  <Project Path="RedStar.WebApp/RedStar.WebApp.csproj" />
 </Solution>

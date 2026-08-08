@@ -1,0 +1,72 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <DefaultItemExcludes>$(DefaultItemExcludes);ClientApp/node_modules/**;wwwroot/dist/**</DefaultItemExcludes>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Vite.AspNetCore" Version="2.4.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RedStar.Base\RedStar.Base.csproj" />
+  </ItemGroup>
+
+  <!--
+    Frontend pipeline wiring. See RedStar.WebApp/CLAUDE.md for the full rationale, summary:
+    dependency install runs on every Build (cheap once cached, via Inputs/Outputs incrementality),
+    the actual `vite build`/`tsc -b` production build only ever runs on Publish, so the inner
+    dev loop (dotnet watch run) never triggers it. Development-time asset serving comes entirely
+    from the Vite dev server (Vite.AspNetCore's AutoRun), decoupled from MSBuild.
+  -->
+
+  <ItemGroup>
+    <ClientAppDependencySources Include="ClientApp/package.json;ClientApp/pnpm-lock.yaml" />
+  </ItemGroup>
+
+  <Target Name="EnsureClientAppDependencies"
+          BeforeTargets="Build;Publish"
+          Condition="'$(DesignTimeBuild)' != 'true'"
+          Inputs="@(ClientAppDependencySources)"
+          Outputs="$(MSBuildProjectDirectory)\ClientApp\node_modules\.install-stamp">
+    <Exec Command="corepack pnpm install --frozen-lockfile" WorkingDirectory="$(MSBuildProjectDirectory)\ClientApp" />
+    <Touch Files="$(MSBuildProjectDirectory)\ClientApp\node_modules\.install-stamp" AlwaysCreate="true" />
+  </Target>
+
+  <ItemGroup>
+    <ClientAppSources Include="ClientApp/**/*.ts;ClientApp/**/*.css;ClientApp/**/tsconfig*.json;ClientApp/vite.config.ts;ClientApp/package.json"
+                       Exclude="ClientApp/node_modules/**" />
+  </ItemGroup>
+
+  <Target Name="ViteProductionBuild"
+          AfterTargets="ComputeFilesToPublish"
+          DependsOnTargets="EnsureClientAppDependencies"
+          Condition="'$(DesignTimeBuild)' != 'true'"
+          Inputs="@(ClientAppSources)"
+          Outputs="$(MSBuildProjectDirectory)\wwwroot\dist\.vite\manifest.json">
+    <!-- `pnpm run build` is `tsc -b && vite build` (ClientApp/package.json); type-checking is
+         part of what "build" means here, the same shape Vite's own official TS templates ship,
+         so a real type error fails this Exec (and therefore dotnet publish) before any bundle
+         is produced. -->
+    <Exec Command="corepack pnpm run build" WorkingDirectory="$(MSBuildProjectDirectory)\ClientApp" />
+    <ItemGroup>
+      <ClientAppDistFiles Include="$(MSBuildProjectDirectory)\wwwroot\dist\**" />
+    </ItemGroup>
+    <ItemGroup>
+      <!-- The SDK's implicit wwwroot/** content glob is evaluated once at MSBuild project-evaluation
+           time, before any target runs; on a clean checkout wwwroot/dist doesn't exist yet, so
+           that implicit glob can never pick it up. Re-globbing explicitly here (evaluated live,
+           inside a target, after vite build has run) is the only way the generated output reliably
+           reaches the publish payload, the same AfterTargets="ComputeFilesToPublish" pattern the
+           old ASP.NET Core SPA templates used (PublishRunWebpack) for this exact problem. -->
+      <ResolvedFileToPublish Include="@(ClientAppDistFiles)">
+        <RelativePath>wwwroot\dist\%(RecursiveDir)%(Filename)%(Extension)</RelativePath>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+  </Target>
+
+</Project>

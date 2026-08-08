@@ -1,0 +1,8 @@
+{
+  "recommendations": [
+    "runem.lit-plugin",
+    "bradlc.vscode-tailwindcss",
+    "esbenp.prettier-vscode",
+    "ms-dotnettools.csdevkit"
+  ]
+}
