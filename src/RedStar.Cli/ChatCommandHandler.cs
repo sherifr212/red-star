@@ -6,6 +6,7 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using RedStar.Base;
+using RedStar.Base.Agents.LMStudio;
 using RedStar.Base.Agents.Unsloth;
 using RedStar.Base.Telemetry;
 using Spectre.Console;
@@ -17,16 +18,19 @@ internal static class ChatCommandHandler
 {
     /// <param name="agentFactory">
     /// Builds the <see cref="AIAgent"/> to chat with, given (options, modelId, instructions). Defaults to
-    /// <see cref="UnslothAgentFactory.Create"/>; tests can substitute a fake here without touching the
-    /// network.
+    /// <see cref="UnslothAgentFactory.Create"/> or <c>LMStudioAgentFactory.Create</c> depending on
+    /// <see cref="RedStarOptions.Agent"/> (an explicit two-way switch, not a registry -- see
+    /// <see cref="AgentNames"/>); tests can substitute a fake here without touching the network.
     /// </param>
     /// <param name="modelsClientFactory">
     /// Builds the <see cref="IModelsClient"/> used for auto-resolving a default model. Defaults to a real
-    /// <see cref="ModelsClient"/>; tests can substitute a fake here without touching the network.
+    /// <see cref="ModelsClient"/> or <c>LMStudioModelsClient</c>, same per-agent switch as
+    /// <paramref name="agentFactory"/>; tests can substitute a fake here without touching the network.
     /// </param>
     /// <param name="responseExtractor">
     /// Extracts tool-status labels and web-search hit lists from streamed updates (see
-    /// <see cref="ProduceStageEventsAsync"/>). Defaults to <see cref="UnslothAgentResponseExtractor"/>;
+    /// <see cref="ProduceStageEventsAsync"/>). Defaults to <see cref="UnslothAgentResponseExtractor"/> or
+    /// <c>LMStudioAgentResponseExtractor</c>, same per-agent switch as <paramref name="agentFactory"/>;
     /// tests can substitute a fake here without depending on real Unsloth SSE JSON shapes.
     /// </param>
     /// <param name="runId">
@@ -52,10 +56,18 @@ internal static class ChatCommandHandler
         var logger = RedStarTelemetry.CreateLogger("RedStar.Cli.ChatCommandHandler");
         logger.LogInformation("Starting redstar chat run {RunId}", runId);
 
-        agentFactory ??= static (opts, modelId, instructions) => UnslothAgentFactory.Create(opts, modelId, instructions);
-        responseExtractor ??= new UnslothAgentResponseExtractor();
+        var active = ResolveActiveAgentSettings(options);
+        var isLMStudio = active.AgentName == AgentNames.LMStudio;
 
-        if (string.IsNullOrEmpty(options.Agents.Unsloth.ApiKey))
+        agentFactory ??= isLMStudio
+            ? static (opts, modelId, instructions) => LMStudioAgentFactory.Create(opts, modelId, instructions)
+            : static (opts, modelId, instructions) => UnslothAgentFactory.Create(opts, modelId, instructions);
+        responseExtractor ??= isLMStudio ? new LMStudioAgentResponseExtractor() : new UnslothAgentResponseExtractor();
+        modelsClientFactory ??= isLMStudio
+            ? static opts => new LMStudioModelsClient(opts)
+            : static opts => new ModelsClient(opts);
+
+        if (string.IsNullOrEmpty(active.ApiKey) && !isLMStudio)
         {
             ConsoleOutput.Error.MarkupLine(
                 "[yellow]Warning: no API key configured.[/] Unsloth Studio requires a bearer token for /v1 calls.\n" +
@@ -63,7 +75,8 @@ internal static class ChatCommandHandler
                 "--api-key, the RedStar__Agents__Unsloth__ApiKey environment variable, or appsettings.local.json.\n");
         }
 
-        var selection = await ResolveModelAsync(options, cancellationToken, modelsClientFactory);
+        var configuredDefault = isLMStudio ? options.Agents.LMStudio.DefaultModel : options.Agents.Unsloth.DefaultModel;
+        var selection = await ResolveModelAsync(configuredDefault, isLMStudio, options, cancellationToken, modelsClientFactory);
         if (!selection.Succeeded)
         {
             logger.LogWarning("Run {RunId} aborted: model resolution failed ({Reason})", runId, selection.ErrorMessage);
@@ -80,7 +93,7 @@ internal static class ChatCommandHandler
 
         logger.LogInformation("Run {RunId} resolved model {ModelId} via {ModelSource}", runId, modelId, modelSource);
 
-        PrintStartupInfoBox(options, runId, modelId, modelSource, activity, logger);
+        PrintStartupInfoBox(active, options.Otel, runId, modelId, modelSource, activity, logger);
 
         AIAgent agent = agentFactory(options, modelId, systemPrompt);
         var session = new ChatSession(agent);
@@ -835,26 +848,40 @@ internal static class ChatCommandHandler
     private static void PrintBoxBottomBorder(int width, Color color) =>
         AnsiConsole.MarkupLine($"[{color.ToMarkup()}]╰{new string('─', width - 2)}╯[/]");
 
+    /// <summary>One agent's resolved connection settings for this run, picked from <see cref="RedStarOptions.Agent"/>
+    /// once at the top of <see cref="RunAsync"/> instead of every call site reaching into
+    /// <c>options.Agents.Unsloth</c>/<c>options.Agents.LMStudio</c> directly. <see cref="WebSearchEnabled"/> is
+    /// null for an agent with no such concept (LM Studio), rather than false, so <see cref="PrintStartupInfoBox"/>
+    /// can tell "disabled" apart from "not applicable" and omit the row entirely for the latter.</summary>
+    private readonly record struct ActiveAgentSettings(string AgentName, string BaseUrl, string ApiKey, bool? WebSearchEnabled);
+
+    private static ActiveAgentSettings ResolveActiveAgentSettings(RedStarOptions options) =>
+        string.Equals(options.Agent, AgentNames.LMStudio, StringComparison.OrdinalIgnoreCase)
+            ? new ActiveAgentSettings(AgentNames.LMStudio, options.Agents.LMStudio.BaseUrl, options.Agents.LMStudio.ApiKey, null)
+            : new ActiveAgentSettings(
+                AgentNames.Unsloth, options.Agents.Unsloth.BaseUrl, options.Agents.Unsloth.ApiKey, options.Agents.Unsloth.WebSearchEnabled);
+
     /// <summary>
-    /// Resolves and validates the model to chat with by checking it against the server's
-    /// <c>/v1/models</c> list before any chat request is made -- this always makes the call
-    /// (whether or not <see cref="UnslothAgentOptions.DefaultModel"/> is set) so an unloaded or
-    /// nonexistent model is caught here, with a clear message, instead of surfacing later as a
-    /// misleading "the model returned no response" once the chat stream unexpectedly ends empty.
-    /// See <see cref="ModelSelector.SelectDefault"/> for the resolution/trust rules.
+    /// Resolves and validates the model to chat with by checking it against the server's model list before
+    /// any chat request is made -- this always makes the call (whether or not <paramref name="configuredDefault"/>
+    /// is set) so an unloaded or nonexistent model is caught here, with a clear message, instead of surfacing
+    /// later as a misleading "the model returned no response" once the chat stream unexpectedly ends empty.
+    /// See <see cref="ModelSelector.SelectDefault"/> for the resolution/trust rules, including what
+    /// <paramref name="allowJitLoad"/> changes.
     /// </summary>
     private static async Task<ModelSelectionResult> ResolveModelAsync(
-        RedStarOptions options, CancellationToken cancellationToken, Func<RedStarOptions, IModelsClient>? modelsClientFactory)
+        string? configuredDefault, bool allowJitLoad, RedStarOptions options, CancellationToken cancellationToken,
+        Func<RedStarOptions, IModelsClient> modelsClientFactory)
     {
         return await AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots)
             .StartAsync("Checking available models...", async _ =>
             {
-                var modelsClient = modelsClientFactory is null ? new ModelsClient(options) : modelsClientFactory(options);
+                var modelsClient = modelsClientFactory(options);
                 try
                 {
                     var models = await modelsClient.ListAsync(cancellationToken);
-                    var result = ModelSelector.SelectDefault(models, options.Agents.Unsloth.DefaultModel);
+                    var result = ModelSelector.SelectDefault(models, configuredDefault, allowJitLoad);
                     if (!result.Succeeded)
                     {
                         ConsoleOutput.Error.MarkupLine($"[red]{Markup.Escape(result.ErrorMessage!)}[/]");
@@ -877,31 +904,42 @@ internal static class ChatCommandHandler
     }
 
     /// <summary>
-    /// Prints a boxed summary of this run's effective configuration -- endpoint, whether an API key is
-    /// configured, the resolved model plus whether it was picked implicitly or explicitly (see
-    /// <see cref="ModelSelectionSource"/>), web search, and telemetry export -- once per run, before any
-    /// chat request goes out. Mirrors the same fields onto <paramref name="activity"/>'s tags
-    /// (<c>redstar.config.*</c>) and one structured log line so this is recoverable from telemetry too, not
-    /// just from the terminal -- the box itself is stdout-only and gone once the terminal scrolls past it.
+    /// Prints a boxed summary of this run's effective configuration -- which agent, endpoint, whether an
+    /// API key is configured, the resolved model plus how it was picked (see
+    /// <see cref="ModelSelectionSource"/>), web search (when the active agent has such a concept), and
+    /// telemetry export -- once per run, before any chat request goes out. Mirrors the same fields onto
+    /// <paramref name="activity"/>'s tags (<c>redstar.config.*</c>) and one structured log line so this is
+    /// recoverable from telemetry too, not just from the terminal -- the box itself is stdout-only and gone
+    /// once the terminal scrolls past it.
     /// </summary>
     private static void PrintStartupInfoBox(
-        RedStarOptions options, string runId, string modelId, ModelSelectionSource modelSource, Activity? activity, ILogger logger)
+        ActiveAgentSettings active, OtelOptions otel, string runId, string modelId, ModelSelectionSource modelSource,
+        Activity? activity, ILogger logger)
     {
-        var unsloth = options.Agents.Unsloth;
-        var apiKeyConfigured = !string.IsNullOrEmpty(unsloth.ApiKey);
-        var modelSourceLabel = modelSource == ModelSelectionSource.Explicit ? "explicit (configured)" : "implicit (auto-detected)";
+        var apiKeyConfigured = !string.IsNullOrEmpty(active.ApiKey);
+        var modelSourceLabel = modelSource switch
+        {
+            ModelSelectionSource.Explicit => "explicit (configured)",
+            ModelSelectionSource.PendingJitLoad => "explicit (configured, loading on first request)",
+            _ => "implicit (auto-detected)",
+        };
 
         var table = new Table().Border(TableBorder.None).HideHeaders();
         table.AddColumn(new TableColumn(string.Empty).NoWrap());
         table.AddColumn(string.Empty);
+        table.AddRow("[grey]Agent[/]", Markup.Escape(active.AgentName));
         table.AddRow("[grey]Run ID[/]", Markup.Escape(runId));
-        table.AddRow("[grey]Endpoint[/]", Markup.Escape(unsloth.BaseUrl));
+        table.AddRow("[grey]Endpoint[/]", Markup.Escape(active.BaseUrl));
         table.AddRow("[grey]API key[/]", apiKeyConfigured ? "[green]configured[/]" : "[yellow]not configured[/]");
         table.AddRow("[grey]Model[/]", $"[green]{Markup.Escape(modelId)}[/] [grey]({modelSourceLabel})[/]");
-        table.AddRow("[grey]Web search[/]", unsloth.WebSearchEnabled ? "[green]enabled[/]" : "disabled");
+        if (active.WebSearchEnabled is { } webSearchEnabled)
+        {
+            table.AddRow("[grey]Web search[/]", webSearchEnabled ? "[green]enabled[/]" : "disabled");
+        }
+
         table.AddRow(
             "[grey]Telemetry[/]",
-            options.Otel.Enabled ? $"[green]enabled[/] -> {Markup.Escape(options.Otel.Endpoint)}" : "disabled");
+            otel.Enabled ? $"[green]enabled[/] -> {Markup.Escape(otel.Endpoint)}" : "disabled");
 
         var panel = new Panel(table)
             .Header("[bold]Startup configuration[/]")
@@ -910,19 +948,24 @@ internal static class ChatCommandHandler
             .Expand();
         AnsiConsole.Write(panel);
 
-        activity?.SetTag("redstar.config.endpoint", unsloth.BaseUrl);
+        activity?.SetTag("redstar.config.agent", active.AgentName);
+        activity?.SetTag("redstar.config.endpoint", active.BaseUrl);
         activity?.SetTag("redstar.config.api_key_configured", apiKeyConfigured);
         activity?.SetTag("redstar.config.model", modelId);
         activity?.SetTag("redstar.config.model_source", modelSource.ToString());
-        activity?.SetTag("redstar.config.web_search_enabled", unsloth.WebSearchEnabled);
-        activity?.SetTag("redstar.config.telemetry_enabled", options.Otel.Enabled);
-        activity?.SetTag("redstar.config.telemetry_endpoint", options.Otel.Endpoint);
+        if (active.WebSearchEnabled is { } webSearchTag)
+        {
+            activity?.SetTag("redstar.config.web_search_enabled", webSearchTag);
+        }
+
+        activity?.SetTag("redstar.config.telemetry_enabled", otel.Enabled);
+        activity?.SetTag("redstar.config.telemetry_endpoint", otel.Endpoint);
 
         logger.LogInformation(
-            "Startup configuration for run {RunId}: endpoint={Endpoint} apiKeyConfigured={ApiKeyConfigured} " +
+            "Startup configuration for run {RunId}: agent={Agent} endpoint={Endpoint} apiKeyConfigured={ApiKeyConfigured} " +
             "model={ModelId} modelSource={ModelSource} webSearchEnabled={WebSearchEnabled} " +
             "telemetryEnabled={TelemetryEnabled} telemetryEndpoint={TelemetryEndpoint}",
-            runId, unsloth.BaseUrl, apiKeyConfigured, modelId, modelSource, unsloth.WebSearchEnabled,
-            options.Otel.Enabled, options.Otel.Endpoint);
+            runId, active.AgentName, active.BaseUrl, apiKeyConfigured, modelId, modelSource,
+            active.WebSearchEnabled, otel.Enabled, otel.Endpoint);
     }
 }

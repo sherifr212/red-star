@@ -36,7 +36,7 @@ app.Configure(config =>
         .WithDescription("List models available on the server.");
 });
 
-var startupOptions = RedStarOptionsFactory.Build(endpoint: null, apiKey: null);
+var startupOptions = RedStarOptionsFactory.Build(agent: null, endpoint: null, apiKey: null);
 using var telemetry = TelemetryBootstrapper.Configure(startupOptions);
 
 return await app.RunAsync(args, cts.Token);

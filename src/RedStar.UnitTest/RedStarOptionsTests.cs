@@ -142,6 +142,12 @@ public class RedStarOptionsTests
                                     DefaultModel = "sample-model",
                                     WebSearchEnabled = true,
                                 },
+                                LMStudio = new LMStudioAgentOptions
+                                {
+                                    BaseUrl = "http://sample-lmstudio",
+                                    ApiKey = "sample-key",
+                                    DefaultModel = "sample-model",
+                                },
                             }
                             : throw new NotSupportedException(
                                 $"Add a sample value for new {nameof(RedStarOptions)} property '{property.Name}' " +
@@ -155,6 +161,77 @@ public class RedStarOptionsTests
         {
             Assert.Equal(property.GetValue(original), property.GetValue(result));
         }
+    }
+
+    [Fact]
+    public void Agent_DefaultsToUnsloth()
+    {
+        Assert.Equal(AgentNames.Unsloth, new RedStarOptions().Agent);
+    }
+
+    [Fact]
+    public void ApplyOverrides_WithAgentLMStudio_OverridesLMStudioSettings_LeavingUnslothUntouched()
+    {
+        var original = Original();
+        original.Agents = original.Agents with
+        {
+            LMStudio = new LMStudioAgentOptions { BaseUrl = "http://original-lmstudio/v1", ApiKey = "orig-key", DefaultModel = "orig-model" },
+        };
+
+        var result = original.ApplyOverrides(
+            agent: AgentNames.LMStudio, baseUrl: "http://override/v1", apiKey: "override-key", defaultModel: "override-model");
+
+        Assert.Equal(AgentNames.LMStudio, result.Agent);
+        Assert.Equal("http://override/v1", result.Agents.LMStudio.BaseUrl);
+        Assert.Equal("override-key", result.Agents.LMStudio.ApiKey);
+        Assert.Equal("override-model", result.Agents.LMStudio.DefaultModel);
+
+        // Unsloth's settings, unrelated to the LMStudio-targeted override, must be untouched.
+        Assert.Equal(original.Agents.Unsloth.BaseUrl, result.Agents.Unsloth.BaseUrl);
+        Assert.Equal(original.Agents.Unsloth.ApiKey, result.Agents.Unsloth.ApiKey);
+        Assert.Equal(original.Agents.Unsloth.DefaultModel, result.Agents.Unsloth.DefaultModel);
+    }
+
+    [Fact]
+    public void ApplyOverrides_WithoutAgentOverride_DefaultsToUnsloth_LeavingLMStudioUntouched()
+    {
+        var original = Original();
+        original.Agents = original.Agents with
+        {
+            LMStudio = new LMStudioAgentOptions { BaseUrl = "http://original-lmstudio/v1", ApiKey = "orig-key", DefaultModel = "orig-model" },
+        };
+
+        var result = original.ApplyOverrides(baseUrl: "http://override/v1", apiKey: "override-key", defaultModel: "override-model");
+
+        Assert.Equal("http://override/v1", result.Agents.Unsloth.BaseUrl);
+        Assert.Equal(original.Agents.LMStudio.BaseUrl, result.Agents.LMStudio.BaseUrl);
+        Assert.Equal(original.Agents.LMStudio.ApiKey, result.Agents.LMStudio.ApiKey);
+        Assert.Equal(original.Agents.LMStudio.DefaultModel, result.Agents.LMStudio.DefaultModel);
+    }
+
+    [Theory]
+    [InlineData("LMStudio")]
+    [InlineData("lmstudio")]
+    [InlineData("LMSTUDIO")]
+    public void ApplyOverrides_MatchesAgentCaseInsensitively(string agentValue)
+    {
+        var result = new RedStarOptions().ApplyOverrides(agent: agentValue, defaultModel: "m");
+
+        Assert.Equal("m", result.Agents.LMStudio.DefaultModel);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public void ApplyOverrides_KeepsOriginalAgent_WhenAgentOverrideIsBlank(string? blankAgent)
+    {
+        var original = Original();
+        original.Agent = AgentNames.LMStudio;
+
+        var result = original.ApplyOverrides(agent: blankAgent);
+
+        Assert.Equal(AgentNames.LMStudio, result.Agent);
     }
 
     [Fact]
