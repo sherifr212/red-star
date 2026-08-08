@@ -39,6 +39,36 @@ public class UnslothAgentResponseExtractorTests
     }
 
     [Fact]
+    public void TryGetToolStatus_ReturnsNull_ForDifferentEventType()
+    {
+        var update = Wrap("""
+            {"id":"1","object":"chat.completion.chunk","created":0,"model":"m","choices":[],
+             "type":"tool_end","tool_name":"web_search","result":"whatever"}
+            """);
+
+        Assert.Null(Extractor.TryGetToolStatus(update));
+    }
+
+    [Fact]
+    public void TryGetToolStatus_ReturnsNull_WhenContentIsEmpty()
+    {
+        var update = Wrap("""
+            {"id":"1","object":"chat.completion.chunk","created":0,"model":"m","choices":[],
+             "type":"tool_status","content":""}
+            """);
+
+        Assert.Null(Extractor.TryGetToolStatus(update));
+    }
+
+    [Fact]
+    public void TryGetToolStatus_ReturnsNull_ForNonOpenAiBackend()
+    {
+        var update = new AgentResponseUpdate();
+
+        Assert.Null(Extractor.TryGetToolStatus(update));
+    }
+
+    [Fact]
     public void TryGetWebSearchResults_ParsesTitleAndUrlBlocks_FromToolEndResult()
     {
         var resultText =
@@ -84,6 +114,58 @@ public class UnslothAgentResponseExtractorTests
             {"id":"1","object":"chat.completion.chunk","created":0,"model":"m","choices":[],
              "type":"tool_end","tool_name":"web_search","result":"Just raw page content, no Title/URL lines."}
             """);
+
+        Assert.Null(Extractor.TryGetWebSearchResults(update));
+    }
+
+    [Fact]
+    public void TryGetWebSearchResults_ReturnsNull_ForDifferentEventType()
+    {
+        var update = Wrap("""
+            {"id":"1","object":"chat.completion.chunk","created":0,"model":"m","choices":[],
+             "type":"tool_status","content":"Searching: x"}
+            """);
+
+        Assert.Null(Extractor.TryGetWebSearchResults(update));
+    }
+
+    [Fact]
+    public void TryGetWebSearchResults_ReturnsNull_WhenToolNameIsNotWebSearch()
+    {
+        var update = Wrap($$"""
+            {"id":"1","object":"chat.completion.chunk","created":0,"model":"m","choices":[],
+             "type":"tool_end","tool_name":"read_page","result":"Title: X\nURL: https://example.com"}
+            """);
+
+        Assert.Null(Extractor.TryGetWebSearchResults(update));
+    }
+
+    [Fact]
+    public void TryGetWebSearchResults_ReturnsNull_WhenResultPropertyIsMissing()
+    {
+        var update = Wrap("""
+            {"id":"1","object":"chat.completion.chunk","created":0,"model":"m","choices":[],
+             "type":"tool_end","tool_name":"web_search"}
+            """);
+
+        Assert.Null(Extractor.TryGetWebSearchResults(update));
+    }
+
+    [Fact]
+    public void TryGetWebSearchResults_ReturnsNull_WhenResultIsEmpty()
+    {
+        var update = Wrap("""
+            {"id":"1","object":"chat.completion.chunk","created":0,"model":"m","choices":[],
+             "type":"tool_end","tool_name":"web_search","result":""}
+            """);
+
+        Assert.Null(Extractor.TryGetWebSearchResults(update));
+    }
+
+    [Fact]
+    public void TryGetWebSearchResults_ReturnsNull_ForNonOpenAiBackend()
+    {
+        var update = new AgentResponseUpdate();
 
         Assert.Null(Extractor.TryGetWebSearchResults(update));
     }

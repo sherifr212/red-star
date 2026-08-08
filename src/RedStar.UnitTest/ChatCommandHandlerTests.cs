@@ -175,6 +175,57 @@ public class ChatCommandHandlerTests
         Assert.Contains("Searching", recordedStages);
     }
 
+    /// <summary>
+    /// Same seam as <see cref="RunAsync_OneShot_UsesInjectedResponseExtractor_ForSearchingStage"/>, but for
+    /// the other half of <see cref="IAgentResponseExtractor"/> -- <c>TryGetWebSearchResults</c> -- which
+    /// <see cref="ChatCommandHandler.ProduceStageEventsAsync"/> reads independently of <c>TryGetToolStatus</c>.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_OneShot_UsesInjectedResponseExtractor_ForWebSearchResults()
+    {
+        Func<RedStarOptions, string, string?, AIAgent> agentFactory =
+            (_, _, instructions) => new ChatClientAgent(new FakeChatClient("answer"), instructions: instructions);
+
+        var webSearchCalls = 0;
+        var responseExtractor = new FakeAgentResponseExtractor(
+            webSearchResults: (_, _) => Interlocked.Increment(ref webSearchCalls) == 1
+                ? [new WebSearchResult("Example", "https://example.com")]
+                : null);
+
+        var recordedStages = new List<string>();
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, l) =>
+        {
+            if (instrument.Meter.Name == RedStarTelemetry.ServiceName && instrument.Name == "redstar.stage.duration")
+            {
+                l.EnableMeasurementEvents(instrument);
+            }
+        };
+        listener.SetMeasurementEventCallback<double>((_, _, tags, _) =>
+        {
+            var stage = tags.ToArray().First(t => t.Key == "stage").Value?.ToString();
+            lock (recordedStages)
+            {
+                recordedStages.Add(stage!);
+            }
+        });
+        listener.Start();
+
+        var exitCode = await ChatCommandHandler.RunAsync(
+            Options,
+            oneShotPrompt: "hi",
+            systemPrompt: null,
+            CancellationToken.None,
+            agentFactory: agentFactory,
+            modelsClientFactory: ModelsClientFactory(),
+            responseExtractor: responseExtractor);
+
+        listener.Dispose();
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("Searching", recordedStages);
+    }
+
     private static async IAsyncEnumerable<ChatResponseUpdate> MixedStageStream()
     {
         yield return new ChatResponseUpdate { Contents = [new TextReasoningContent("thinking one")] };
