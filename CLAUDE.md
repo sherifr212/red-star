@@ -44,28 +44,42 @@ through the config layering described in [Config resolution](#config-resolution)
 
 ### Tests
 
-Test project is xUnit (`RedStar.UnitTest`), referencing both `RedStar.Base` and `RedStar.Cli`.
+Tests are split across two xUnit projects by what they exercise, not just by source location:
+`RedStar.UnitTest` references only `RedStar.Base` and covers everything agent-agnostic (`ChatSession`,
+`RedStarOptions`, `ModelSelector`, `ModelsClient`, `ConditionalAuthHandler`, the Unsloth agent
+factory/extractor). `RedStar.UnitTest.Cli` references both `RedStar.Base` and `RedStar.Cli` and covers
+`ChatCommandHandler`'s one-shot path and model-resolution branching. Keep new tests in whichever
+project matches what they construct — a test that never touches `RedStar.Cli` types belongs in
+`RedStar.UnitTest`, not the other way around, so `RedStar.UnitTest` doesn't regain a `RedStar.Cli`
+reference by accretion.
+
 `RedStar.Cli`'s classes (`ChatCommandHandler`, `ModelsCommandHandler`, `RedStarOptionsFactory`, ...)
-are `internal`, exposed to the test project via `[assembly: InternalsVisibleTo("RedStar.UnitTest")]`
-in `RedStar.Cli/AssemblyInfo.cs`. `ChatCommandHandler.RunAsync`/`ModelsCommandHandler.RunAsync` take
-optional trailing factory delegates (`agentFactory`, `modelsClientFactory`) that default to their real
-production construction (`UnslothAgentFactory.Create`, `new ModelsClient(options)`) — tests
-substitute `FakeChatClient`/`FakeModelsClient` there instead. This only covers the one-shot path and
+are `internal`, exposed to `RedStar.UnitTest.Cli` via
+`[assembly: InternalsVisibleTo("RedStar.UnitTest.Cli")]` in `RedStar.Cli/AssemblyInfo.cs`.
+`ChatCommandHandler.RunAsync`/`ModelsCommandHandler.RunAsync` take optional trailing factory delegates
+(`agentFactory`, `modelsClientFactory`) that default to their real production construction
+(`UnslothAgentFactory.Create`, `new ModelsClient(options)`) — tests substitute
+`FakeChatClient`/`FakeModelsClient` there instead. This only covers the one-shot path and
 model-resolution branching; the interactive REPL loop (`Console.ReadLine`-driven) has no tests, since
 it isn't cheaply testable without redirecting stdin.
 
-One consequence worth knowing: referencing `RedStar.Cli` from the test project transitively copies
-its `appsettings.local.json` (real, holds a live API key) into `RedStar.UnitTest`'s build output too
-— harmless since `bin/`/`obj/` are git-ignored, but it means `RedStarOptionsFactory` tests can't
-assume a blank-slate environment and must only assert override *precedence*, not absolute
-"no config present" defaults.
+`FakeChatClient` is duplicated (not shared via a project reference) between `RedStar.UnitTest/Fakes/`
+and `RedStar.UnitTest.Cli/Fakes/`, since `ChatSessionTests` (Base) and `ChatCommandHandlerTests` (Cli)
+both need it and neither test project should depend on the other.
+
+One consequence worth knowing: referencing `RedStar.Cli` from a test project transitively copies its
+`appsettings.local.json` (real, holds a live API key) into that project's build output too — harmless
+since `bin/`/`obj/` are git-ignored, but it means `RedStar.UnitTest.Cli` can't assume a blank-slate
+environment and must only assert override *precedence*, not absolute "no config present" defaults.
+`RedStar.UnitTest` no longer references `RedStar.Cli`, so it doesn't have this constraint.
 
 ## Architecture
 
 ### Project layout
 
-`src/`: `RedStar.Base` (client library) ← `RedStar.Cli` (Spectre.Console.Cli entry point) and
-`RedStar.UnitTest` both depend on it.
+`src/`: `RedStar.Base` (client library) ← `RedStar.Cli` (Spectre.Console.Cli entry point),
+`RedStar.UnitTest`, and `RedStar.UnitTest.Cli` all depend on it; `RedStar.UnitTest.Cli` additionally
+depends on `RedStar.Cli`.
 
 `RedStar.Base` is meant to host multiple agents over time, not just Unsloth — agent-specific code
 lives under `RedStar.Base/Agents/<AgentName>/` (e.g.
@@ -269,7 +283,7 @@ inject-for-tests pattern as `agentFactory`/`modelsClientFactory`), defaulting to
 `new UnslothAgentResponseExtractor()`; `ProduceStageEventsAsync` calls the interface, never the
 concrete Unsloth type, so a future second agent under `RedStar.Base/Agents/<AgentName>/` plugs in
 its own extractor without any agent-type branching inside the CLI. Tests substitute
-`FakeAgentResponseExtractor` (`RedStar.UnitTest/Fakes/`) here instead of depending on real Unsloth
+`FakeAgentResponseExtractor` (`RedStar.UnitTest.Cli/Fakes/`) here instead of depending on real Unsloth
 SSE JSON shapes.
 
 ### Two HTTP paths, not one

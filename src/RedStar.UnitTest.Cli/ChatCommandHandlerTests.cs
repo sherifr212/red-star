@@ -5,9 +5,9 @@ using RedStar.Base;
 using RedStar.Base.Agents.Unsloth;
 using RedStar.Base.Telemetry;
 using RedStar.Cli;
-using RedStar.UnitTest.Fakes;
+using RedStar.UnitTest.Cli.Fakes;
 
-namespace RedStar.UnitTest;
+namespace RedStar.UnitTest.Cli;
 
 public class ChatCommandHandlerTests
 {

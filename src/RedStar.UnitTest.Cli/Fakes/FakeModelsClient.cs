@@ -1,6 +1,6 @@
 using RedStar.Base;
 
-namespace RedStar.UnitTest.Fakes;
+namespace RedStar.UnitTest.Cli.Fakes;
 
 internal sealed class FakeModelsClient(IReadOnlyList<ModelInfo> models) : IModelsClient
 {
