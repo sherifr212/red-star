@@ -2,6 +2,7 @@ using System.Diagnostics.Metrics;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using RedStar.Base;
+using RedStar.Base.Agents.Unsloth;
 using RedStar.Base.Telemetry;
 using RedStar.Cli;
 using RedStar.UnitTest.Fakes;
@@ -121,6 +122,57 @@ public class ChatCommandHandlerTests
 
         Assert.Equal(0, exitCode);
         Assert.Equal(["Reasoning", "Generating", "Reasoning", "Generating"], recordedStages);
+    }
+
+    /// <summary>
+    /// <see cref="ChatCommandHandler.RunAsync"/>'s <c>responseExtractor</c> parameter is the seam a future
+    /// second agent would plug its own tool-status/search-result extraction into instead of the CLI branching
+    /// on agent type -- this proves the seam actually drives the "Searching" stage end to end, using a fake
+    /// that has no dependency on real Unsloth SSE JSON shapes (unlike <see cref="UnslothAgentResponseExtractor"/>,
+    /// which only recognizes those).
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_OneShot_UsesInjectedResponseExtractor_ForSearchingStage()
+    {
+        Func<RedStarOptions, string, string?, AIAgent> agentFactory =
+            (_, _, instructions) => new ChatClientAgent(new FakeChatClient("answer"), instructions: instructions);
+
+        var toolStatusCalls = 0;
+        var responseExtractor = new FakeAgentResponseExtractor(
+            toolStatus: _ => Interlocked.Increment(ref toolStatusCalls) == 1 ? "Searching: test query" : null);
+
+        var recordedStages = new List<string>();
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, l) =>
+        {
+            if (instrument.Meter.Name == RedStarTelemetry.ServiceName && instrument.Name == "redstar.stage.duration")
+            {
+                l.EnableMeasurementEvents(instrument);
+            }
+        };
+        listener.SetMeasurementEventCallback<double>((_, _, tags, _) =>
+        {
+            var stage = tags.ToArray().First(t => t.Key == "stage").Value?.ToString();
+            lock (recordedStages)
+            {
+                recordedStages.Add(stage!);
+            }
+        });
+        listener.Start();
+
+        var exitCode = await ChatCommandHandler.RunAsync(
+            Options,
+            oneShotPrompt: "hi",
+            systemPrompt: null,
+            CancellationToken.None,
+            agentFactory: agentFactory,
+            modelsClientFactory: ModelsClientFactory(),
+            responseExtractor: responseExtractor);
+
+        listener.Dispose();
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("Searching", recordedStages);
     }
 
     private static async IAsyncEnumerable<ChatResponseUpdate> MixedStageStream()

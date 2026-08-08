@@ -24,6 +24,11 @@ internal static class ChatCommandHandler
     /// Builds the <see cref="IModelsClient"/> used for auto-resolving a default model. Defaults to a real
     /// <see cref="ModelsClient"/>; tests can substitute a fake here without touching the network.
     /// </param>
+    /// <param name="responseExtractor">
+    /// Extracts tool-status labels and web-search hit lists from streamed updates (see
+    /// <see cref="ProduceStageEventsAsync"/>). Defaults to <see cref="UnslothAgentResponseExtractor"/>;
+    /// tests can substitute a fake here without depending on real Unsloth SSE JSON shapes.
+    /// </param>
     /// <param name="runId">
     /// Correlation ID tagged onto this run's root OTel span (<c>run.correlation.id</c>). Falls back to the
     /// <c>REDSTAR_RUN_ID</c> environment variable, then a generated GUID -- every child span created for the
@@ -37,6 +42,7 @@ internal static class ChatCommandHandler
         CancellationToken cancellationToken,
         Func<RedStarOptions, string, string?, AIAgent>? agentFactory = null,
         Func<RedStarOptions, IModelsClient>? modelsClientFactory = null,
+        IAgentResponseExtractor? responseExtractor = null,
         string? runId = null)
     {
         using var activity = RedStarTelemetry.ActivitySource.StartActivity("redstar.chat");
@@ -47,6 +53,7 @@ internal static class ChatCommandHandler
         logger.LogInformation("Starting redstar chat run {RunId}", runId);
 
         agentFactory ??= static (opts, modelId, instructions) => UnslothAgentFactory.Create(opts, modelId, instructions);
+        responseExtractor ??= new UnslothAgentResponseExtractor();
 
         if (string.IsNullOrEmpty(options.Agents.Unsloth.ApiKey))
         {
@@ -81,7 +88,7 @@ internal static class ChatCommandHandler
         if (!string.IsNullOrWhiteSpace(oneShotPrompt))
         {
             PrintUserMessageBox(oneShotPrompt);
-            return await SendAndPrintAsync(session, oneShotPrompt, cancellationToken);
+            return await SendAndPrintAsync(session, oneShotPrompt, responseExtractor, cancellationToken);
         }
 
         AnsiConsole.MarkupLine(
@@ -107,7 +114,7 @@ internal static class ChatCommandHandler
                 continue;
             }
 
-            var exitCode = await SendAndPrintAsync(session, line, cancellationToken);
+            var exitCode = await SendAndPrintAsync(session, line, responseExtractor, cancellationToken);
             if (exitCode != 0)
             {
                 return exitCode;
@@ -174,7 +181,7 @@ internal static class ChatCommandHandler
     private readonly record struct DrainResult(StageEvent? NextEvent, bool SplitForHeight);
 
     private static async Task<int> SendAndPrintAsync(
-        ChatSession session, string userText, CancellationToken cancellationToken)
+        ChatSession session, string userText, IAgentResponseExtractor responseExtractor, CancellationToken cancellationToken)
     {
         var channel = Channel.CreateUnbounded<StageEvent>(new UnboundedChannelOptions
         {
@@ -182,7 +189,7 @@ internal static class ChatCommandHandler
             SingleWriter = true,
         });
 
-        var producer = ProduceStageEventsAsync(session, userText, channel.Writer, cancellationToken);
+        var producer = ProduceStageEventsAsync(session, userText, responseExtractor, channel.Writer, cancellationToken);
         var turnStopwatch = Stopwatch.StartNew();
 
         try
@@ -212,16 +219,16 @@ internal static class ChatCommandHandler
 
     /// <summary>
     /// Drives the streamed turn and translates it into <see cref="StageEvent"/>s on <paramref name="writer"/>:
-    /// reasoning text from <see cref="TextReasoningContent"/>, Unsloth tool-status labels and completed
-    /// web-search hit lists via <see cref="UnslothAgentFactory"/>'s raw-JSON extractors, and the final
-    /// answer's text chunks. Runs concurrently with <see cref="RenderStageBoxesAsync"/> so the UI can start
-    /// drawing a stage's box as soon as that stage's first event lands, rather than after the whole turn
-    /// completes. Completes the channel (successfully or with the caught exception) when
-    /// <see cref="ChatSession.SendAsync"/> returns or throws, which is how the reader side learns the turn is
-    /// over.
+    /// reasoning text from <see cref="TextReasoningContent"/>, tool-status labels and completed web-search
+    /// hit lists via <paramref name="responseExtractor"/>, and the final answer's text chunks. Runs
+    /// concurrently with <see cref="RenderStageBoxesAsync"/> so the UI can start drawing a stage's box as
+    /// soon as that stage's first event lands, rather than after the whole turn completes. Completes the
+    /// channel (successfully or with the caught exception) when <see cref="ChatSession.SendAsync"/> returns
+    /// or throws, which is how the reader side learns the turn is over.
     /// </summary>
     private static async Task ProduceStageEventsAsync(
-        ChatSession session, string userText, ChannelWriter<StageEvent> writer, CancellationToken cancellationToken)
+        ChatSession session, string userText, IAgentResponseExtractor responseExtractor,
+        ChannelWriter<StageEvent> writer, CancellationToken cancellationToken)
     {
         try
         {
@@ -238,13 +245,13 @@ internal static class ChatCommandHandler
                         }
                     }
 
-                    var status = UnslothAgentFactory.TryGetToolStatus(update);
+                    var status = responseExtractor.TryGetToolStatus(update);
                     if (status is not null)
                     {
                         writer.TryWrite(new StageEvent(TurnStage.Searching, status, null));
                     }
 
-                    var sites = UnslothAgentFactory.TryGetWebSearchResults(update);
+                    var sites = responseExtractor.TryGetWebSearchResults(update);
                     if (sites is { Count: > 0 })
                     {
                         writer.TryWrite(new StageEvent(TurnStage.Searching, null, sites));

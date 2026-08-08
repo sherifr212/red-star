@@ -104,11 +104,15 @@ their own cancellation wiring.
 - **User turns**: `PrintUserMessageBox`/`ReadUserMessageBoxed` draw a box (top border, a `>` prompt,
   bottom border).
 - **Assistant turns are multi-box**: `ProduceStageEventsAsync` translates a streamed
-  `ChatSession.SendAsync` call into `StageEvent`s (reasoning text, Unsloth tool-status labels,
-  web-search hits, answer text chunks) on an unbounded `Channel`, each tagged with a `TurnStage`
+  `ChatSession.SendAsync` call into `StageEvent`s (reasoning text, tool-status labels, web-search hits,
+  answer text chunks) on an unbounded `Channel`, each tagged with a `TurnStage`
   (`Other`/`Reasoning`/`Searching`/`Generating`). `RenderStageBoxesAsync` reads that channel and opens
   one `AnsiConsole.Live` region per run of same-stage events via `StageBox`, sealing it and opening the
-  next once the stage changes — see the "Multi-box rendering" remarks there.
+  next once the stage changes — see the "Multi-box rendering" remarks there. Tool-status labels and
+  web-search hits come from an injected `IAgentResponseExtractor` (`RunAsync`'s `responseExtractor`
+  parameter, defaulting to `UnslothAgentResponseExtractor`) rather than `ProduceStageEventsAsync`
+  calling a concrete agent's extraction statics directly — see
+  [Agent response extraction](#agent-response-extraction).
 - **Height overflow**: a still-growing box that would exceed `GetSafeBoxHeight()` (console height minus
   a margin) seals early and reopens as a same-stage "(cont'd)" continuation instead of letting
   Spectre's `Live` region silently crop it from the top once it overflows the console (see the remarks
@@ -243,6 +247,24 @@ to remember to pass it alongside `SendAsync`.
 Extending to other Unsloth-specific fields follows the same pattern: build/extend the
 `ChatCompletionOptions` inside `CreateChatOptions`, not inside `ChatSession`, which stays
 agent-agnostic (it only knows about `AIAgent`, never about Unsloth or HTTP).
+
+### Agent response extraction
+
+`IAgentResponseExtractor` (`RedStar.Base/IAgentResponseExtractor.cs`, top-level namespace —
+agent-agnostic like `ChatSession`/`RedStarOptions`) is the seam for pulling provider-specific
+side-channel data out of a streamed `AgentResponseUpdate`: `TryGetToolStatus` (a human-readable
+tool-activity label) and `TryGetWebSearchResults` (a completed search-hit list, `WebSearchResult`
+records). `RedStar.Base.Agents.Unsloth.UnslothAgentResponseExtractor` is the only implementation —
+it unwraps Unsloth's custom `tool_status`/`tool_end` SSE events, which sit outside the OpenAI
+chat-completions chunk schema, from `AgentResponseUpdate.RawRepresentation`.
+
+`ChatCommandHandler.RunAsync` takes an optional `responseExtractor` parameter (same
+inject-for-tests pattern as `agentFactory`/`modelsClientFactory`), defaulting to
+`new UnslothAgentResponseExtractor()`; `ProduceStageEventsAsync` calls the interface, never the
+concrete Unsloth type, so a future second agent under `RedStar.Base/Agents/<AgentName>/` plugs in
+its own extractor without any agent-type branching inside the CLI. Tests substitute
+`FakeAgentResponseExtractor` (`RedStar.UnitTest/Fakes/`) here instead of depending on real Unsloth
+SSE JSON shapes.
 
 ### Two HTTP paths, not one
 
