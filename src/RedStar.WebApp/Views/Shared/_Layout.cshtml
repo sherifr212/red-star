@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - RedStar</title>
+    @* The one shared Tailwind entry point (ClientApp/styles/app.css), linked once here rather
+       than imported per-page -- see RedStar.WebApp/CLAUDE.md's "ClientApp/ conventions" (styling
+       rule) for why. vite-href resolves to the Vite dev server in Development and to the hashed,
+       manifest-resolved file in Production. *@
+    <link rel="stylesheet" vite-href="~/styles/app.css" />
+</head>
+<body>
+    <nav class="border-b border-slate-200 bg-white">
+        <div class="mx-auto flex max-w-4xl items-center gap-6 px-4 py-3">
+            <span class="font-semibold text-slate-900">RedStar</span>
+            <a class="text-sm text-slate-600 hover:text-slate-900" href="/">Home</a>
+        </div>
+    </nav>
+
+    <main class="mx-auto max-w-4xl px-4 py-8">
+        @RenderBody()
+    </main>
+
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

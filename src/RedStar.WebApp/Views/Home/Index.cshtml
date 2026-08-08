@@ -1,0 +1,17 @@
+@{
+    ViewData["Title"] = "Home";
+}
+
+<h1 class="text-2xl font-semibold text-slate-900">Welcome to RedStar.WebApp</h1>
+<p class="mt-2 text-slate-600">
+    This page is a Razor shell &mdash; the badge below is rendered entirely by a Lit web component.
+</p>
+
+<div class="mt-6">
+    <hello-badge label="RedStar"></hello-badge>
+</div>
+
+@* One Vite entry per page (see RedStar.WebApp/CLAUDE.md's "ClientApp/ conventions"). In
+   Development this proxies to the Vite dev server (HMR); in Production it resolves to the
+   hashed bundle via the build manifest. *@
+<script type="module" vite-src="~/pages/home/main.ts"></script>
