@@ -135,9 +135,10 @@ dotnet test RedStar.slnx --filter "FullyQualifiedName~ChatSessionTests"
 dotnet test RedStar.slnx --filter "FullyQualifiedName~SendAsync_MergesInstructions_IntoChatOptions"
 ```
 
-Tests use xUnit (`RedStar.UnitTest`) and fake the underlying model/HTTP clients rather than hitting
-a real server. The interactive REPL loop isn't covered, since it isn't cheaply testable without
-redirecting stdin — the one-shot chat path and model-resolution logic are.
+Tests use xUnit, split across two projects: `RedStar.UnitTest` (tests `RedStar.Base` only) and
+`RedStar.UnitTest.Cli` (tests `RedStar.Cli`). Both fake the underlying model/HTTP clients rather than
+hitting a real server. The interactive REPL loop isn't covered, since it isn't cheaply testable
+without redirecting stdin — the one-shot chat path and model-resolution logic are.
 
 ## Project layout
 
@@ -147,7 +148,8 @@ src/
 │   └── Agents/
 │       └── Unsloth/    # Unsloth-specific agent construction (UnslothAgentFactory)
 ├── RedStar.Cli/        # `redstar` executable: Spectre.Console.Cli commands, console rendering
-├── RedStar.UnitTest/   # xUnit tests for RedStar.Base and RedStar.Cli
+├── RedStar.UnitTest/   # xUnit tests for RedStar.Base
+├── RedStar.UnitTest.Cli/ # xUnit tests for RedStar.Cli
 └── RedStar.WebApp/     # ASP.NET Core MVC web frontend: Lit + Vite + Tailwind, references RedStar.Base
 ```
 
