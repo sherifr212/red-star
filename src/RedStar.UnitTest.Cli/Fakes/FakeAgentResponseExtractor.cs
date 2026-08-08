@@ -1,7 +1,7 @@
 using Microsoft.Agents.AI;
 using RedStar.Base;
 
-namespace RedStar.UnitTest.Fakes;
+namespace RedStar.UnitTest.Cli.Fakes;
 
 internal sealed class FakeAgentResponseExtractor(
     Func<AgentResponseUpdate, string?>? toolStatus = null,
