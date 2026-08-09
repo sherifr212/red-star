@@ -188,7 +188,7 @@ public class ChatCommandHandlerTests
 
         var webSearchCalls = 0;
         var responseExtractor = new FakeAgentResponseExtractor(
-            webSearchResults: (_, _) => Interlocked.Increment(ref webSearchCalls) == 1
+            webSearchResults: _ => Interlocked.Increment(ref webSearchCalls) == 1
                 ? [new WebSearchResult("Example", "https://example.com")]
                 : null);
 

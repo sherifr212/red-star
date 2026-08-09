@@ -90,7 +90,7 @@ public class UnslothAgentResponseExtractorTests
     }
 
     [Fact]
-    public void TryGetWebSearchResults_RespectsMaxResults()
+    public void TryGetWebSearchResults_ReturnsAllHits_NotCapped()
     {
         var resultText = string.Join(
             "\n\n---\n\n",
@@ -101,10 +101,10 @@ public class UnslothAgentResponseExtractorTests
              "type":"tool_end","tool_name":"web_search","result":{{System.Text.Json.JsonSerializer.Serialize(resultText)}}}
             """);
 
-        var results = Extractor.TryGetWebSearchResults(update, maxResults: 3);
+        var results = Extractor.TryGetWebSearchResults(update);
 
         Assert.NotNull(results);
-        Assert.Equal(3, results!.Count);
+        Assert.Equal(10, results!.Count);
     }
 
     [Fact]

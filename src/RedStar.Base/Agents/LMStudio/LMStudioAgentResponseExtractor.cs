@@ -26,7 +26,7 @@ public sealed class LMStudioAgentResponseExtractor : IAgentResponseExtractor
         return null;
     }
 
-    public IReadOnlyList<WebSearchResult>? TryGetWebSearchResults(AgentResponseUpdate update, int maxResults = 5)
+    public IReadOnlyList<WebSearchResult>? TryGetWebSearchResults(AgentResponseUpdate update)
     {
         ArgumentNullException.ThrowIfNull(update);
         return null;

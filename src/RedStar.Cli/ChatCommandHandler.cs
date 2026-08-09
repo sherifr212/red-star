@@ -623,7 +623,15 @@ internal static class ChatCommandHandler
         private readonly Stopwatch _stopwatch;
         private readonly bool _isContinuation;
         private readonly string _priorChainText;
-        private IReadOnlyList<WebSearchResult>? _sites;
+        /// <summary>
+        /// Accumulates hits across every <see cref="StageEvent"/> with a non-empty <see cref="StageEvent.Sites"/>
+        /// applied to this box, rather than being replaced by the latest one -- a single "Searching" box can
+        /// span multiple <c>web_search</c> tool calls in one turn (e.g. a follow-up query), and each call's
+        /// <c>tool_end</c> event only carries that call's own hits (see
+        /// <see cref="RedStar.Base.Agents.Unsloth.UnslothAgentResponseExtractor.TryGetWebSearchResults"/>), so
+        /// overwriting here would silently drop every earlier search's results from the box.
+        /// </summary>
+        private readonly List<WebSearchResult> _sites = [];
         private int _frame;
         private string? _copyFilePath;
         private int? _outputTokenCount;
@@ -686,7 +694,13 @@ internal static class ChatCommandHandler
 
             if (evt.Sites is { Count: > 0 })
             {
-                _sites = evt.Sites;
+                foreach (var site in evt.Sites)
+                {
+                    if (!_sites.Contains(site))
+                    {
+                        _sites.Add(site);
+                    }
+                }
             }
 
             if (evt.OutputTokenCount is { } tokens)

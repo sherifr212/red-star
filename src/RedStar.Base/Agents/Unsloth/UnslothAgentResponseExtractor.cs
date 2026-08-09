@@ -42,21 +42,23 @@ public sealed class UnslothAgentResponseExtractor : IAgentResponseExtractor
     }
 
     /// <summary>
-    /// Extracts the top <paramref name="maxResults"/> hits (title + URL) from a completed Unsloth
-    /// <c>web_search</c> tool call, if <paramref name="update"/> is the <c>tool_end</c> event for one.
-    /// Only fires for general queries, not single-page fetches (used to read one already-found site,
-    /// covered by a status label from <see cref="TryGetToolStatus"/> instead): the <c>tool_end</c> event
-    /// carries no <c>arguments</c> to distinguish the two by (only its paired <c>tool_start</c> does, and
-    /// updates are handled one at a time with no correlation between them), so this instead relies on
-    /// Unsloth's two <c>result</c> shapes being structurally distinct -- a query's hits come back as one
-    /// plain-text blob (<c>"Title: ...\nURL: ...\nSnippet: ...\n\n---\n\n..."</c>, ending in an
-    /// instructional paragraph with neither a Title nor a URL line, which is what the per-block filter
-    /// below excludes), while a page fetch's <c>result</c> is either raw page content or an error string,
-    /// neither of which has any <c>Title:</c>/<c>URL:</c> lines to match. Either way, nothing here is
-    /// streamed incrementally by the server -- callers wanting a "revealing" effect need to fake it
-    /// client-side.
+    /// Extracts every hit (title + URL) from a completed Unsloth <c>web_search</c> tool call, if
+    /// <paramref name="update"/> is the <c>tool_end</c> event for one. Only fires for general queries, not
+    /// single-page fetches (used to read one already-found site, covered by a status label from
+    /// <see cref="TryGetToolStatus"/> instead): the <c>tool_end</c> event carries no <c>arguments</c> to
+    /// distinguish the two by (only its paired <c>tool_start</c> does, and updates are handled one at a
+    /// time with no correlation between them), so this instead relies on Unsloth's two <c>result</c>
+    /// shapes being structurally distinct -- a query's hits come back as one plain-text blob
+    /// (<c>"Title: ...\nURL: ...\nSnippet: ...\n\n---\n\n..."</c>, ending in an instructional paragraph
+    /// with neither a Title nor a URL line, which is what the per-block filter below excludes), while a
+    /// page fetch's <c>result</c> is either raw page content or an error string, neither of which has any
+    /// <c>Title:</c>/<c>URL:</c> lines to match. Either way, nothing here is streamed incrementally by the
+    /// server -- callers wanting a "revealing" effect need to fake it client-side. Callers that run
+    /// multiple searches in one turn (see <c>ChatCommandHandler.StageBox.Apply</c>) are expected to
+    /// accumulate results across calls rather than rely on this method capping or deduplicating across
+    /// calls -- it only ever returns the hits from this one <c>tool_end</c> event.
     /// </summary>
-    public IReadOnlyList<WebSearchResult>? TryGetWebSearchResults(AgentResponseUpdate update, int maxResults = 5)
+    public IReadOnlyList<WebSearchResult>? TryGetWebSearchResults(AgentResponseUpdate update)
     {
         ArgumentNullException.ThrowIfNull(update);
 
@@ -98,10 +100,6 @@ public sealed class UnslothAgentResponseExtractor : IAgentResponseExtractor
             }
 
             results.Add(new WebSearchResult(title, url));
-            if (results.Count >= maxResults)
-            {
-                break;
-            }
         }
 
         return results.Count == 0 ? null : results;

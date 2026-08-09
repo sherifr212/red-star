@@ -21,7 +21,7 @@ public interface IAgentResponseExtractor
     /// <summary>Completed search-hit list (title + URL), if <paramref name="update"/> is the terminal event
     /// for a search-style tool call. Returns null when it isn't, including for backends that don't emit
     /// this kind of event at all.</summary>
-    IReadOnlyList<WebSearchResult>? TryGetWebSearchResults(AgentResponseUpdate update, int maxResults = 5);
+    IReadOnlyList<WebSearchResult>? TryGetWebSearchResults(AgentResponseUpdate update);
 }
 
 /// <summary>One hit from a server-side web-search tool call.</summary>
