@@ -59,3 +59,4 @@ nunit-*.xml
 # Project-specific
 appsettings.Production.json
 build
+node_modules
