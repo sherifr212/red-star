@@ -1,0 +1,5 @@
+# Frontend tooling (ClientApp) -- see GETTING_STARTED.md. pnpm-lock.yaml is NOT ignored; it must
+# be committed.
+ClientApp/node_modules/
+.vite/
+wwwroot/dist/

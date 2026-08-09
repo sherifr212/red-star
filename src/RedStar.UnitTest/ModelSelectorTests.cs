@@ -127,4 +127,95 @@ public class ModelSelectorTests
     {
         Assert.Throws<ArgumentNullException>(() => ModelSelector.SelectDefault(null!, "any"));
     }
+
+    [Fact]
+    public void SelectDefault_Fails_WhenConfiguredModelIsNotLoaded_AndJitLoadIsNotAllowed()
+    {
+        var models = new[] { NotLoaded };
+
+        var result = ModelSelector.SelectDefault(models, configuredDefault: "not-loaded-model", allowJitLoad: false);
+
+        Assert.False(result.Succeeded);
+    }
+
+    [Fact]
+    public void SelectDefault_SucceedsWithPendingJitLoad_WhenConfiguredModelIsKnownButNotLoaded_AndJitLoadIsAllowed()
+    {
+        var models = new[] { NotLoaded };
+
+        var result = ModelSelector.SelectDefault(models, configuredDefault: "not-loaded-model", allowJitLoad: true);
+
+        Assert.True(result.Succeeded);
+        Assert.Same(NotLoaded, result.Model);
+        Assert.Equal(ModelSelectionSource.PendingJitLoad, result.Source);
+        Assert.Contains("not-loaded-model", result.InfoMessage);
+    }
+
+    [Fact]
+    public void SelectDefault_Fails_WhenConfiguredModelIsUnknownToTheServer_EvenWithJitLoadAllowed()
+    {
+        var models = new[] { Loaded };
+
+        var result = ModelSelector.SelectDefault(models, configuredDefault: "not-yet-downloaded", allowJitLoad: true);
+
+        Assert.False(result.Succeeded);
+    }
+
+    [Fact]
+    public void SelectDefault_ReturnsExplicit_NotPendingJitLoad_WhenConfiguredModelIsAlreadyLoaded_AndJitLoadIsAllowed()
+    {
+        var models = new[] { Loaded };
+
+        var result = ModelSelector.SelectDefault(models, configuredDefault: "loaded-model", allowJitLoad: true);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(ModelSelectionSource.Explicit, result.Source);
+    }
+
+    [Fact]
+    public void SelectDefault_Fails_WhenNoModelsAreLoadedAndNoDefaultIsConfigured_EvenWithJitLoadAllowed()
+    {
+        var models = new[] { NotLoaded };
+
+        var result = ModelSelector.SelectDefault(models, configuredDefault: null, allowJitLoad: true);
+
+        Assert.False(result.Succeeded);
+    }
+
+    [Fact]
+    public void SelectDefault_ExcludesEmbeddingsModel_FromImplicitSingleLoadedSelection()
+    {
+        var embeddingsModel = new ModelInfo("embed-model", Loaded: true, Type: "embeddings");
+        var models = new[] { embeddingsModel, Loaded };
+
+        var result = ModelSelector.SelectDefault(models, configuredDefault: null);
+
+        Assert.True(result.Succeeded);
+        Assert.Same(Loaded, result.Model);
+        Assert.Equal(ModelSelectionSource.Implicit, result.Source);
+    }
+
+    [Fact]
+    public void SelectDefault_ExcludesEmbeddingsModel_FromAmbiguityCount()
+    {
+        var embeddingsModel = new ModelInfo("embed-model", Loaded: true, Type: "embeddings");
+        var models = new[] { embeddingsModel, Loaded };
+
+        // Only one *chat-capable* model is loaded (the embeddings one doesn't count), so this must
+        // succeed implicitly rather than failing as "multiple loaded, ambiguous".
+        var result = ModelSelector.SelectDefault(models, configuredDefault: null);
+
+        Assert.True(result.Succeeded);
+    }
+
+    [Fact]
+    public void SelectDefault_Fails_WhenOnlyLoadedModelIsAnEmbeddingsModel()
+    {
+        var embeddingsModel = new ModelInfo("embed-model", Loaded: true, Type: "embeddings");
+        var models = new[] { embeddingsModel };
+
+        var result = ModelSelector.SelectDefault(models, configuredDefault: null);
+
+        Assert.False(result.Succeeded);
+    }
 }

@@ -4,8 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-RedStar is a .NET CLI for chatting with a locally/self-hosted LLM server (Unsloth Studio) over its
-OpenAI-compatible `/v1` API. It's a thin client: `RedStar.Cli` (the `redstar` executable) drives
+RedStar is a .NET CLI for chatting with a locally/self-hosted LLM server (Unsloth Studio or LM Studio
+— see `RedStarOptions.Agent`) over its OpenAI-compatible `/v1` API. It's a thin client: `RedStar.Cli`
+(the `redstar` executable) drives
 `RedStar.Base` (the client library), which wraps the official `OpenAI` .NET SDK via the
 Microsoft Agent Framework's `AIAgent` abstraction (`Microsoft.Agents.AI`) rather than talking HTTP
 directly for chat. `AIAgent` itself wraps `Microsoft.Extensions.AI`'s `IChatClient` — RedStar builds
@@ -26,53 +27,82 @@ dotnet test RedStar.slnx --filter "FullyQualifiedName~ChatSessionTests"   # sing
 dotnet test RedStar.slnx --filter "FullyQualifiedName~SendAsync_MergesInstructions_IntoChatOptions"  # single test
 dotnet run --project RedStar.Cli -- chat -p "hello"                      # one-shot prompt
 dotnet run --project RedStar.Cli -- models                               # list models on the server
+dotnet watch run --project RedStar.WebApp                                # web frontend, live-reloading
 ```
 
 `chat` (and the root command, which behaves identically) accepts every shared flag; `models` only
-takes `--endpoint`/`--api-key`. Long form and short-alias form, all flags spelled out:
+takes `--agent`/`--endpoint`/`--api-key`. Long form and short-alias form, all flags spelled out:
 
 ```
 dotnet run --project RedStar.Cli -- chat --endpoint "http://127.0.0.1:8888/v1" --api-key "ab-..." --model "unsloth/gemma-4-E4B-it-GGUF" --prompt "hello" --system "be terse"
 
 dotnet run --project RedStar.Cli -- chat --endpoint "http://127.0.0.1:8888/v1" --api-key "ab-..." -m "unsloth/gemma-4-E4B-it-GGUF" -p "hello" -s "be terse"
+
+dotnet run --project RedStar.Cli -- chat --agent LMStudio -p "hello"
 ```
 
-`-m`/`-p`/`-s` are the only flags with short aliases (`--endpoint`/`--api-key` are long-only). Omit
+`-m`/`-p`/`-s` are the only flags with short aliases (`--agent`/`--endpoint`/`--api-key` are
+long-only). `--agent` selects which agent backend `--endpoint`/`--api-key`/`--model` apply to
+(`Unsloth`, the default, or `LMStudio` — see [Config resolution](#config-resolution)). Omit
 `--prompt` for an interactive session instead of a one-shot exchange. Any flag left out falls back
 through the config layering described in [Config resolution](#config-resolution).
 
 ### Tests
 
-Test project is xUnit (`RedStar.UnitTest`), referencing both `RedStar.Base` and `RedStar.Cli`.
-`RedStar.Cli`'s classes (`ChatCommandHandler`, `ModelsCommandHandler`, `RedStarOptionsFactory`, ...)
-are `internal`, exposed to the test project via `[assembly: InternalsVisibleTo("RedStar.UnitTest")]`
-in `RedStar.Cli/AssemblyInfo.cs`. `ChatCommandHandler.RunAsync`/`ModelsCommandHandler.RunAsync` take
-optional trailing factory delegates (`agentFactory`, `modelsClientFactory`) that default to their real
-production construction (`UnslothAgentFactory.Create`, `new ModelsClient(options)`) — tests
-substitute `FakeChatClient`/`FakeModelsClient` there instead. This only covers the one-shot path and
-model-resolution branching; the interactive REPL loop (`Console.ReadLine`-driven) has no tests, since
-it isn't cheaply testable without redirecting stdin.
+Tests are split across two xUnit projects by what they exercise, not just by source location:
+`RedStar.UnitTest` references only `RedStar.Base` and covers everything agent-agnostic (`ChatSession`,
+`RedStarOptions`, `ModelSelector`, `ModelsClient`, `ConditionalAuthHandler`, the Unsloth agent
+factory/extractor). `RedStar.UnitTest.Cli` references both `RedStar.Base` and `RedStar.Cli` and covers
+`ChatCommandHandler`'s one-shot path and model-resolution branching. Keep new tests in whichever
+project matches what they construct — a test that never touches `RedStar.Cli` types belongs in
+`RedStar.UnitTest`, not the other way around, so `RedStar.UnitTest` doesn't regain a `RedStar.Cli`
+reference by accretion.
 
-One consequence worth knowing: referencing `RedStar.Cli` from the test project transitively copies
-its `appsettings.local.json` (real, holds a live API key) into `RedStar.UnitTest`'s build output too
-— harmless since `bin/`/`obj/` are git-ignored, but it means `RedStarOptionsFactory` tests can't
-assume a blank-slate environment and must only assert override *precedence*, not absolute
-"no config present" defaults.
+`RedStar.Cli`'s classes (`ChatCommandHandler`, `ModelsCommandHandler`, `RedStarOptionsFactory`, ...)
+are `internal`, exposed to `RedStar.UnitTest.Cli` via
+`[assembly: InternalsVisibleTo("RedStar.UnitTest.Cli")]` in `RedStar.Cli/AssemblyInfo.cs`.
+`ChatCommandHandler.RunAsync`/`ModelsCommandHandler.RunAsync` take optional trailing factory delegates
+(`agentFactory`, `modelsClientFactory`) that default to their real production construction
+(`UnslothAgentFactory.Create`/`new ModelsClient(options)`, or their LM Studio equivalents, depending on
+`RedStarOptions.Agent`) — tests substitute `FakeChatClient`/`FakeModelsClient` there instead. This only
+covers the one-shot path and model-resolution branching; the interactive REPL loop
+(`Console.ReadLine`-driven) has no tests, since it isn't cheaply testable without redirecting stdin.
+
+`FakeChatClient` is duplicated (not shared via a project reference) between `RedStar.UnitTest/Fakes/`
+and `RedStar.UnitTest.Cli/Fakes/`, since `ChatSessionTests` (Base) and `ChatCommandHandlerTests` (Cli)
+both need it and neither test project should depend on the other.
+
+One consequence worth knowing: referencing `RedStar.Cli` from a test project transitively copies its
+`appsettings.local.json` (real, holds a live API key) into that project's build output too — harmless
+since `bin/`/`obj/` are git-ignored, but it means `RedStar.UnitTest.Cli` can't assume a blank-slate
+environment and must only assert override *precedence*, not absolute "no config present" defaults.
+`RedStar.UnitTest` no longer references `RedStar.Cli`, so it doesn't have this constraint.
 
 ## Architecture
 
 ### Project layout
 
-`src/`: `RedStar.Base` (client library) ← `RedStar.Cli` (Spectre.Console.Cli entry point) and
-`RedStar.UnitTest` both depend on it.
+`src/`: `RedStar.Base` (client library) ← `RedStar.Cli` (Spectre.Console.Cli entry point),
+`RedStar.UnitTest`, and `RedStar.UnitTest.Cli` all depend on it; `RedStar.UnitTest.Cli` additionally
+depends on `RedStar.Cli`.
 
-`RedStar.Base` is meant to host multiple agents over time, not just Unsloth — agent-specific code
-lives under `RedStar.Base/Agents/<AgentName>/` (e.g.
-`RedStar.Base/Agents/Unsloth/UnslothAgentFactory.cs`, namespace `RedStar.Base.Agents.Unsloth`),
-while `ChatSession`/`RedStarOptions`/telemetry stay in the top-level `RedStar.Base` namespace since
-they're agent-agnostic (they only know about `AIAgent`, never about any one agent's specifics).
-There's still only one concrete agent (Unsloth), so a generic pluggable-agent interface/registry is
-intentionally not built yet — that's a follow-up once a second agent exists to design it against.
+`RedStar.Base` is meant to host multiple agents over time — agent-specific code lives under
+`RedStar.Base/Agents/<AgentName>/` (e.g. `RedStar.Base/Agents/Unsloth/UnslothAgentFactory.cs`,
+namespace `RedStar.Base.Agents.Unsloth`; `RedStar.Base/Agents/LMStudio/LMStudioAgentFactory.cs`,
+namespace `RedStar.Base.Agents.LMStudio`), while `ChatSession`/`RedStarOptions`/telemetry stay in the
+top-level `RedStar.Base` namespace since they're agent-agnostic (they only know about `AIAgent`,
+never about any one agent's specifics). There are two concrete agents now (Unsloth, LM Studio), and
+still no generic pluggable-agent interface/registry — that's deliberate, not an oversight left over
+from when there was only one: `RedStarOptions.Agent` (see [Config resolution](#config-resolution))
+selects between them via a plain string (`AgentNames.Unsloth`/`AgentNames.LMStudio`), and
+`ChatCommandHandler`/`ModelsCommandHandler` pick the right factory/response-extractor/models-client
+with an explicit two-way switch on that string. A third agent grows that switch to three arms; a
+registry only becomes worth its indirection well past that.
+
+`RedStar.WebApp/` is an ASP.NET Core MVC web frontend (Lit + Vite + Tailwind, referencing
+`RedStar.Base`) — see `RedStar.WebApp/CLAUDE.md` for its architecture and
+`RedStar.WebApp/GETTING_STARTED.md` for setup, commands, and troubleshooting; both are nested inside
+that project rather than covered here.
 
 ### `RedStar.Cli` structure
 
@@ -141,26 +171,35 @@ gate.
 ### Config resolution
 
 `RedStarOptions`, bound from the `RedStar` section, is layered as `appsettings.json` →
-`appsettings.local.json` → environment variables (`RedStar__*`) → CLI flags (`--endpoint`,
+`appsettings.local.json` → environment variables (`RedStar__*`) → CLI flags (`--agent`, `--endpoint`,
 `--api-key`, `--model`), each layer overriding the last. `appsettings.json` is the checked-in template
 listing every key with its default; `appsettings.local.json` holds the real API key/model for local
 dev. Only `appsettings.Production.json` is git-ignored — `appsettings.json` and
 `appsettings.local.json` are both tracked, so double-check `appsettings.local.json`'s contents before
-any commit/push that touches it; it currently holds a live Unsloth API key.
+any commit/push that touches it; it currently holds a live Unsloth API key. `appsettings.local.json`
+has no `LMStudio` section checked in (LM Studio's server has no auth by default, so there's no secret
+to hold) — add one there, following `appsettings.json`'s template, to persist a local LM Studio
+endpoint/default model instead of passing them as flags every run.
 
-`RedStarOptions` is treated as a "mega project" config root rather than a flat bag of Unsloth
-settings: agent-specific settings (`BaseUrl`, `ApiKey`, `DefaultModel`, `WebSearchEnabled`) are nested
-under `RedStarOptions.Agents.Unsloth` (a `UnslothAgentOptions` record, config key
-`RedStar:Agents:Unsloth:*`, env var `RedStar__Agents__Unsloth__*`) instead of living flat on
-`RedStarOptions` as if they were global — a second agent's settings would get its own
-`RedStarOptions.Agents.<AgentName>` sibling rather than colliding with Unsloth's. `Otel` stays
-top-level (`RedStarOptions.Otel`) since telemetry export is genuinely agent-agnostic, not specific to
-any one agent.
+`RedStarOptions.Agent` (config key `RedStar:Agent`, env var `RedStar__Agent`, CLI flag `--agent`,
+default `AgentNames.Unsloth`) selects which agent backend a run talks to — see
+[Project layout](#project-layout) for how that selection is consumed. `RedStarOptions` is treated as a
+"mega project" config root rather than a flat bag of Unsloth settings: agent-specific settings
+(`BaseUrl`, `ApiKey`, `DefaultModel`, plus Unsloth's own `WebSearchEnabled`) are nested under
+`RedStarOptions.Agents.Unsloth`/`RedStarOptions.Agents.LMStudio` (`UnslothAgentOptions`/
+`LMStudioAgentOptions` records, config keys `RedStar:Agents:Unsloth:*`/`RedStar:Agents:LMStudio:*`,
+env vars `RedStar__Agents__Unsloth__*`/`RedStar__Agents__LMStudio__*`) instead of living flat on
+`RedStarOptions` as if they were global. `RedStarOptions.ApplyOverrides`'s `agent`/`baseUrl`/`apiKey`/
+`defaultModel` parameters apply the latter three to whichever single agent section `agent` (or,
+unspecified, the already-configured `Agent`) resolves to — the other agent's section is always left
+untouched by a given call. `Otel` stays top-level (`RedStarOptions.Otel`) since telemetry export is
+genuinely agent-agnostic, not specific to any one agent.
 
-`AgentsOptions`/`UnslothAgentOptions` are `record`s (not classes) specifically so
+`AgentsOptions`/`UnslothAgentOptions`/`LMStudioAgentOptions` are `record`s (not classes) specifically so
 `RedStarOptions.ApplyOverrides` can rebuild them with `with` expressions rather than a deep-clone by
-hand. `RedStarOptions.ApplyOverrides` implements the CLI-flags-win-if-non-blank step against
-`Agents.Unsloth`'s three overridable fields; `WebSearchEnabled` has no CLI flag (config/env-only), but
+hand. `RedStarOptions.ApplyOverrides` implements the CLI-flags-win-if-non-blank step against whichever
+single agent's section the resolved `Agent` points at (`Agents.Unsloth`'s three overridable fields, or
+`Agents.LMStudio`'s); `Unsloth.WebSearchEnabled` has no CLI flag (config/env-only), but
 `ApplyOverrides` must still carry its value through into the new instance it returns — it was dropped
 (silently reset to `false`) for a while because the method only copied the three overridable fields,
 and every CLI run rebuilds `RedStarOptions` via `ApplyOverrides`. See the
@@ -192,40 +231,56 @@ container) — never to the console or a file, so the boxed chat UI stays untouc
 
 ### No-auth mode
 
-`RedStarOptions.Agents.Unsloth.ApiKey` empty means "talk to a server with no auth" — but the OpenAI
-SDK requires a non-empty credential object, so `UnslothAgentFactory.Create` always passes a
-placeholder credential and relies on `ConditionalAuthHandler` (a `DelegatingHandler`) to strip the
-`Authorization` header from outgoing requests when no real key is configured. Don't try to "fix" this
-by passing a null/empty credential to the SDK — it throws.
+An empty `ApiKey` (`RedStarOptions.Agents.Unsloth.ApiKey` or `Agents.LMStudio.ApiKey`) means "talk to a
+server with no auth" — the default and expected state for LM Studio, which has authentication disabled
+out of the box; Unsloth requires a bearer token, so this is the exceptional case there. Either way, the
+OpenAI SDK requires a non-empty credential object, so `UnslothAgentFactory.Create`/
+`LMStudioAgentFactory.Create` always pass a placeholder credential and rely on `ConditionalAuthHandler`
+(a `DelegatingHandler`, top-level `RedStar.Base` namespace — agent-agnostic, shared by both factories)
+to strip the `Authorization` header from outgoing requests when no real key is configured. Don't try to
+"fix" this by passing a null/empty credential to the SDK — it throws.
 
 ### Model resolution
 
-`ChatCommandHandler.ResolveModelAsync` always hits `/v1/models` before building the chat client,
-whether or not `RedStarOptions.Agents.Unsloth.DefaultModel` is set, so a bad model id is caught here —
-with a clear error — instead of surfacing later as a misleading "the model returned no response" once
-the chat stream unexpectedly ends empty (Unsloth just silently drops the connection for an
-unloaded/nonexistent model rather than erroring).
+`ChatCommandHandler.ResolveModelAsync` always lists models (via whichever `IModelsClient` the active
+agent defaults to — see [Two HTTP paths, not one](#two-http-paths-not-one)) before building the chat
+client, whether or not a default model is configured, so a bad model id is caught here — with a clear
+error — instead of surfacing later as a misleading "the model returned no response" once the chat
+stream unexpectedly ends empty (Unsloth just silently drops the connection for an unloaded/nonexistent
+model rather than erroring).
 
 Every outcome requires at least one model to be currently *loaded* — an id the server merely knows
-about but hasn't loaded isn't usable. `ModelSelector.SelectDefault` resolves in order:
+about but hasn't loaded isn't usable — unless the caller opts into `allowJitLoad` (below), which only
+`ChatCommandHandler` does for the LM Studio agent. `ModelSelector.SelectDefault` also excludes
+embeddings-type models (`ModelInfo.Type == "embeddings"`, only ever populated by
+`LMStudioModelsClient`; always null and therefore never excluded for Unsloth) from every rule below —
+an embeddings model can't serve a chat request, so it must never be auto-selected or count toward
+"multiple models loaded". Resolves in order:
 
-1. **Zero models loaded anywhere** → hard failure (graceful error, `ChatCommandHandler` exits 1).
-2. **`Agents.Unsloth.DefaultModel` configured and non-blank** → it must be one of the currently-loaded
-   models, or resolution fails even though some *other* model is loaded — silently substituting a
+1. **`allowJitLoad` is true and the configured default names a chat-capable model the server knows
+   about but hasn't loaded** → succeeds immediately (`ModelSelectionSource.PendingJitLoad`), trusting
+   the server to load it on the first request instead of failing. This is LM Studio's just-in-time
+   loading; `ChatCommandHandler` passes `allowJitLoad: true` only when `RedStarOptions.Agent` is
+   `AgentNames.LMStudio` — Unsloth has no equivalent capability, so this rule never fires for it.
+2. **Zero (chat-capable) models loaded anywhere** → hard failure (graceful error, `ChatCommandHandler`
+   exits 1).
+3. **A configured default model, non-blank** → it must be one of the currently-loaded models, or
+   resolution fails even though some *other* model is loaded — silently substituting a
    different model than the one configured would be misleading, so there's no fallback here, only an
    error+exit (`ModelSelectionSource.Explicit` on success).
-3. **No `DefaultModel` configured and exactly one model is loaded** → that model is used
+4. **No default configured and exactly one (chat-capable) model is loaded** → that model is used
    (`ModelSelectionSource.Implicit`), with an informational message surfaced at startup and in
    telemetry, since it wasn't asked for by name.
-4. **No `DefaultModel` configured and multiple models are loaded** → ambiguous, hard failure.
+5. **No default configured and multiple (chat-capable) models are loaded** → ambiguous, hard failure.
 
 `ModelSelector.SelectDefault` returns a `ModelSelectionResult` (`Model`/`Source`/`InfoMessage` on
 success, `ErrorMessage` on failure) rather than a bare model/`null`, so callers can distinguish *why*
-resolution failed and which of the two success paths was taken.
+resolution failed and which of the three success paths was taken.
 
 `ChatCommandHandler.PrintStartupInfoBox` prints a boxed summary of the run's effective configuration
-(endpoint, whether an API key is configured, the resolved model plus its implicit/explicit source, web
-search, telemetry export) once per run before any chat request goes out, and mirrors the same fields
+(which agent, endpoint, whether an API key is configured, the resolved model plus how it was picked,
+web search when the active agent has such a concept, telemetry export) once per run before any chat
+request goes out, and mirrors the same fields
 onto the run's OTel activity as `redstar.config.*` tags plus one structured log line, so the resolved
 configuration is recoverable from telemetry too.
 
@@ -254,25 +309,60 @@ agent-agnostic (it only knows about `AIAgent`, never about Unsloth or HTTP).
 agent-agnostic like `ChatSession`/`RedStarOptions`) is the seam for pulling provider-specific
 side-channel data out of a streamed `AgentResponseUpdate`: `TryGetToolStatus` (a human-readable
 tool-activity label) and `TryGetWebSearchResults` (a completed search-hit list, `WebSearchResult`
-records). `RedStar.Base.Agents.Unsloth.UnslothAgentResponseExtractor` is the only implementation —
-it unwraps Unsloth's custom `tool_status`/`tool_end` SSE events, which sit outside the OpenAI
-chat-completions chunk schema, from `AgentResponseUpdate.RawRepresentation`.
+records). `RedStar.Base.Agents.Unsloth.UnslothAgentResponseExtractor` unwraps Unsloth's custom
+`tool_status`/`tool_end` SSE events, which sit outside the OpenAI chat-completions chunk schema, from
+`AgentResponseUpdate.RawRepresentation`. `RedStar.Base.Agents.LMStudio.LMStudioAgentResponseExtractor`
+is a deliberate no-op (both methods always return null) — LM Studio's OpenAI-compatible streaming
+carries no equivalent custom SSE events, so there's nothing to unwrap; see
+[LM Studio agent](#lm-studio-agent).
 
 `ChatCommandHandler.RunAsync` takes an optional `responseExtractor` parameter (same
 inject-for-tests pattern as `agentFactory`/`modelsClientFactory`), defaulting to
-`new UnslothAgentResponseExtractor()`; `ProduceStageEventsAsync` calls the interface, never the
-concrete Unsloth type, so a future second agent under `RedStar.Base/Agents/<AgentName>/` plugs in
-its own extractor without any agent-type branching inside the CLI. Tests substitute
-`FakeAgentResponseExtractor` (`RedStar.UnitTest/Fakes/`) here instead of depending on real Unsloth
-SSE JSON shapes.
+`new UnslothAgentResponseExtractor()` or `new LMStudioAgentResponseExtractor()` depending on
+`RedStarOptions.Agent`; `ProduceStageEventsAsync` calls the interface, never a concrete agent's type,
+so each agent plugs in its own extractor without any agent-type branching below
+`ChatCommandHandler.RunAsync` itself. Tests substitute `FakeAgentResponseExtractor`
+(`RedStar.UnitTest.Cli/Fakes/`) here instead of depending on real Unsloth SSE JSON shapes.
+
+### LM Studio agent
+
+`RedStar.Base.Agents.LMStudio.LMStudioAgentFactory.Create` builds the LM Studio agent the same way
+`UnslothAgentFactory.Create` builds Unsloth's — same `OpenAIClient`/`ConditionalAuthHandler` shape,
+default endpoint `http://127.0.0.1:1234/v1` (LM Studio's default local server port) — but with no
+`CreateChatOptions`/`Patch` step: LM Studio's tool-calling/structured-output/streaming all use the
+standard OpenAI schema that the OpenAI SDK/`Microsoft.Extensions.AI` already model directly, unlike
+Unsloth's `enable_tools`/`enabled_tools` extension (see
+[Unsloth-specific request fields via `Patch`](#unsloth-specific-request-fields-via-patch)).
+
+Model listing goes through `LMStudioModelsClient`, not a config of the shared `ModelsClient` —
+LM Studio's OpenAI-compatible `GET /v1/models` (what `ModelsClient` calls for Unsloth) reports no
+load-state field at all, so `LMStudioModelsClient` instead calls LM Studio's *native*
+`GET /api/v0/models`, which reports `state` (loaded/not-loaded), `type` (llm/vlm/embeddings),
+`max_context_length`, and `quantization` per model. That endpoint hangs off the server root rather
+than the `/v1` OpenAI-compat prefix `LMStudioAgentOptions.BaseUrl` is configured with, so
+`LMStudioModelsClient` derives the root by stripping a trailing `/v1`. These extra fields are why
+`ModelInfo` grew nullable `Type`/`MaxContextLength`/`Quantization` properties (always null from
+Unsloth's `ModelsClient`, which has no equivalent JSON to populate them from) — `Type` feeds
+`ModelSelector`'s embeddings-model exclusion (see [Model resolution](#model-resolution)), and all
+three surface as an extra "Details" column in `redstar models`'s output.
+
+LM Studio can load a downloaded-but-not-currently-loaded model on demand when a request references it
+(just-in-time loading) instead of requiring it pre-loaded like Unsloth does — `ChatCommandHandler`
+passes `allowJitLoad: true` to `ModelSelector.SelectDefault` only for this agent, see
+[Model resolution](#model-resolution) for the resulting `ModelSelectionSource.PendingJitLoad` outcome.
+LM Studio's server also has authentication disabled by default (unlike Unsloth, which requires a
+bearer token) — `ChatCommandHandler` skips the "no API key configured" warning entirely for this
+agent rather than printing Unsloth's wording, which would be actively wrong here.
 
 ### Two HTTP paths, not one
 
-`ModelsClient` (`GET /v1/models`) is a plain hand-rolled `HttpClient`/`System.Text.Json` client — it
-does not go through the OpenAI SDK or `IChatClient`, because model listing isn't part of that
-abstraction. Chat completions go through `UnslothAgentFactory` → OpenAI SDK → `IChatClient` →
-`AIAgent`. Keep that split in mind when adding features: "does this belong on the models endpoint or
-the chat endpoint" determines which client it touches.
+`ModelsClient` (Unsloth, `GET /v1/models`) and `LMStudioModelsClient` (LM Studio, `GET /api/v0/models`
+— see [LM Studio agent](#lm-studio-agent) for why a different endpoint) are both plain hand-rolled
+`HttpClient`/`System.Text.Json` clients — neither goes through the OpenAI SDK or `IChatClient`,
+because model listing isn't part of that abstraction. Chat completions go through
+`UnslothAgentFactory`/`LMStudioAgentFactory` → OpenAI SDK → `IChatClient` → `AIAgent`. Keep that split
+in mind when adding features: "does this belong on the models endpoint or the chat endpoint"
+determines which client it touches.
 
 ### `ChatSession`
 

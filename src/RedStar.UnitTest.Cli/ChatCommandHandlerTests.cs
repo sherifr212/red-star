@@ -5,9 +5,9 @@ using RedStar.Base;
 using RedStar.Base.Agents.Unsloth;
 using RedStar.Base.Telemetry;
 using RedStar.Cli;
-using RedStar.UnitTest.Fakes;
+using RedStar.UnitTest.Cli.Fakes;
 
-namespace RedStar.UnitTest;
+namespace RedStar.UnitTest.Cli;
 
 public class ChatCommandHandlerTests
 {
@@ -311,6 +311,72 @@ public class ChatCommandHandlerTests
 
         var exitCode = await ChatCommandHandler.RunAsync(
             noDefaultOptions,
+            oneShotPrompt: "hi",
+            systemPrompt: null,
+            CancellationToken.None,
+            agentFactory: agentFactory,
+            modelsClientFactory: modelsClientFactory);
+
+        Assert.Equal(0, exitCode);
+    }
+
+    /// <summary>
+    /// The whole point of adding LM Studio support: a configured default model that's known to the server
+    /// but not currently loaded must NOT fail the same way it does for Unsloth (see
+    /// <see cref="RunAsync_FailsGracefully_WhenNoModelsAreLoaded"/>, which uses the identical model-list
+    /// shape) -- <see cref="ChatCommandHandler.RunAsync"/> must pass <c>allowJitLoad: true</c> through to
+    /// <see cref="ModelSelector.SelectDefault"/> when <see cref="RedStarOptions.Agent"/> is
+    /// <see cref="AgentNames.LMStudio"/>, trusting the server to load it on the first request.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_Succeeds_WhenConfiguredModelIsKnownButNotLoaded_AndAgentIsLMStudio()
+    {
+        var lmStudioOptions = new RedStarOptions
+        {
+            Agent = AgentNames.LMStudio,
+            Agents = new AgentsOptions { LMStudio = new LMStudioAgentOptions { DefaultModel = "test-model" } },
+        };
+        Func<RedStarOptions, IModelsClient> modelsClientFactory = _ => new FakeModelsClient([new ModelInfo("test-model", Loaded: false)]);
+        Func<RedStarOptions, string, string?, AIAgent> agentFactory =
+            (_, modelId, instructions) =>
+            {
+                Assert.Equal("test-model", modelId);
+                return new ChatClientAgent(new FakeChatClient("hi"), instructions: instructions);
+            };
+
+        var exitCode = await ChatCommandHandler.RunAsync(
+            lmStudioOptions,
+            oneShotPrompt: "hi",
+            systemPrompt: null,
+            CancellationToken.None,
+            agentFactory: agentFactory,
+            modelsClientFactory: modelsClientFactory);
+
+        Assert.Equal(0, exitCode);
+    }
+
+    [Fact]
+    public async Task RunAsync_UsesLMStudioDefaultModel_NotUnslothDefaultModel_WhenAgentIsLMStudio()
+    {
+        var lmStudioOptions = new RedStarOptions
+        {
+            Agent = AgentNames.LMStudio,
+            Agents = new AgentsOptions
+            {
+                Unsloth = new UnslothAgentOptions { DefaultModel = "unsloth-model" },
+                LMStudio = new LMStudioAgentOptions { DefaultModel = "lmstudio-model" },
+            },
+        };
+        Func<RedStarOptions, IModelsClient> modelsClientFactory = _ => new FakeModelsClient([new ModelInfo("lmstudio-model", Loaded: true)]);
+        Func<RedStarOptions, string, string?, AIAgent> agentFactory =
+            (_, modelId, instructions) =>
+            {
+                Assert.Equal("lmstudio-model", modelId);
+                return new ChatClientAgent(new FakeChatClient("hi"), instructions: instructions);
+            };
+
+        var exitCode = await ChatCommandHandler.RunAsync(
+            lmStudioOptions,
             oneShotPrompt: "hi",
             systemPrompt: null,
             CancellationToken.None,

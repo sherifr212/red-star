@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using RedStar.Base;
+using RedStar.Base.Agents.LMStudio;
 using RedStar.Base.Telemetry;
 using Spectre.Console;
 
@@ -8,8 +9,10 @@ namespace RedStar.Cli;
 internal static class ModelsCommandHandler
 {
     /// <param name="modelsClientFactory">
-    /// Builds the <see cref="IModelsClient"/> to query. Defaults to a real <see cref="ModelsClient"/>;
-    /// tests can substitute a fake here without touching the network.
+    /// Builds the <see cref="IModelsClient"/> to query. Defaults to a real <see cref="ModelsClient"/> or
+    /// <c>LMStudioModelsClient</c> depending on <see cref="RedStarOptions.Agent"/> (same per-agent switch
+    /// as <see cref="ChatCommandHandler.RunAsync"/>'s <c>modelsClientFactory</c> default); tests can
+    /// substitute a fake here without touching the network.
     /// </param>
     /// <param name="runId">
     /// Correlation ID tagged onto this run's root OTel span (<c>run.correlation.id</c>). Falls back to the
@@ -29,25 +32,32 @@ internal static class ModelsCommandHandler
         var logger = RedStarTelemetry.CreateLogger("RedStar.Cli.ModelsCommandHandler");
         logger.LogInformation("Starting redstar models run {RunId}", runId);
 
-        var modelsClient = modelsClientFactory is null ? new ModelsClient(options) : modelsClientFactory(options);
+        var isLMStudio = string.Equals(options.Agent, AgentNames.LMStudio, StringComparison.OrdinalIgnoreCase);
+        modelsClientFactory ??= isLMStudio
+            ? static opts => new LMStudioModelsClient(opts)
+            : static opts => new ModelsClient(opts);
+
+        var modelsClient = modelsClientFactory(options);
         try
         {
             var models = await modelsClient.ListAsync(cancellationToken);
             if (models.Count == 0)
             {
-                AnsiConsole.MarkupLine("[yellow]No models available.[/] Load one in Unsloth Studio first.");
+                AnsiConsole.MarkupLine("[yellow]No models available.[/] Load one on the server first.");
                 return 0;
             }
 
             var table = new Table().Border(TableBorder.Rounded);
             table.AddColumn(string.Empty);
             table.AddColumn("Model");
+            table.AddColumn("Details");
             foreach (var model in models)
             {
                 var id = Markup.Escape(model.Id);
                 table.AddRow(
                     model.Loaded ? "[green]●[/]" : string.Empty,
-                    model.Loaded ? $"[green]{id}[/] [dim](loaded)[/]" : id);
+                    model.Loaded ? $"[green]{id}[/] [dim](loaded)[/]" : id,
+                    Markup.Escape(FormatDetails(model)));
             }
 
             AnsiConsole.Write(table);
@@ -63,5 +73,29 @@ internal static class ModelsCommandHandler
         {
             (modelsClient as IDisposable)?.Dispose();
         }
+    }
+
+    /// <summary>Builds the "Details" column from whichever of <see cref="ModelInfo.Type"/>/
+    /// <see cref="ModelInfo.MaxContextLength"/>/<see cref="ModelInfo.Quantization"/> are present -- always
+    /// empty for Unsloth's entries (which report none of them), populated for LM Studio's.</summary>
+    private static string FormatDetails(ModelInfo model)
+    {
+        var parts = new List<string>();
+        if (model.Type is { Length: > 0 })
+        {
+            parts.Add(model.Type);
+        }
+
+        if (model.MaxContextLength is { } contextLength)
+        {
+            parts.Add($"{contextLength} ctx");
+        }
+
+        if (model.Quantization is { Length: > 0 })
+        {
+            parts.Add(model.Quantization);
+        }
+
+        return string.Join(" · ", parts);
     }
 }
