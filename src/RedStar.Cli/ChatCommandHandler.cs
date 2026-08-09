@@ -6,6 +6,7 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using RedStar.Base;
+using RedStar.Base.Agents.ClaudeCode;
 using RedStar.Base.Agents.LMStudio;
 using RedStar.Base.Agents.Unsloth;
 using RedStar.Base.Telemetry;
@@ -58,16 +59,23 @@ internal static class ChatCommandHandler
 
         var active = ResolveActiveAgentSettings(options);
         var isLMStudio = active.AgentName == AgentNames.LMStudio;
+        var isClaudeCode = active.AgentName == AgentNames.ClaudeCode;
 
-        agentFactory ??= isLMStudio
-            ? static (opts, modelId, instructions) => LMStudioAgentFactory.Create(opts, modelId, instructions)
-            : static (opts, modelId, instructions) => UnslothAgentFactory.Create(opts, modelId, instructions);
-        responseExtractor ??= isLMStudio ? new LMStudioAgentResponseExtractor() : new UnslothAgentResponseExtractor();
-        modelsClientFactory ??= isLMStudio
-            ? static opts => new LMStudioModelsClient(opts)
-            : static opts => new ModelsClient(opts);
+        agentFactory ??= isClaudeCode
+            ? static (opts, modelId, instructions) => ClaudeCodeAgentFactory.Create(opts, modelId, instructions)
+            : isLMStudio
+                ? static (opts, modelId, instructions) => LMStudioAgentFactory.Create(opts, modelId, instructions)
+                : static (opts, modelId, instructions) => UnslothAgentFactory.Create(opts, modelId, instructions);
+        responseExtractor ??= isClaudeCode
+            ? new ClaudeCodeAgentResponseExtractor()
+            : isLMStudio ? new LMStudioAgentResponseExtractor() : new UnslothAgentResponseExtractor();
+        modelsClientFactory ??= isClaudeCode
+            ? static opts => new ClaudeCodeModelsClient()
+            : isLMStudio
+                ? static opts => new LMStudioModelsClient(opts)
+                : static opts => new ModelsClient(opts);
 
-        if (string.IsNullOrEmpty(active.ApiKey) && !isLMStudio)
+        if (string.IsNullOrEmpty(active.ApiKey) && !isLMStudio && !isClaudeCode)
         {
             ConsoleOutput.Error.MarkupLine(
                 "[yellow]Warning: no API key configured.[/] Unsloth Studio requires a bearer token for /v1 calls.\n" +
@@ -75,25 +83,50 @@ internal static class ChatCommandHandler
                 "--api-key, the RedStar__Agents__Unsloth__ApiKey environment variable, or appsettings.local.json.\n");
         }
 
-        var configuredDefault = isLMStudio ? options.Agents.LMStudio.DefaultModel : options.Agents.Unsloth.DefaultModel;
-        var selection = await ResolveModelAsync(configuredDefault, isLMStudio, options, cancellationToken, modelsClientFactory);
-        if (!selection.Succeeded)
+        if (isClaudeCode)
         {
-            logger.LogWarning("Run {RunId} aborted: model resolution failed ({Reason})", runId, selection.ErrorMessage);
-            return 1;
+            WarnOnClaudeCodeAuthMisconfiguration(options.Agents.ClaudeCode);
         }
 
-        var modelId = selection.Model!.Id;
-        var modelSource = selection.Source!.Value;
+        string modelId;
+        string modelSourceLabel;
 
-        if (selection.InfoMessage is not null)
+        if (isClaudeCode)
         {
-            ConsoleOutput.Error.MarkupLine($"[yellow]{Markup.Escape(selection.InfoMessage)}[/]");
+            // ClaudeCode has no "currently loaded models" concept for ModelSelector to resolve against --
+            // the CLI resolves --model at request time with no separate listing step (see
+            // ClaudeCodeAgentOptions.DefaultModel's remarks) -- so model resolution is just "pass whatever's
+            // configured straight through", including empty (meaning "let the CLI use its own default").
+            modelId = options.Agents.ClaudeCode.DefaultModel;
+            modelSourceLabel = modelId.Length == 0 ? "CLI default" : "configured";
+        }
+        else
+        {
+            var configuredDefault = isLMStudio ? options.Agents.LMStudio.DefaultModel : options.Agents.Unsloth.DefaultModel;
+            var selection = await ResolveModelAsync(configuredDefault, isLMStudio, options, cancellationToken, modelsClientFactory);
+            if (!selection.Succeeded)
+            {
+                logger.LogWarning("Run {RunId} aborted: model resolution failed ({Reason})", runId, selection.ErrorMessage);
+                return 1;
+            }
+
+            modelId = selection.Model!.Id;
+            modelSourceLabel = selection.Source!.Value switch
+            {
+                ModelSelectionSource.Explicit => "explicit (configured)",
+                ModelSelectionSource.PendingJitLoad => "explicit (configured, loading on first request)",
+                _ => "implicit (auto-detected)",
+            };
+
+            if (selection.InfoMessage is not null)
+            {
+                ConsoleOutput.Error.MarkupLine($"[yellow]{Markup.Escape(selection.InfoMessage)}[/]");
+            }
+
+            logger.LogInformation("Run {RunId} resolved model {ModelId} via {ModelSource}", runId, modelId, selection.Source!.Value);
         }
 
-        logger.LogInformation("Run {RunId} resolved model {ModelId} via {ModelSource}", runId, modelId, modelSource);
-
-        PrintStartupInfoBox(active, options.Otel, runId, modelId, modelSource, activity, logger);
+        PrintStartupInfoBox(options, active, runId, modelId, modelSourceLabel, activity, logger);
 
         AIAgent agent = agentFactory(options, modelId, systemPrompt);
         var session = new ChatSession(agent);
@@ -104,8 +137,9 @@ internal static class ChatCommandHandler
             return await SendAndPrintAsync(session, oneShotPrompt, responseExtractor, logger, cancellationToken);
         }
 
+        var modelLabel = modelId.Length == 0 ? "(CLI default)" : modelId;
         AnsiConsole.MarkupLine(
-            $"[bold]RedStar chat[/] - model '[green]{Markup.Escape(modelId)}[/]'. Type 'exit' or press Ctrl+C to quit.");
+            $"[bold]RedStar chat[/] - model '[green]{Markup.Escape(modelLabel)}[/]'. Type 'exit' or press Ctrl+C to quit.");
         while (!cancellationToken.IsCancellationRequested)
         {
             AnsiConsole.WriteLine();
@@ -957,16 +991,65 @@ internal static class ChatCommandHandler
 
     /// <summary>One agent's resolved connection settings for this run, picked from <see cref="RedStarOptions.Agent"/>
     /// once at the top of <see cref="RunAsync"/> instead of every call site reaching into
-    /// <c>options.Agents.Unsloth</c>/<c>options.Agents.LMStudio</c> directly. <see cref="EnabledTools"/> is
-    /// null for an agent with no such concept (LM Studio), rather than an empty list, so <see cref="PrintStartupInfoBox"/>
-    /// can tell "no tools enabled" apart from "not applicable" and omit the row entirely for the latter.</summary>
-    private readonly record struct ActiveAgentSettings(string AgentName, string BaseUrl, string ApiKey, IReadOnlyList<string>? EnabledTools);
+    /// <c>options.Agents.Unsloth</c>/<c>options.Agents.LMStudio</c>/<c>options.Agents.ClaudeCode</c> directly.
+    /// <see cref="Tools"/> is null for an agent with no such concept, rather than an empty list, so
+    /// <see cref="PrintStartupInfoBox"/> can tell "no tools enabled" apart from "not applicable" and omit the
+    /// row entirely for the latter; <see cref="KnownToolNames"/> is the catalog <see cref="FormatToolsSummary"/>
+    /// checks <see cref="Tools"/> against (<see cref="UnslothTools.Known"/> or <see cref="ClaudeCodeTools.Known"/>),
+    /// non-null exactly when <see cref="Tools"/> is. <see cref="BaseUrl"/>/<see cref="ApiKey"/> are both empty
+    /// for ClaudeCode -- it's a subprocess agent, not an HTTP one, so neither concept applies; see
+    /// <see cref="PrintStartupInfoBox"/>'s ClaudeCode branch for what it shows instead.</summary>
+    private readonly record struct ActiveAgentSettings(
+        string AgentName, string BaseUrl, string ApiKey, IReadOnlyList<string>? Tools, IReadOnlyList<string>? KnownToolNames);
 
-    private static ActiveAgentSettings ResolveActiveAgentSettings(RedStarOptions options) =>
-        string.Equals(options.Agent, AgentNames.LMStudio, StringComparison.OrdinalIgnoreCase)
-            ? new ActiveAgentSettings(AgentNames.LMStudio, options.Agents.LMStudio.BaseUrl, options.Agents.LMStudio.ApiKey, null)
-            : new ActiveAgentSettings(
-                AgentNames.Unsloth, options.Agents.Unsloth.BaseUrl, options.Agents.Unsloth.ApiKey, options.Agents.Unsloth.EnabledTools);
+    private static ActiveAgentSettings ResolveActiveAgentSettings(RedStarOptions options)
+    {
+        if (string.Equals(options.Agent, AgentNames.LMStudio, StringComparison.OrdinalIgnoreCase))
+        {
+            return new ActiveAgentSettings(AgentNames.LMStudio, options.Agents.LMStudio.BaseUrl, options.Agents.LMStudio.ApiKey, null, null);
+        }
+
+        if (string.Equals(options.Agent, AgentNames.ClaudeCode, StringComparison.OrdinalIgnoreCase))
+        {
+            return new ActiveAgentSettings(
+                AgentNames.ClaudeCode, "", "", options.Agents.ClaudeCode.AllowedTools, ClaudeCodeTools.Known);
+        }
+
+        return new ActiveAgentSettings(
+            AgentNames.Unsloth, options.Agents.Unsloth.BaseUrl, options.Agents.Unsloth.ApiKey,
+            options.Agents.Unsloth.EnabledTools, UnslothTools.Known);
+    }
+
+    /// <summary>
+    /// Warns (doesn't fail the run -- the CLI itself will surface the real auth error once it runs) about two
+    /// ClaudeCode-specific misconfigurations that would otherwise only show up as a confusing subprocess
+    /// failure: <see cref="ClaudeCodeAgentOptions.AuthMode"/> == <see cref="ClaudeCodeAuthModes.ApiKey"/> with
+    /// a blank <see cref="ClaudeCodeAgentOptions.ApiKey"/> (mirrors the Unsloth "no API key configured"
+    /// warning above), and <see cref="ClaudeCodeAgentOptions.Bare"/> combined with
+    /// <see cref="ClaudeCodeAuthModes.CliLogin"/> -- <c>--bare</c> explicitly skips OAuth keychain reads,
+    /// which is CliLogin's only credential source, so that combination can never authenticate.
+    /// </summary>
+    private static void WarnOnClaudeCodeAuthMisconfiguration(ClaudeCodeAgentOptions claudeCode)
+    {
+        if (string.Equals(claudeCode.AuthMode, ClaudeCodeAuthModes.ApiKey, StringComparison.OrdinalIgnoreCase) &&
+            string.IsNullOrEmpty(claudeCode.ApiKey))
+        {
+            ConsoleOutput.Error.MarkupLine(
+                "[yellow]Warning: no API key configured.[/] ClaudeCode's AuthMode is set to ApiKey, which requires\n" +
+                "ANTHROPIC_API_KEY. Set it via --api-key, the RedStar__Agents__ClaudeCode__ApiKey environment\n" +
+                "variable, or appsettings.local.json -- or switch AuthMode back to CliLogin to use a locally\n" +
+                "logged-in `claude auth login` credential instead.\n");
+        }
+
+        if (claudeCode.Bare && string.Equals(claudeCode.AuthMode, ClaudeCodeAuthModes.CliLogin, StringComparison.OrdinalIgnoreCase))
+        {
+            ConsoleOutput.Error.MarkupLine(
+                "[yellow]Warning: Bare is enabled with AuthMode CliLogin.[/] --bare explicitly skips OAuth keychain\n" +
+                "reads, which is CliLogin's only credential source -- this combination has no working " +
+                "credential and\nwill fail to authenticate. Set AuthMode to ApiKey (with an ApiKey configured), " +
+                "or disable Bare.\n");
+        }
+    }
 
     /// <summary>
     /// Resolves and validates the model to chat with by checking it against the server's model list before
@@ -1011,39 +1094,61 @@ internal static class ChatCommandHandler
     }
 
     /// <summary>
-    /// Prints a boxed summary of this run's effective configuration -- which agent, endpoint, whether an
-    /// API key is configured, the resolved model plus how it was picked (see
-    /// <see cref="ModelSelectionSource"/>), every known tool's on/off state (when the active agent has such
-    /// a concept -- see <see cref="UnslothTools.Known"/>), and telemetry export -- once per run, before any
-    /// chat request goes out. Mirrors the same fields onto <paramref name="activity"/>'s tags
-    /// (<c>redstar.config.*</c>) and one structured log line so this is recoverable from telemetry too, not
-    /// just from the terminal -- the box itself is stdout-only and gone once the terminal scrolls past it.
+    /// Prints a boxed summary of this run's effective configuration -- which agent, connection details
+    /// (endpoint+API key for Unsloth/LM Studio; CLI path/auth mode/process mode for ClaudeCode -- see the
+    /// branch below), the resolved model plus how it was picked, every known tool's on/off state (when the
+    /// active agent has such a concept -- see <see cref="UnslothTools.Known"/>/<see cref="ClaudeCodeTools.Known"/>),
+    /// and telemetry export -- once per run, before any chat request goes out. Mirrors the same fields onto
+    /// <paramref name="activity"/>'s tags (<c>redstar.config.*</c>) and one structured log line so this is
+    /// recoverable from telemetry too, not just from the terminal -- the box itself is stdout-only and gone
+    /// once the terminal scrolls past it. <paramref name="modelSourceLabel"/> is a plain string rather than
+    /// <see cref="ModelSelectionSource"/> directly since ClaudeCode has no such concept to report (see
+    /// <see cref="RunAsync"/>'s model-resolution branch) -- callers for Unsloth/LM Studio still derive it from
+    /// that enum, just one level up from here.
     /// </summary>
     private static void PrintStartupInfoBox(
-        ActiveAgentSettings active, OtelOptions otel, string runId, string modelId, ModelSelectionSource modelSource,
+        RedStarOptions options, ActiveAgentSettings active, string runId, string modelId, string modelSourceLabel,
         Activity? activity, ILogger logger)
     {
+        var isClaudeCode = active.AgentName == AgentNames.ClaudeCode;
         var apiKeyConfigured = !string.IsNullOrEmpty(active.ApiKey);
-        var modelSourceLabel = modelSource switch
-        {
-            ModelSelectionSource.Explicit => "explicit (configured)",
-            ModelSelectionSource.PendingJitLoad => "explicit (configured, loading on first request)",
-            _ => "implicit (auto-detected)",
-        };
 
         var table = new Table().Border(TableBorder.None).HideHeaders();
         table.AddColumn(new TableColumn(string.Empty).NoWrap());
         table.AddColumn(string.Empty);
         table.AddRow("[grey]Agent[/]", Markup.Escape(active.AgentName));
         table.AddRow("[grey]Run ID[/]", Markup.Escape(runId));
-        table.AddRow("[grey]Endpoint[/]", Markup.Escape(active.BaseUrl));
-        table.AddRow("[grey]API key[/]", apiKeyConfigured ? "[green]configured[/]" : "[yellow]not configured[/]");
-        table.AddRow("[grey]Model[/]", $"[green]{Markup.Escape(modelId)}[/] [grey]({modelSourceLabel})[/]");
-        if (active.EnabledTools is { } enabledTools)
+
+        if (isClaudeCode)
         {
-            table.AddRow("[grey]Tools[/]", FormatToolsSummary(enabledTools));
+            var claudeCode = options.Agents.ClaudeCode;
+            table.AddRow("[grey]CLI path[/]", Markup.Escape(claudeCode.CliPath));
+            table.AddRow("[grey]Auth mode[/]", Markup.Escape(claudeCode.AuthMode));
+            if (string.Equals(claudeCode.AuthMode, ClaudeCodeAuthModes.ApiKey, StringComparison.OrdinalIgnoreCase))
+            {
+                var claudeApiKeyConfigured = !string.IsNullOrEmpty(claudeCode.ApiKey);
+                table.AddRow("[grey]API key[/]", claudeApiKeyConfigured ? "[green]configured[/]" : "[yellow]not configured[/]");
+            }
+
+            table.AddRow("[grey]Process mode[/]", Markup.Escape(claudeCode.ProcessMode));
+            if (claudeCode.Bare)
+            {
+                table.AddRow("[grey]Bare[/]", "[green]enabled[/]");
+            }
+        }
+        else
+        {
+            table.AddRow("[grey]Endpoint[/]", Markup.Escape(active.BaseUrl));
+            table.AddRow("[grey]API key[/]", apiKeyConfigured ? "[green]configured[/]" : "[yellow]not configured[/]");
         }
 
+        table.AddRow("[grey]Model[/]", $"[green]{Markup.Escape(modelId)}[/] [grey]({modelSourceLabel})[/]");
+        if (active.Tools is { } tools)
+        {
+            table.AddRow("[grey]Tools[/]", FormatToolsSummary(tools, active.KnownToolNames ?? []));
+        }
+
+        var otel = options.Otel;
         table.AddRow(
             "[grey]Telemetry[/]",
             otel.Enabled ? $"[green]enabled[/] -> {Markup.Escape(otel.Endpoint)}" : "disabled");
@@ -1056,13 +1161,25 @@ internal static class ChatCommandHandler
         AnsiConsole.Write(panel);
 
         activity?.SetTag("redstar.config.agent", active.AgentName);
-        activity?.SetTag("redstar.config.endpoint", active.BaseUrl);
-        activity?.SetTag("redstar.config.api_key_configured", apiKeyConfigured);
-        activity?.SetTag("redstar.config.model", modelId);
-        activity?.SetTag("redstar.config.model_source", modelSource.ToString());
-        if (active.EnabledTools is { } enabledToolsForTag)
+        if (isClaudeCode)
         {
-            activity?.SetTag("redstar.config.enabled_tools", string.Join(",", enabledToolsForTag));
+            var claudeCode = options.Agents.ClaudeCode;
+            activity?.SetTag("redstar.config.claude_code.cli_path", claudeCode.CliPath);
+            activity?.SetTag("redstar.config.claude_code.auth_mode", claudeCode.AuthMode);
+            activity?.SetTag("redstar.config.claude_code.process_mode", claudeCode.ProcessMode);
+            activity?.SetTag("redstar.config.claude_code.bare", claudeCode.Bare);
+        }
+        else
+        {
+            activity?.SetTag("redstar.config.endpoint", active.BaseUrl);
+            activity?.SetTag("redstar.config.api_key_configured", apiKeyConfigured);
+        }
+
+        activity?.SetTag("redstar.config.model", modelId);
+        activity?.SetTag("redstar.config.model_source", modelSourceLabel);
+        if (active.Tools is { } toolsForTag)
+        {
+            activity?.SetTag("redstar.config.enabled_tools", string.Join(",", toolsForTag));
         }
 
         activity?.SetTag("redstar.config.telemetry_enabled", otel.Enabled);
@@ -1072,22 +1189,23 @@ internal static class ChatCommandHandler
             "Startup configuration for run {RunId}: agent={Agent} endpoint={Endpoint} apiKeyConfigured={ApiKeyConfigured} " +
             "model={ModelId} modelSource={ModelSource} enabledTools={EnabledTools} " +
             "telemetryEnabled={TelemetryEnabled} telemetryEndpoint={TelemetryEndpoint}",
-            runId, active.AgentName, active.BaseUrl, apiKeyConfigured, modelId, modelSource,
-            active.EnabledTools is null ? "n/a" : string.Join(",", active.EnabledTools), otel.Enabled, otel.Endpoint);
+            runId, active.AgentName, active.BaseUrl, apiKeyConfigured, modelId, modelSourceLabel,
+            active.Tools is null ? "n/a" : string.Join(",", active.Tools), otel.Enabled, otel.Endpoint);
     }
 
     /// <summary>
-    /// Renders every documented Unsloth tool (<see cref="UnslothTools.Known"/>) plus any extra names present
-    /// in <paramref name="enabledTools"/> that aren't in that list (a custom/undocumented tool name, since
-    /// <see cref="RedStarOptions.EnabledTools"/> on <c>UnslothAgentOptions</c> is free-form) -- one per line,
-    /// each tagged with its current enabled/disabled state, so the startup box always shows the full
-    /// picture rather than only what happens to be turned on.
+    /// Renders every tool in <paramref name="knownToolNames"/> (<see cref="UnslothTools.Known"/> or
+    /// <see cref="ClaudeCodeTools.Known"/>, depending on the active agent) plus any extra names present in
+    /// <paramref name="enabledTools"/> that aren't in that list (a custom/undocumented tool name, since both
+    /// agents' tool-list config fields are free-form) -- one per line, each tagged with its current
+    /// enabled/disabled state, so the startup box always shows the full picture rather than only what
+    /// happens to be turned on.
     /// </summary>
-    private static string FormatToolsSummary(IReadOnlyList<string> enabledTools)
+    private static string FormatToolsSummary(IReadOnlyList<string> enabledTools, IReadOnlyList<string> knownToolNames)
     {
         var enabledSet = new HashSet<string>(enabledTools, StringComparer.OrdinalIgnoreCase);
-        var names = UnslothTools.Known
-            .Concat(enabledTools.Where(t => !UnslothTools.Known.Contains(t, StringComparer.OrdinalIgnoreCase)))
+        var names = knownToolNames
+            .Concat(enabledTools.Where(t => !knownToolNames.Contains(t, StringComparer.OrdinalIgnoreCase)))
             .Distinct(StringComparer.OrdinalIgnoreCase);
 
         return string.Join(

@@ -1,3 +1,4 @@
+using RedStar.Base;
 using Spectre.Console.Cli;
 
 namespace RedStar.Cli.Commands;
@@ -10,7 +11,18 @@ public sealed class ChatCommand : AsyncCommand<ChatSettings>
 {
     protected override async Task<int> ExecuteAsync(CommandContext context, ChatSettings settings, CancellationToken cancellationToken)
     {
-        var options = RedStarOptionsFactory.Build(settings.Agent, settings.Endpoint, settings.ApiKey, settings.Model);
+        var claudeCode = new ClaudeCodeOverrides(
+            CliPath: settings.ClaudeCliPath,
+            AuthMode: settings.ClaudeAuthMode,
+            Bare: settings.ClaudeBare,
+            ProcessMode: settings.ClaudeProcessMode,
+            WorkingDirectory: settings.ClaudeWorkingDirectory,
+            AllowedTools: settings.ClaudeAllowedTools,
+            DisallowedTools: settings.ClaudeDisallowedTools,
+            PermissionMode: settings.ClaudePermissionMode,
+            MaxBudgetUsd: settings.ClaudeMaxBudgetUsd);
+
+        var options = RedStarOptionsFactory.Build(settings.Agent, settings.Endpoint, settings.ApiKey, settings.Model, claudeCode);
         return await ChatCommandHandler.RunAsync(options, settings.Prompt, settings.System, cancellationToken, runId: settings.RunId);
     }
 }

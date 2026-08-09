@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using RedStar.Base;
+using RedStar.Base.Agents.ClaudeCode;
 using RedStar.Base.Agents.LMStudio;
 using RedStar.Base.Telemetry;
 using Spectre.Console;
@@ -33,9 +34,12 @@ internal static class ModelsCommandHandler
         logger.LogInformation("Starting redstar models run {RunId}", runId);
 
         var isLMStudio = string.Equals(options.Agent, AgentNames.LMStudio, StringComparison.OrdinalIgnoreCase);
-        modelsClientFactory ??= isLMStudio
-            ? static opts => new LMStudioModelsClient(opts)
-            : static opts => new ModelsClient(opts);
+        var isClaudeCode = string.Equals(options.Agent, AgentNames.ClaudeCode, StringComparison.OrdinalIgnoreCase);
+        modelsClientFactory ??= isClaudeCode
+            ? static opts => new ClaudeCodeModelsClient()
+            : isLMStudio
+                ? static opts => new LMStudioModelsClient(opts)
+                : static opts => new ModelsClient(opts);
 
         var modelsClient = modelsClientFactory(options);
         try
