@@ -6,6 +6,7 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using RedStar.Base;
+using RedStar.Base.Agents.LMStudio;
 using RedStar.Base.Agents.Unsloth;
 using RedStar.Base.Telemetry;
 using Spectre.Console;
@@ -17,16 +18,19 @@ internal static class ChatCommandHandler
 {
     /// <param name="agentFactory">
     /// Builds the <see cref="AIAgent"/> to chat with, given (options, modelId, instructions). Defaults to
-    /// <see cref="UnslothAgentFactory.Create"/>; tests can substitute a fake here without touching the
-    /// network.
+    /// <see cref="UnslothAgentFactory.Create"/> or <c>LMStudioAgentFactory.Create</c> depending on
+    /// <see cref="RedStarOptions.Agent"/> (an explicit two-way switch, not a registry -- see
+    /// <see cref="AgentNames"/>); tests can substitute a fake here without touching the network.
     /// </param>
     /// <param name="modelsClientFactory">
     /// Builds the <see cref="IModelsClient"/> used for auto-resolving a default model. Defaults to a real
-    /// <see cref="ModelsClient"/>; tests can substitute a fake here without touching the network.
+    /// <see cref="ModelsClient"/> or <c>LMStudioModelsClient</c>, same per-agent switch as
+    /// <paramref name="agentFactory"/>; tests can substitute a fake here without touching the network.
     /// </param>
     /// <param name="responseExtractor">
     /// Extracts tool-status labels and web-search hit lists from streamed updates (see
-    /// <see cref="ProduceStageEventsAsync"/>). Defaults to <see cref="UnslothAgentResponseExtractor"/>;
+    /// <see cref="ProduceStageEventsAsync"/>). Defaults to <see cref="UnslothAgentResponseExtractor"/> or
+    /// <c>LMStudioAgentResponseExtractor</c>, same per-agent switch as <paramref name="agentFactory"/>;
     /// tests can substitute a fake here without depending on real Unsloth SSE JSON shapes.
     /// </param>
     /// <param name="runId">
@@ -52,10 +56,18 @@ internal static class ChatCommandHandler
         var logger = RedStarTelemetry.CreateLogger("RedStar.Cli.ChatCommandHandler");
         logger.LogInformation("Starting redstar chat run {RunId}", runId);
 
-        agentFactory ??= static (opts, modelId, instructions) => UnslothAgentFactory.Create(opts, modelId, instructions);
-        responseExtractor ??= new UnslothAgentResponseExtractor();
+        var active = ResolveActiveAgentSettings(options);
+        var isLMStudio = active.AgentName == AgentNames.LMStudio;
 
-        if (string.IsNullOrEmpty(options.Agents.Unsloth.ApiKey))
+        agentFactory ??= isLMStudio
+            ? static (opts, modelId, instructions) => LMStudioAgentFactory.Create(opts, modelId, instructions)
+            : static (opts, modelId, instructions) => UnslothAgentFactory.Create(opts, modelId, instructions);
+        responseExtractor ??= isLMStudio ? new LMStudioAgentResponseExtractor() : new UnslothAgentResponseExtractor();
+        modelsClientFactory ??= isLMStudio
+            ? static opts => new LMStudioModelsClient(opts)
+            : static opts => new ModelsClient(opts);
+
+        if (string.IsNullOrEmpty(active.ApiKey) && !isLMStudio)
         {
             ConsoleOutput.Error.MarkupLine(
                 "[yellow]Warning: no API key configured.[/] Unsloth Studio requires a bearer token for /v1 calls.\n" +
@@ -63,7 +75,8 @@ internal static class ChatCommandHandler
                 "--api-key, the RedStar__Agents__Unsloth__ApiKey environment variable, or appsettings.local.json.\n");
         }
 
-        var selection = await ResolveModelAsync(options, cancellationToken, modelsClientFactory);
+        var configuredDefault = isLMStudio ? options.Agents.LMStudio.DefaultModel : options.Agents.Unsloth.DefaultModel;
+        var selection = await ResolveModelAsync(configuredDefault, isLMStudio, options, cancellationToken, modelsClientFactory);
         if (!selection.Succeeded)
         {
             logger.LogWarning("Run {RunId} aborted: model resolution failed ({Reason})", runId, selection.ErrorMessage);
@@ -80,7 +93,7 @@ internal static class ChatCommandHandler
 
         logger.LogInformation("Run {RunId} resolved model {ModelId} via {ModelSource}", runId, modelId, modelSource);
 
-        PrintStartupInfoBox(options, runId, modelId, modelSource, activity, logger);
+        PrintStartupInfoBox(active, options.Otel, runId, modelId, modelSource, activity, logger);
 
         AIAgent agent = agentFactory(options, modelId, systemPrompt);
         var session = new ChatSession(agent);
@@ -88,7 +101,7 @@ internal static class ChatCommandHandler
         if (!string.IsNullOrWhiteSpace(oneShotPrompt))
         {
             PrintUserMessageBox(oneShotPrompt);
-            return await SendAndPrintAsync(session, oneShotPrompt, responseExtractor, cancellationToken);
+            return await SendAndPrintAsync(session, oneShotPrompt, responseExtractor, logger, cancellationToken);
         }
 
         AnsiConsole.MarkupLine(
@@ -114,7 +127,7 @@ internal static class ChatCommandHandler
                 continue;
             }
 
-            var exitCode = await SendAndPrintAsync(session, line, responseExtractor, cancellationToken);
+            var exitCode = await SendAndPrintAsync(session, line, responseExtractor, logger, cancellationToken);
             if (exitCode != 0)
             {
                 return exitCode;
@@ -169,8 +182,11 @@ internal static class ChatCommandHandler
         public const string Generating = "Generating";
     }
 
-    /// <summary>One piece of one stage's content: either a text delta to append, or a completed site list.</summary>
-    private readonly record struct StageEvent(string Stage, string? TextDelta, IReadOnlyList<WebSearchResult>? Sites);
+    /// <summary>One piece of one stage's content: a text delta to append, a completed site list, or a
+    /// final output-token count (see <see cref="ProduceStageEventsAsync"/>'s <c>UsageContent</c> handling).
+    /// </summary>
+    private readonly record struct StageEvent(
+        string Stage, string? TextDelta, IReadOnlyList<WebSearchResult>? Sites, int? OutputTokenCount = null);
 
     /// <summary>Result of draining one stage's events until either a differently-staged event arrives
     /// (<see cref="NextEvent"/> set, <see cref="SplitForHeight"/> false) or the current box's estimated
@@ -181,7 +197,8 @@ internal static class ChatCommandHandler
     private readonly record struct DrainResult(StageEvent? NextEvent, bool SplitForHeight);
 
     private static async Task<int> SendAndPrintAsync(
-        ChatSession session, string userText, IAgentResponseExtractor responseExtractor, CancellationToken cancellationToken)
+        ChatSession session, string userText, IAgentResponseExtractor responseExtractor, ILogger logger,
+        CancellationToken cancellationToken)
     {
         var channel = Channel.CreateUnbounded<StageEvent>(new UnboundedChannelOptions
         {
@@ -194,7 +211,7 @@ internal static class ChatCommandHandler
 
         try
         {
-            var hasResponseText = await RenderStageBoxesAsync(channel.Reader, turnStopwatch, cancellationToken);
+            var hasResponseText = await RenderStageBoxesAsync(channel.Reader, turnStopwatch, logger, cancellationToken);
             await producer; // never faults -- ProduceStageEventsAsync catches everything -- just observed for hygiene.
 
             AnsiConsole.WriteLine();
@@ -211,7 +228,7 @@ internal static class ChatCommandHandler
         }
         catch (Exception ex)
         {
-            RedStarTelemetry.CreateLogger("RedStar.Cli.ChatCommandHandler").LogError(ex, "Error calling the model");
+            logger.LogError(ex, "Error calling the model");
             ConsoleOutput.Error.MarkupLine($"\n[red]Error calling the model:[/]\n{Markup.Escape(ex.ToString())}\n");
             return 1;
         }
@@ -220,9 +237,15 @@ internal static class ChatCommandHandler
     /// <summary>
     /// Drives the streamed turn and translates it into <see cref="StageEvent"/>s on <paramref name="writer"/>:
     /// reasoning text from <see cref="TextReasoningContent"/>, tool-status labels and completed web-search
-    /// hit lists via <paramref name="responseExtractor"/>, and the final answer's text chunks. Runs
-    /// concurrently with <see cref="RenderStageBoxesAsync"/> so the UI can start drawing a stage's box as
-    /// soon as that stage's first event lands, rather than after the whole turn completes. Completes the
+    /// hit lists via <paramref name="responseExtractor"/>, the final answer's text chunks, and a trailing
+    /// <see cref="UsageContent"/> update (when the server reports one -- see <c>UnslothAgentFactory</c>/
+    /// <c>LMStudioAgentFactory</c>'s <c>stream_options.include_usage</c> request field) carrying the whole
+    /// turn's output token count. That usage update arrives once, after every other event, with no stage of
+    /// its own -- <paramref name="writer"/> tags it with <paramref name="lastStage"/>'s current value (the
+    /// stage of whatever box happens to still be open), which is how the final box's footer in
+    /// <see cref="StageBox"/> ends up with the total tokens/speed and every earlier box in the turn does not.
+    /// Runs concurrently with <see cref="RenderStageBoxesAsync"/> so the UI can start drawing a stage's box
+    /// as soon as that stage's first event lands, rather than after the whole turn completes. Completes the
     /// channel (successfully or with the caught exception) when <see cref="ChatSession.SendAsync"/> returns
     /// or throws, which is how the reader side learns the turn is over.
     /// </summary>
@@ -230,30 +253,43 @@ internal static class ChatCommandHandler
         ChatSession session, string userText, IAgentResponseExtractor responseExtractor,
         ChannelWriter<StageEvent> writer, CancellationToken cancellationToken)
     {
+        var lastStage = TurnStage.Other;
+
         try
         {
             await session.SendAsync(
                 userText,
-                onTextChunk: chunk => writer.TryWrite(new StageEvent(TurnStage.Generating, chunk, null)),
+                onTextChunk: chunk =>
+                {
+                    lastStage = TurnStage.Generating;
+                    writer.TryWrite(new StageEvent(TurnStage.Generating, chunk, null));
+                },
                 onUpdate: update =>
                 {
                     foreach (var content in update.Contents)
                     {
                         if (content is TextReasoningContent { Text.Length: > 0 } reasoning)
                         {
+                            lastStage = TurnStage.Reasoning;
                             writer.TryWrite(new StageEvent(TurnStage.Reasoning, reasoning.Text, null));
+                        }
+                        else if (content is UsageContent { Details.OutputTokenCount: { } outputTokens })
+                        {
+                            writer.TryWrite(new StageEvent(lastStage, null, null, (int)outputTokens));
                         }
                     }
 
                     var status = responseExtractor.TryGetToolStatus(update);
                     if (status is not null)
                     {
+                        lastStage = TurnStage.Searching;
                         writer.TryWrite(new StageEvent(TurnStage.Searching, status, null));
                     }
 
                     var sites = responseExtractor.TryGetWebSearchResults(update);
                     if (sites is { Count: > 0 })
                     {
+                        lastStage = TurnStage.Searching;
                         writer.TryWrite(new StageEvent(TurnStage.Searching, null, sites));
                     }
                 },
@@ -297,7 +333,7 @@ internal static class ChatCommandHandler
     /// after it gets overwritten.
     /// </summary>
     private static async Task<bool> RenderStageBoxesAsync(
-        ChannelReader<StageEvent> reader, Stopwatch turnStopwatch, CancellationToken cancellationToken)
+        ChannelReader<StageEvent> reader, Stopwatch turnStopwatch, ILogger logger, CancellationToken cancellationToken)
     {
         var isLive = !Console.IsOutputRedirected;
         var hasResponseText = false;
@@ -328,7 +364,7 @@ internal static class ChatCommandHandler
             {
                 if (pendingStage is { } completedStage)
                 {
-                    RecordStageDuration(completedStage, turnStopwatch.ElapsedMilliseconds - stageStartMs);
+                    RecordStageDuration(completedStage, turnStopwatch.ElapsedMilliseconds - stageStartMs, logger);
                 }
 
                 stageStartMs = turnStopwatch.ElapsedMilliseconds;
@@ -391,6 +427,11 @@ internal static class ChatCommandHandler
                 hasResponseText = true;
             }
 
+            if (box.OutputTokenCount is { } outputTokens)
+            {
+                LogTokenUsage(outputTokens, turnStopwatch.Elapsed, logger);
+            }
+
             if (splitForHeight)
             {
                 chainCopyFilePath = box.CopyFilePath;
@@ -408,7 +449,7 @@ internal static class ChatCommandHandler
 
         if (pendingStage is { } finalStage)
         {
-            RecordStageDuration(finalStage, turnStopwatch.ElapsedMilliseconds - stageStartMs);
+            RecordStageDuration(finalStage, turnStopwatch.ElapsedMilliseconds - stageStartMs, logger);
         }
 
         return hasResponseText;
@@ -416,12 +457,14 @@ internal static class ChatCommandHandler
 
     /// <summary>
     /// Records one <see cref="RedStarTelemetry.StageDuration"/> measurement for a completed stage
-    /// occurrence. <see cref="TurnStage.Other"/> is the initial "waiting for the first event" box, not a
-    /// generation stage the model itself performs, so it's excluded -- only <see cref="TurnStage.Reasoning"/>,
+    /// occurrence, and logs it as a structured line so it also shows up in the OTEL logs view (the metric
+    /// alone only surfaces in a dashboard's metrics/histogram view, not its logs view). <see
+    /// cref="TurnStage.Other"/> is the initial "waiting for the first event" box, not a generation stage the
+    /// model itself performs, so it's excluded from both -- only <see cref="TurnStage.Reasoning"/>,
     /// <see cref="TurnStage.Searching"/> (tool calling), and <see cref="TurnStage.Generating"/> (the final
-    /// answer) are recorded.
+    /// answer) are recorded/logged.
     /// </summary>
-    private static void RecordStageDuration(string stage, long durationMs)
+    private static void RecordStageDuration(string stage, long durationMs, ILogger logger)
     {
         if (stage == TurnStage.Other)
         {
@@ -429,6 +472,24 @@ internal static class ChatCommandHandler
         }
 
         RedStarTelemetry.StageDuration.Record(durationMs, new KeyValuePair<string, object?>("stage", stage));
+        logger.LogInformation("Stage {Stage} completed in {StageDurationMs}ms", stage, durationMs);
+    }
+
+    /// <summary>
+    /// Logs the whole turn's output-token count and average tokens/second once a <c>UsageContent</c> update
+    /// has arrived (see <see cref="ProduceStageEventsAsync"/> and <see cref="StageBox.OutputTokenCount"/>) --
+    /// a structured log line rather than only the <see cref="StageBox"/> footer, so the number is also
+    /// recoverable from the OTEL logs, not just the terminal. <paramref name="elapsed"/> is the shared
+    /// turn-wide stopwatch, matching the same total used for the footer's speed figure -- the token count is
+    /// a whole-turn total, not this one box's share of it, so pairing it with anything narrower would be
+    /// meaningless.
+    /// </summary>
+    private static void LogTokenUsage(int outputTokenCount, TimeSpan elapsed, ILogger logger)
+    {
+        var tokensPerSecond = elapsed.TotalSeconds > 0 ? outputTokenCount / elapsed.TotalSeconds : 0;
+        logger.LogInformation(
+            "Turn produced {OutputTokenCount} output tokens in {ElapsedMs}ms ({TokensPerSecond:0.0} tok/s)",
+            outputTokenCount, elapsed.TotalMilliseconds, tokensPerSecond);
     }
 
     /// <summary>Applies events to <paramref name="box"/> for as long as they belong to its stage, invoking
@@ -565,6 +626,7 @@ internal static class ChatCommandHandler
         private IReadOnlyList<WebSearchResult>? _sites;
         private int _frame;
         private string? _copyFilePath;
+        private int? _outputTokenCount;
 
         /// <param name="sharedCopyFilePath">
         /// The previous box's <see cref="CopyFilePath"/> when this box is a same-stage "(cont'd)"
@@ -600,6 +662,14 @@ internal static class ChatCommandHandler
         /// next same-stage continuation box as <c>sharedCopyFilePath</c>.</summary>
         public string? CopyFilePath => _copyFilePath;
 
+        /// <summary>The whole turn's output-token count once a <c>UsageContent</c> update has landed on this
+        /// box (see <see cref="ChatCommandHandler.ProduceStageEventsAsync"/>), else null. Read by the caller
+        /// once this box seals, to log it via <see cref="ChatCommandHandler.LogTokenUsage"/> regardless of
+        /// whether this box itself is the one that renders it in its footer -- see
+        /// <see cref="TokensAndSpeedLabel"/>'s "(cont'd)" exclusion, which only governs the footer, not
+        /// telemetry.</summary>
+        public int? OutputTokenCount => _outputTokenCount;
+
         public void Tick() => _frame++;
 
         public void Apply(StageEvent evt)
@@ -617,6 +687,11 @@ internal static class ChatCommandHandler
             if (evt.Sites is { Count: > 0 })
             {
                 _sites = evt.Sites;
+            }
+
+            if (evt.OutputTokenCount is { } tokens)
+            {
+                _outputTokenCount = tokens;
             }
         }
 
@@ -648,9 +723,18 @@ internal static class ChatCommandHandler
                 body = new Markup(string.Join("\n\n", NonGeneratingBlocks()));
             }
 
-            var footerMarkup = final && HasText
-                ? $"[grey]{Markup.Escape(ElapsedLabel())}[/]  [link={EnsureCopyFileUri()}]Copy[/]"
-                : $"[grey]{Markup.Escape(ElapsedLabel())}[/]";
+            var footerMarkup = $"[grey]{Markup.Escape(ElapsedLabel())}[/]";
+            if (final && HasText)
+            {
+                var tokensLabel = TokensAndSpeedLabel();
+                if (tokensLabel is not null)
+                {
+                    footerMarkup = $"[grey]{Markup.Escape(tokensLabel)}[/]  {footerMarkup}";
+                }
+
+                footerMarkup += $"  [link={EnsureCopyFileUri()}]Copy[/]";
+            }
+
             var footer = Align.Right(new Markup(footerMarkup));
             var (header, color) = StageStyle(Stage, _isContinuation);
             return new Panel(new Rows(body, footer))
@@ -730,6 +814,28 @@ internal static class ChatCommandHandler
         {
             var elapsed = _stopwatch.Elapsed;
             return $"{(int)elapsed.TotalMinutes}m {elapsed.Seconds}s";
+        }
+
+        /// <summary>
+        /// The whole turn's output-token count and average tokens/second, or null when neither applies.
+        /// Null for a same-stage "(cont'd)" continuation box (<see cref="_isContinuation"/>) even once the
+        /// chain's later box carries the count -- the count/speed describes the entire turn, not this one
+        /// fragment's share of it, so it's only ever shown on a box that was never split for height. Null
+        /// also whenever no <c>UsageContent</c> update ever arrived (see <see cref="ProduceStageEventsAsync"/>),
+        /// which happens when the server doesn't report usage. Speed divides by <see cref="_stopwatch"/>'s
+        /// elapsed time (shared across the whole turn, not just this box) since the token count itself is a
+        /// whole-turn total, not this box's own.
+        /// </summary>
+        private string? TokensAndSpeedLabel()
+        {
+            if (_isContinuation || _outputTokenCount is not { } tokens)
+            {
+                return null;
+            }
+
+            var elapsedSeconds = _stopwatch.Elapsed.TotalSeconds;
+            var speed = elapsedSeconds > 0 ? tokens / elapsedSeconds : 0;
+            return $"{tokens} tok, {speed:0.0} tok/s";
         }
 
         /// <summary>
@@ -835,26 +941,40 @@ internal static class ChatCommandHandler
     private static void PrintBoxBottomBorder(int width, Color color) =>
         AnsiConsole.MarkupLine($"[{color.ToMarkup()}]╰{new string('─', width - 2)}╯[/]");
 
+    /// <summary>One agent's resolved connection settings for this run, picked from <see cref="RedStarOptions.Agent"/>
+    /// once at the top of <see cref="RunAsync"/> instead of every call site reaching into
+    /// <c>options.Agents.Unsloth</c>/<c>options.Agents.LMStudio</c> directly. <see cref="WebSearchEnabled"/> is
+    /// null for an agent with no such concept (LM Studio), rather than false, so <see cref="PrintStartupInfoBox"/>
+    /// can tell "disabled" apart from "not applicable" and omit the row entirely for the latter.</summary>
+    private readonly record struct ActiveAgentSettings(string AgentName, string BaseUrl, string ApiKey, bool? WebSearchEnabled);
+
+    private static ActiveAgentSettings ResolveActiveAgentSettings(RedStarOptions options) =>
+        string.Equals(options.Agent, AgentNames.LMStudio, StringComparison.OrdinalIgnoreCase)
+            ? new ActiveAgentSettings(AgentNames.LMStudio, options.Agents.LMStudio.BaseUrl, options.Agents.LMStudio.ApiKey, null)
+            : new ActiveAgentSettings(
+                AgentNames.Unsloth, options.Agents.Unsloth.BaseUrl, options.Agents.Unsloth.ApiKey, options.Agents.Unsloth.WebSearchEnabled);
+
     /// <summary>
-    /// Resolves and validates the model to chat with by checking it against the server's
-    /// <c>/v1/models</c> list before any chat request is made -- this always makes the call
-    /// (whether or not <see cref="UnslothAgentOptions.DefaultModel"/> is set) so an unloaded or
-    /// nonexistent model is caught here, with a clear message, instead of surfacing later as a
-    /// misleading "the model returned no response" once the chat stream unexpectedly ends empty.
-    /// See <see cref="ModelSelector.SelectDefault"/> for the resolution/trust rules.
+    /// Resolves and validates the model to chat with by checking it against the server's model list before
+    /// any chat request is made -- this always makes the call (whether or not <paramref name="configuredDefault"/>
+    /// is set) so an unloaded or nonexistent model is caught here, with a clear message, instead of surfacing
+    /// later as a misleading "the model returned no response" once the chat stream unexpectedly ends empty.
+    /// See <see cref="ModelSelector.SelectDefault"/> for the resolution/trust rules, including what
+    /// <paramref name="allowJitLoad"/> changes.
     /// </summary>
     private static async Task<ModelSelectionResult> ResolveModelAsync(
-        RedStarOptions options, CancellationToken cancellationToken, Func<RedStarOptions, IModelsClient>? modelsClientFactory)
+        string? configuredDefault, bool allowJitLoad, RedStarOptions options, CancellationToken cancellationToken,
+        Func<RedStarOptions, IModelsClient> modelsClientFactory)
     {
         return await AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots)
             .StartAsync("Checking available models...", async _ =>
             {
-                var modelsClient = modelsClientFactory is null ? new ModelsClient(options) : modelsClientFactory(options);
+                var modelsClient = modelsClientFactory(options);
                 try
                 {
                     var models = await modelsClient.ListAsync(cancellationToken);
-                    var result = ModelSelector.SelectDefault(models, options.Agents.Unsloth.DefaultModel);
+                    var result = ModelSelector.SelectDefault(models, configuredDefault, allowJitLoad);
                     if (!result.Succeeded)
                     {
                         ConsoleOutput.Error.MarkupLine($"[red]{Markup.Escape(result.ErrorMessage!)}[/]");
@@ -877,31 +997,42 @@ internal static class ChatCommandHandler
     }
 
     /// <summary>
-    /// Prints a boxed summary of this run's effective configuration -- endpoint, whether an API key is
-    /// configured, the resolved model plus whether it was picked implicitly or explicitly (see
-    /// <see cref="ModelSelectionSource"/>), web search, and telemetry export -- once per run, before any
-    /// chat request goes out. Mirrors the same fields onto <paramref name="activity"/>'s tags
-    /// (<c>redstar.config.*</c>) and one structured log line so this is recoverable from telemetry too, not
-    /// just from the terminal -- the box itself is stdout-only and gone once the terminal scrolls past it.
+    /// Prints a boxed summary of this run's effective configuration -- which agent, endpoint, whether an
+    /// API key is configured, the resolved model plus how it was picked (see
+    /// <see cref="ModelSelectionSource"/>), web search (when the active agent has such a concept), and
+    /// telemetry export -- once per run, before any chat request goes out. Mirrors the same fields onto
+    /// <paramref name="activity"/>'s tags (<c>redstar.config.*</c>) and one structured log line so this is
+    /// recoverable from telemetry too, not just from the terminal -- the box itself is stdout-only and gone
+    /// once the terminal scrolls past it.
     /// </summary>
     private static void PrintStartupInfoBox(
-        RedStarOptions options, string runId, string modelId, ModelSelectionSource modelSource, Activity? activity, ILogger logger)
+        ActiveAgentSettings active, OtelOptions otel, string runId, string modelId, ModelSelectionSource modelSource,
+        Activity? activity, ILogger logger)
     {
-        var unsloth = options.Agents.Unsloth;
-        var apiKeyConfigured = !string.IsNullOrEmpty(unsloth.ApiKey);
-        var modelSourceLabel = modelSource == ModelSelectionSource.Explicit ? "explicit (configured)" : "implicit (auto-detected)";
+        var apiKeyConfigured = !string.IsNullOrEmpty(active.ApiKey);
+        var modelSourceLabel = modelSource switch
+        {
+            ModelSelectionSource.Explicit => "explicit (configured)",
+            ModelSelectionSource.PendingJitLoad => "explicit (configured, loading on first request)",
+            _ => "implicit (auto-detected)",
+        };
 
         var table = new Table().Border(TableBorder.None).HideHeaders();
         table.AddColumn(new TableColumn(string.Empty).NoWrap());
         table.AddColumn(string.Empty);
+        table.AddRow("[grey]Agent[/]", Markup.Escape(active.AgentName));
         table.AddRow("[grey]Run ID[/]", Markup.Escape(runId));
-        table.AddRow("[grey]Endpoint[/]", Markup.Escape(unsloth.BaseUrl));
+        table.AddRow("[grey]Endpoint[/]", Markup.Escape(active.BaseUrl));
         table.AddRow("[grey]API key[/]", apiKeyConfigured ? "[green]configured[/]" : "[yellow]not configured[/]");
         table.AddRow("[grey]Model[/]", $"[green]{Markup.Escape(modelId)}[/] [grey]({modelSourceLabel})[/]");
-        table.AddRow("[grey]Web search[/]", unsloth.WebSearchEnabled ? "[green]enabled[/]" : "disabled");
+        if (active.WebSearchEnabled is { } webSearchEnabled)
+        {
+            table.AddRow("[grey]Web search[/]", webSearchEnabled ? "[green]enabled[/]" : "disabled");
+        }
+
         table.AddRow(
             "[grey]Telemetry[/]",
-            options.Otel.Enabled ? $"[green]enabled[/] -> {Markup.Escape(options.Otel.Endpoint)}" : "disabled");
+            otel.Enabled ? $"[green]enabled[/] -> {Markup.Escape(otel.Endpoint)}" : "disabled");
 
         var panel = new Panel(table)
             .Header("[bold]Startup configuration[/]")
@@ -910,19 +1041,24 @@ internal static class ChatCommandHandler
             .Expand();
         AnsiConsole.Write(panel);
 
-        activity?.SetTag("redstar.config.endpoint", unsloth.BaseUrl);
+        activity?.SetTag("redstar.config.agent", active.AgentName);
+        activity?.SetTag("redstar.config.endpoint", active.BaseUrl);
         activity?.SetTag("redstar.config.api_key_configured", apiKeyConfigured);
         activity?.SetTag("redstar.config.model", modelId);
         activity?.SetTag("redstar.config.model_source", modelSource.ToString());
-        activity?.SetTag("redstar.config.web_search_enabled", unsloth.WebSearchEnabled);
-        activity?.SetTag("redstar.config.telemetry_enabled", options.Otel.Enabled);
-        activity?.SetTag("redstar.config.telemetry_endpoint", options.Otel.Endpoint);
+        if (active.WebSearchEnabled is { } webSearchTag)
+        {
+            activity?.SetTag("redstar.config.web_search_enabled", webSearchTag);
+        }
+
+        activity?.SetTag("redstar.config.telemetry_enabled", otel.Enabled);
+        activity?.SetTag("redstar.config.telemetry_endpoint", otel.Endpoint);
 
         logger.LogInformation(
-            "Startup configuration for run {RunId}: endpoint={Endpoint} apiKeyConfigured={ApiKeyConfigured} " +
+            "Startup configuration for run {RunId}: agent={Agent} endpoint={Endpoint} apiKeyConfigured={ApiKeyConfigured} " +
             "model={ModelId} modelSource={ModelSource} webSearchEnabled={WebSearchEnabled} " +
             "telemetryEnabled={TelemetryEnabled} telemetryEndpoint={TelemetryEndpoint}",
-            runId, unsloth.BaseUrl, apiKeyConfigured, modelId, modelSource, unsloth.WebSearchEnabled,
-            options.Otel.Enabled, options.Otel.Endpoint);
+            runId, active.AgentName, active.BaseUrl, apiKeyConfigured, modelId, modelSource,
+            active.WebSearchEnabled, otel.Enabled, otel.Endpoint);
     }
 }

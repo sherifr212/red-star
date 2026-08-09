@@ -47,13 +47,19 @@ public class UnslothAgentFactoryTests
     }
 
     [Fact]
-    public void CreateChatOptions_ReturnsNull_WhenWebSearchDisabled()
+    public void CreateChatOptions_RequestsStreamUsage_ButNotWebSearchFields_WhenWebSearchDisabled()
     {
         var options = WithWebSearchEnabled(false);
-
         var chatOptions = UnslothAgentFactory.CreateChatOptions(options);
 
-        Assert.Null(chatOptions);
+        var raw = chatOptions.RawRepresentationFactory!(null!);
+        var completionOptions = Assert.IsType<ChatCompletionOptions>(raw);
+
+        var json = ModelReaderWriter.Write(completionOptions, ModelReaderWriterOptions.Json).ToString();
+
+        Assert.Contains("\"stream_options\":{\"include_usage\":true}", json);
+        Assert.DoesNotContain("enable_tools", json);
+        Assert.DoesNotContain("enabled_tools", json);
     }
 
     [Fact]
@@ -63,21 +69,21 @@ public class UnslothAgentFactoryTests
 
         var chatOptions = UnslothAgentFactory.CreateChatOptions(options);
 
-        Assert.NotNull(chatOptions);
-        Assert.NotNull(chatOptions!.RawRepresentationFactory);
+        Assert.NotNull(chatOptions.RawRepresentationFactory);
     }
 
     [Fact]
-    public void CreateChatOptions_RawRepresentation_IsChatCompletionOptionsWithOnlyWebSearchEnabled()
+    public void CreateChatOptions_RawRepresentation_IsChatCompletionOptionsWithStreamUsageAndWebSearchEnabled()
     {
         var options = WithWebSearchEnabled(true);
         var chatOptions = UnslothAgentFactory.CreateChatOptions(options);
 
-        var raw = chatOptions!.RawRepresentationFactory!(null!);
+        var raw = chatOptions.RawRepresentationFactory!(null!);
         var completionOptions = Assert.IsType<ChatCompletionOptions>(raw);
 
         var json = ModelReaderWriter.Write(completionOptions, ModelReaderWriterOptions.Json).ToString();
 
+        Assert.Contains("\"stream_options\":{\"include_usage\":true}", json);
         Assert.Contains("\"enable_tools\":true", json);
         Assert.Contains("\"enabled_tools\":[\"web_search\"]", json);
     }
@@ -134,7 +140,7 @@ public class UnslothAgentFactoryTests
         };
         var openAiClient = new OpenAIClient(new ApiKeyCredential("test"), clientOptions);
 
-        var chatOptions = UnslothAgentFactory.CreateChatOptions(WithWebSearchEnabled(true))!;
+        var chatOptions = UnslothAgentFactory.CreateChatOptions(WithWebSearchEnabled(true));
         AIAgent agent = openAiClient.GetChatClient("m").AsAIAgent(new ChatClientAgentOptions { ChatOptions = chatOptions });
 
         await agent.RunAsync("hi");
