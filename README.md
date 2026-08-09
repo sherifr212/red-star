@@ -25,8 +25,9 @@ and wraps it one layer higher instead of consuming it directly.
 - **No-auth friendly** — works against a server with no API key configured (LM Studio's default).
 - **Two agent backends** — Unsloth Studio and LM Studio, selected with `--agent`; each keeps its own
   endpoint/API key/default model, so switching one never disturbs the other's settings.
-- **Unsloth extensions** — server-side web search tool support via Unsloth's extended
-  chat-completions fields.
+- **Unsloth extensions** — opt into Unsloth's server-side tools (`python`, `bash`, `web_search`) via
+  its extended chat-completions fields; any tool name the server recognizes works, not just the
+  documented three.
 - **LM Studio just-in-time loading** — a configured default model that isn't currently loaded doesn't
   have to be a hard failure like it is for Unsloth; LM Studio can load it on the first request, and
   RedStar's model resolution knows to trust that instead of erroring. `redstar models --agent
@@ -150,7 +151,7 @@ like telemetry, stay top-level.
 | `RedStar:Agents:Unsloth:BaseUrl` | `http://127.0.0.1:8888/v1` | Base URL of Unsloth's OpenAI-compatible API. |
 | `RedStar:Agents:Unsloth:ApiKey` | *(empty)* | Bearer API key. Empty means "talk to a server with no auth." |
 | `RedStar:Agents:Unsloth:DefaultModel` | *(empty)* | Model to use when none is specified. If left empty, the currently loaded model is auto-detected (fails if zero or more than one model is loaded). |
-| `RedStar:Agents:Unsloth:WebSearchEnabled` | `false` | Enables Unsloth's server-side web search tool. Config/env-only, no CLI flag. |
+| `RedStar:Agents:Unsloth:EnabledTools` | `[]` | Names of Unsloth server-side tools to opt into, e.g. `["web_search", "python"]` (documented names: `python`, `bash`, `web_search`, but any name the server recognizes works). Config/env-only, no CLI flag. |
 | `RedStar:Agents:LMStudio:BaseUrl` | `http://127.0.0.1:1234/v1` | Base URL of LM Studio's OpenAI-compatible API. |
 | `RedStar:Agents:LMStudio:ApiKey` | *(empty)* | Bearer API key. LM Studio has no auth by default, so this is usually left empty. |
 | `RedStar:Agents:LMStudio:DefaultModel` | *(empty)* | Model to use when none is specified. Unlike Unsloth, this doesn't have to already be loaded — LM Studio can load it just-in-time on the first request. Auto-detects the same way as Unsloth if left empty. |

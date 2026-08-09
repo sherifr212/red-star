@@ -1,5 +1,6 @@
 using System.ClientModel;
 using System.ClientModel.Primitives;
+using System.Text.Json;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -49,7 +50,8 @@ public static class UnslothAgentFactory
     /// <c>StreamOptions</c> property is internal, not modeled for external callers, same reason
     /// Unsloth's own fields below go through <c>Patch</c>) so a final <c>UsageContent</c> update carries the
     /// turn's output token count -- see <see cref="RedStar.Cli.ChatCommandHandler"/>'s per-block token/speed
-    /// footer. Also applies Unsloth-specific fields via <c>Patch</c> when web search is enabled.
+    /// footer. Also applies Unsloth-specific fields via <c>Patch</c> when any tool is enabled (see
+    /// <see cref="RedStarOptions.EnabledTools"/> on <see cref="UnslothAgentOptions"/>).
     /// </summary>
     public static ChatOptions CreateChatOptions(RedStarOptions options)
     {
@@ -59,10 +61,12 @@ public static class UnslothAgentFactory
 #pragma warning disable SCME0001 // Patch is an evaluation-only OpenAI SDK API for fields it doesn't model yet.
         completionOptions.Patch.Set("$.stream_options.include_usage"u8, true);
 
-        if (options.Agents.Unsloth.WebSearchEnabled)
+        var enabledTools = options.Agents.Unsloth.EnabledTools;
+        if (enabledTools.Count > 0)
         {
             completionOptions.Patch.Set("$.enable_tools"u8, true);
-            completionOptions.Patch.Set("$.enabled_tools"u8, BinaryData.FromString("""["web_search"]"""));
+            completionOptions.Patch.Set(
+                "$.enabled_tools"u8, BinaryData.FromString(JsonSerializer.Serialize(enabledTools)));
         }
 #pragma warning restore SCME0001
 

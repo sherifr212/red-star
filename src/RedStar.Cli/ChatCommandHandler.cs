@@ -957,16 +957,16 @@ internal static class ChatCommandHandler
 
     /// <summary>One agent's resolved connection settings for this run, picked from <see cref="RedStarOptions.Agent"/>
     /// once at the top of <see cref="RunAsync"/> instead of every call site reaching into
-    /// <c>options.Agents.Unsloth</c>/<c>options.Agents.LMStudio</c> directly. <see cref="WebSearchEnabled"/> is
-    /// null for an agent with no such concept (LM Studio), rather than false, so <see cref="PrintStartupInfoBox"/>
-    /// can tell "disabled" apart from "not applicable" and omit the row entirely for the latter.</summary>
-    private readonly record struct ActiveAgentSettings(string AgentName, string BaseUrl, string ApiKey, bool? WebSearchEnabled);
+    /// <c>options.Agents.Unsloth</c>/<c>options.Agents.LMStudio</c> directly. <see cref="EnabledTools"/> is
+    /// null for an agent with no such concept (LM Studio), rather than an empty list, so <see cref="PrintStartupInfoBox"/>
+    /// can tell "no tools enabled" apart from "not applicable" and omit the row entirely for the latter.</summary>
+    private readonly record struct ActiveAgentSettings(string AgentName, string BaseUrl, string ApiKey, IReadOnlyList<string>? EnabledTools);
 
     private static ActiveAgentSettings ResolveActiveAgentSettings(RedStarOptions options) =>
         string.Equals(options.Agent, AgentNames.LMStudio, StringComparison.OrdinalIgnoreCase)
             ? new ActiveAgentSettings(AgentNames.LMStudio, options.Agents.LMStudio.BaseUrl, options.Agents.LMStudio.ApiKey, null)
             : new ActiveAgentSettings(
-                AgentNames.Unsloth, options.Agents.Unsloth.BaseUrl, options.Agents.Unsloth.ApiKey, options.Agents.Unsloth.WebSearchEnabled);
+                AgentNames.Unsloth, options.Agents.Unsloth.BaseUrl, options.Agents.Unsloth.ApiKey, options.Agents.Unsloth.EnabledTools);
 
     /// <summary>
     /// Resolves and validates the model to chat with by checking it against the server's model list before
@@ -1013,11 +1013,11 @@ internal static class ChatCommandHandler
     /// <summary>
     /// Prints a boxed summary of this run's effective configuration -- which agent, endpoint, whether an
     /// API key is configured, the resolved model plus how it was picked (see
-    /// <see cref="ModelSelectionSource"/>), web search (when the active agent has such a concept), and
-    /// telemetry export -- once per run, before any chat request goes out. Mirrors the same fields onto
-    /// <paramref name="activity"/>'s tags (<c>redstar.config.*</c>) and one structured log line so this is
-    /// recoverable from telemetry too, not just from the terminal -- the box itself is stdout-only and gone
-    /// once the terminal scrolls past it.
+    /// <see cref="ModelSelectionSource"/>), every known tool's on/off state (when the active agent has such
+    /// a concept -- see <see cref="UnslothTools.Known"/>), and telemetry export -- once per run, before any
+    /// chat request goes out. Mirrors the same fields onto <paramref name="activity"/>'s tags
+    /// (<c>redstar.config.*</c>) and one structured log line so this is recoverable from telemetry too, not
+    /// just from the terminal -- the box itself is stdout-only and gone once the terminal scrolls past it.
     /// </summary>
     private static void PrintStartupInfoBox(
         ActiveAgentSettings active, OtelOptions otel, string runId, string modelId, ModelSelectionSource modelSource,
@@ -1039,9 +1039,9 @@ internal static class ChatCommandHandler
         table.AddRow("[grey]Endpoint[/]", Markup.Escape(active.BaseUrl));
         table.AddRow("[grey]API key[/]", apiKeyConfigured ? "[green]configured[/]" : "[yellow]not configured[/]");
         table.AddRow("[grey]Model[/]", $"[green]{Markup.Escape(modelId)}[/] [grey]({modelSourceLabel})[/]");
-        if (active.WebSearchEnabled is { } webSearchEnabled)
+        if (active.EnabledTools is { } enabledTools)
         {
-            table.AddRow("[grey]Web search[/]", webSearchEnabled ? "[green]enabled[/]" : "disabled");
+            table.AddRow("[grey]Tools[/]", FormatToolsSummary(enabledTools));
         }
 
         table.AddRow(
@@ -1060,9 +1060,9 @@ internal static class ChatCommandHandler
         activity?.SetTag("redstar.config.api_key_configured", apiKeyConfigured);
         activity?.SetTag("redstar.config.model", modelId);
         activity?.SetTag("redstar.config.model_source", modelSource.ToString());
-        if (active.WebSearchEnabled is { } webSearchTag)
+        if (active.EnabledTools is { } enabledToolsForTag)
         {
-            activity?.SetTag("redstar.config.web_search_enabled", webSearchTag);
+            activity?.SetTag("redstar.config.enabled_tools", string.Join(",", enabledToolsForTag));
         }
 
         activity?.SetTag("redstar.config.telemetry_enabled", otel.Enabled);
@@ -1070,9 +1070,30 @@ internal static class ChatCommandHandler
 
         logger.LogInformation(
             "Startup configuration for run {RunId}: agent={Agent} endpoint={Endpoint} apiKeyConfigured={ApiKeyConfigured} " +
-            "model={ModelId} modelSource={ModelSource} webSearchEnabled={WebSearchEnabled} " +
+            "model={ModelId} modelSource={ModelSource} enabledTools={EnabledTools} " +
             "telemetryEnabled={TelemetryEnabled} telemetryEndpoint={TelemetryEndpoint}",
             runId, active.AgentName, active.BaseUrl, apiKeyConfigured, modelId, modelSource,
-            active.WebSearchEnabled, otel.Enabled, otel.Endpoint);
+            active.EnabledTools is null ? "n/a" : string.Join(",", active.EnabledTools), otel.Enabled, otel.Endpoint);
+    }
+
+    /// <summary>
+    /// Renders every documented Unsloth tool (<see cref="UnslothTools.Known"/>) plus any extra names present
+    /// in <paramref name="enabledTools"/> that aren't in that list (a custom/undocumented tool name, since
+    /// <see cref="RedStarOptions.EnabledTools"/> on <c>UnslothAgentOptions</c> is free-form) -- one per line,
+    /// each tagged with its current enabled/disabled state, so the startup box always shows the full
+    /// picture rather than only what happens to be turned on.
+    /// </summary>
+    private static string FormatToolsSummary(IReadOnlyList<string> enabledTools)
+    {
+        var enabledSet = new HashSet<string>(enabledTools, StringComparer.OrdinalIgnoreCase);
+        var names = UnslothTools.Known
+            .Concat(enabledTools.Where(t => !UnslothTools.Known.Contains(t, StringComparer.OrdinalIgnoreCase)))
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+
+        return string.Join(
+            "\n",
+            names.Select(name => enabledSet.Contains(name)
+                ? $"[green]{Markup.Escape(name)}: enabled[/]"
+                : $"[grey]{Markup.Escape(name)}: disabled[/]"));
     }
 }

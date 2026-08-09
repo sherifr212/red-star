@@ -69,21 +69,21 @@ public class RedStarOptionsTests
     }
 
     [Fact]
-    public void WebSearchEnabled_DefaultsToFalse()
+    public void EnabledTools_DefaultsToEmpty()
     {
-        Assert.False(new RedStarOptions().Agents.Unsloth.WebSearchEnabled);
+        Assert.Empty(new RedStarOptions().Agents.Unsloth.EnabledTools);
     }
 
     [Fact]
-    public void ApplyOverrides_PreservesWebSearchEnabled_WhichHasNoCliOverride()
+    public void ApplyOverrides_PreservesEnabledTools_WhichHasNoCliOverride()
     {
         var original = Original();
-        original.Agents.Unsloth.WebSearchEnabled = true;
+        original.Agents.Unsloth.EnabledTools = ["web_search", "python"];
 
         var result = original.ApplyOverrides(
             baseUrl: "http://override/v1", apiKey: "override-key", defaultModel: "override-model");
 
-        Assert.True(result.Agents.Unsloth.WebSearchEnabled);
+        Assert.Equal(["web_search", "python"], result.Agents.Unsloth.EnabledTools);
     }
 
     [Fact]
@@ -111,7 +111,8 @@ public class RedStarOptionsTests
     /// <summary>
     /// Guards against regressing to a field-by-field <c>ApplyOverrides</c> implementation that silently drops
     /// any property with no corresponding CLI override (the bug that dropped
-    /// <see cref="UnslothAgentOptions.WebSearchEnabled"/>). Walks every public settable property via
+    /// <see cref="UnslothAgentOptions.EnabledTools"/>'s predecessor, a single <c>WebSearchEnabled</c> bool).
+    /// Walks every public settable property via
     /// reflection instead of naming them, so a future property added to <see cref="RedStarOptions"/> is
     /// covered automatically without anyone remembering to update this test.
     /// </summary>
@@ -140,7 +141,7 @@ public class RedStarOptionsTests
                                     BaseUrl = "http://sample-unsloth",
                                     ApiKey = "sample-key",
                                     DefaultModel = "sample-model",
-                                    WebSearchEnabled = true,
+                                    EnabledTools = ["web_search", "python"],
                                 },
                                 LMStudio = new LMStudioAgentOptions
                                 {

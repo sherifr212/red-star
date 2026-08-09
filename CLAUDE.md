@@ -185,7 +185,7 @@ endpoint/default model instead of passing them as flags every run.
 default `AgentNames.Unsloth`) selects which agent backend a run talks to — see
 [Project layout](#project-layout) for how that selection is consumed. `RedStarOptions` is treated as a
 "mega project" config root rather than a flat bag of Unsloth settings: agent-specific settings
-(`BaseUrl`, `ApiKey`, `DefaultModel`, plus Unsloth's own `WebSearchEnabled`) are nested under
+(`BaseUrl`, `ApiKey`, `DefaultModel`, plus Unsloth's own `EnabledTools`) are nested under
 `RedStarOptions.Agents.Unsloth`/`RedStarOptions.Agents.LMStudio` (`UnslothAgentOptions`/
 `LMStudioAgentOptions` records, config keys `RedStar:Agents:Unsloth:*`/`RedStar:Agents:LMStudio:*`,
 env vars `RedStar__Agents__Unsloth__*`/`RedStar__Agents__LMStudio__*`) instead of living flat on
@@ -199,11 +199,12 @@ genuinely agent-agnostic, not specific to any one agent.
 `RedStarOptions.ApplyOverrides` can rebuild them with `with` expressions rather than a deep-clone by
 hand. `RedStarOptions.ApplyOverrides` implements the CLI-flags-win-if-non-blank step against whichever
 single agent's section the resolved `Agent` points at (`Agents.Unsloth`'s three overridable fields, or
-`Agents.LMStudio`'s); `Unsloth.WebSearchEnabled` has no CLI flag (config/env-only), but
-`ApplyOverrides` must still carry its value through into the new instance it returns — it was dropped
-(silently reset to `false`) for a while because the method only copied the three overridable fields,
-and every CLI run rebuilds `RedStarOptions` via `ApplyOverrides`. See the
-`ApplyOverrides_PreservesWebSearchEnabled_WhichHasNoCliOverride` test.
+`Agents.LMStudio`'s); `Unsloth.EnabledTools` has no CLI flag (config/env-only), but
+`ApplyOverrides` must still carry its value through into the new instance it returns — this list's
+predecessor, a single `WebSearchEnabled` bool, was dropped (silently reset to `false`) for a while
+because the method only copied the three overridable fields, and every CLI run rebuilds
+`RedStarOptions` via `ApplyOverrides`. See the
+`ApplyOverrides_PreservesEnabledTools_WhichHasNoCliOverride` test.
 
 ### Telemetry
 
@@ -216,7 +217,7 @@ unit tests or any path that never runs the bootstrapper.
 `RedStar.Cli/Telemetry/TelemetryBootstrapper.Configure` is the *only* place the OTel SDK/exporter/
 instrumentation packages are referenced — it builds the `TracerProvider`/`MeterProvider`/
 `ILoggerFactory` from `RedStarOptions.Otel` (`Enabled`, default `true`; `Endpoint`, default
-`http://localhost:4317` — config/env-only like `WebSearchEnabled`, no CLI flag) and assigns the logger
+`http://localhost:4317` — config/env-only like `EnabledTools`, no CLI flag) and assigns the logger
 factory to `RedStarTelemetry.LoggerFactory`. `Program.cs` holds it in a `using` around `app.RunAsync`
 so providers flush on normal exit, an unhandled exception, or Ctrl+C.
 
@@ -279,8 +280,10 @@ resolution failed and which of the three success paths was taken.
 
 `ChatCommandHandler.PrintStartupInfoBox` prints a boxed summary of the run's effective configuration
 (which agent, endpoint, whether an API key is configured, the resolved model plus how it was picked,
-web search when the active agent has such a concept, telemetry export) once per run before any chat
-request goes out, and mirrors the same fields
+every documented Unsloth tool's enabled/disabled state (via `UnslothTools.Known`, see
+[Unsloth-specific request fields via `Patch`](#unsloth-specific-request-fields-via-patch)) when the
+active agent has such a concept, telemetry export) once per run before any chat request goes out,
+and mirrors the same fields
 onto the run's OTel activity as `redstar.config.*` tags plus one structured log line, so the resolved
 configuration is recoverable from telemetry too.
 
@@ -292,8 +295,13 @@ Unsloth's API extends OpenAI's chat-completions schema with fields the OpenAI SD
 (`System.ClientModel.Primitives.JsonPatch`, gated behind diagnostic `SCME0001` — suppress locally with
 a scoped `#pragma`, don't blanket-suppress project-wide), then handed to `Microsoft.Extensions.AI` via
 `ChatOptions.RawRepresentationFactory`. See `UnslothAgentFactory.CreateChatOptions` for the current
-example (toggles Unsloth's server-side `web_search` tool from
-`RedStarOptions.Agents.Unsloth.WebSearchEnabled`).
+example: whenever `RedStarOptions.Agents.Unsloth.EnabledTools` is non-empty, it sends `enable_tools:
+true` and `enabled_tools` as that list verbatim. `EnabledTools` is free-form (any string Unsloth's
+server recognizes works, not just the documented `python`/`bash`/`web_search` three catalogued in
+`RedStar.Base.Agents.Unsloth.UnslothTools.Known`) — adding a newly-documented Unsloth tool needs no
+code change here, only a config value; `UnslothTools.Known` only exists so
+`ChatCommandHandler.PrintStartupInfoBox` (see [Model resolution](#model-resolution)) can enumerate
+every documented tool's on/off state at startup, not to gate what `CreateChatOptions` will send.
 
 `Create` composes that `ChatOptions` as the built agent's *default* `ChatOptions` (via
 `ChatClientAgentOptions`), so it applies to every run automatically instead of every call site having

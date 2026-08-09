@@ -37,7 +37,7 @@ public sealed class RedStarOptions
     /// <see cref="AgentsOptions.Unsloth"/>. The other agent's section is left completely untouched either way.
     /// Clones via <see cref="MemberwiseClone"/> rather than a field-by-field object initializer so that
     /// properties with no CLI override (like <see cref="OtelOptions"/> or
-    /// <see cref="UnslothAgentOptions.WebSearchEnabled"/>) are carried over automatically instead of
+    /// <see cref="UnslothAgentOptions.EnabledTools"/>) are carried over automatically instead of
     /// silently resetting to their default whenever a new property is added to this class or its nested
     /// option types. Only reassigns <see cref="Agents"/>/the targeted nested options record when at least one
     /// of <paramref name="baseUrl"/>/<paramref name="apiKey"/>/<paramref name="defaultModel"/> is non-blank, so
@@ -105,17 +105,20 @@ public sealed record UnslothAgentOptions
     public string DefaultModel { get; set; } = "";
 
     /// <summary>
-    /// When true, requests opt into Unsloth's server-side web search tool
-    /// (sent as <c>enabled_tools: ["web_search"]</c>). See
-    /// <see cref="RedStar.Base.Agents.Unsloth.UnslothAgentFactory.CreateChatOptions"/>.
+    /// Names of Unsloth server-side tools to opt into, sent verbatim as <c>enabled_tools</c> (e.g.
+    /// <c>["web_search", "python"]</c>); <c>enable_tools</c> is only sent when this is non-empty. Free-form
+    /// -- any name the server recognizes works via config alone, no code change required -- see
+    /// <see cref="RedStar.Base.Agents.Unsloth.UnslothTools"/> for the documented names and
+    /// <see cref="RedStar.Base.Agents.Unsloth.UnslothAgentFactory.CreateChatOptions"/> for how this is sent.
+    /// Config/env-only, no CLI flag.
     /// </summary>
-    public bool WebSearchEnabled { get; set; }
+    public List<string> EnabledTools { get; set; } = [];
 }
 
 /// <summary>
 /// LM Studio agent connection/behavior settings, nested at <c>RedStar:Agents:LMStudio:*</c>. No
-/// <c>WebSearchEnabled</c> equivalent -- LM Studio has no built-in server-side web search tool, unlike
-/// Unsloth. Default <see cref="BaseUrl"/> matches LM Studio's default local server port (1234); LM Studio's
+/// <c>EnabledTools</c> equivalent -- LM Studio has no built-in server-side tools, unlike Unsloth.
+/// Default <see cref="BaseUrl"/> matches LM Studio's default local server port (1234); LM Studio's
 /// native REST endpoints (used by <see cref="RedStar.Base.Agents.LMStudio.LMStudioModelsClient"/> for
 /// richer model listing) hang off the same host/port, under <c>/api/v0/*</c> instead of <c>/v1/*</c>.
 /// </summary>

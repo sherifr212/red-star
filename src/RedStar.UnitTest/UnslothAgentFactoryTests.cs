@@ -13,8 +13,8 @@ namespace RedStar.UnitTest;
 
 public class UnslothAgentFactoryTests
 {
-    private static RedStarOptions WithWebSearchEnabled(bool enabled) =>
-        new() { Agents = new AgentsOptions { Unsloth = new UnslothAgentOptions { WebSearchEnabled = enabled } } };
+    private static RedStarOptions WithEnabledTools(params string[] tools) =>
+        new() { Agents = new AgentsOptions { Unsloth = new UnslothAgentOptions { EnabledTools = [.. tools] } } };
 
     [Fact]
     public void Create_Throws_WhenOptionsIsNull()
@@ -47,9 +47,9 @@ public class UnslothAgentFactoryTests
     }
 
     [Fact]
-    public void CreateChatOptions_RequestsStreamUsage_ButNotWebSearchFields_WhenWebSearchDisabled()
+    public void CreateChatOptions_RequestsStreamUsage_ButNotToolFields_WhenNoToolsEnabled()
     {
-        var options = WithWebSearchEnabled(false);
+        var options = WithEnabledTools();
         var chatOptions = UnslothAgentFactory.CreateChatOptions(options);
 
         var raw = chatOptions.RawRepresentationFactory!(null!);
@@ -63,9 +63,9 @@ public class UnslothAgentFactoryTests
     }
 
     [Fact]
-    public void CreateChatOptions_ReturnsOptionsWithRawRepresentationFactory_WhenWebSearchEnabled()
+    public void CreateChatOptions_ReturnsOptionsWithRawRepresentationFactory_WhenToolsEnabled()
     {
-        var options = WithWebSearchEnabled(true);
+        var options = WithEnabledTools("web_search");
 
         var chatOptions = UnslothAgentFactory.CreateChatOptions(options);
 
@@ -73,9 +73,9 @@ public class UnslothAgentFactoryTests
     }
 
     [Fact]
-    public void CreateChatOptions_RawRepresentation_IsChatCompletionOptionsWithStreamUsageAndWebSearchEnabled()
+    public void CreateChatOptions_RawRepresentation_IsChatCompletionOptionsWithStreamUsageAndEnabledTools()
     {
-        var options = WithWebSearchEnabled(true);
+        var options = WithEnabledTools("web_search");
         var chatOptions = UnslothAgentFactory.CreateChatOptions(options);
 
         var raw = chatOptions.RawRepresentationFactory!(null!);
@@ -86,6 +86,20 @@ public class UnslothAgentFactoryTests
         Assert.Contains("\"stream_options\":{\"include_usage\":true}", json);
         Assert.Contains("\"enable_tools\":true", json);
         Assert.Contains("\"enabled_tools\":[\"web_search\"]", json);
+    }
+
+    [Fact]
+    public void CreateChatOptions_RawRepresentation_SendsMultipleEnabledToolsInOrder()
+    {
+        var options = WithEnabledTools("python", "web_search");
+        var chatOptions = UnslothAgentFactory.CreateChatOptions(options);
+
+        var raw = chatOptions.RawRepresentationFactory!(null!);
+        var completionOptions = Assert.IsType<ChatCompletionOptions>(raw);
+
+        var json = ModelReaderWriter.Write(completionOptions, ModelReaderWriterOptions.Json).ToString();
+
+        Assert.Contains("\"enabled_tools\":[\"python\",\"web_search\"]", json);
     }
 
     [Fact]
@@ -113,7 +127,7 @@ public class UnslothAgentFactoryTests
         var openAiClient = new OpenAIClient(new ApiKeyCredential("test"), clientOptions);
         IChatClient chatClient = openAiClient.GetChatClient("m").AsIChatClient();
 
-        var chatOptions = UnslothAgentFactory.CreateChatOptions(WithWebSearchEnabled(true));
+        var chatOptions = UnslothAgentFactory.CreateChatOptions(WithEnabledTools("web_search"));
 
         await chatClient.GetResponseAsync(
             [new Microsoft.Extensions.AI.ChatMessage(ChatRole.User, "hi")], chatOptions);
@@ -140,7 +154,7 @@ public class UnslothAgentFactoryTests
         };
         var openAiClient = new OpenAIClient(new ApiKeyCredential("test"), clientOptions);
 
-        var chatOptions = UnslothAgentFactory.CreateChatOptions(WithWebSearchEnabled(true));
+        var chatOptions = UnslothAgentFactory.CreateChatOptions(WithEnabledTools("web_search"));
         AIAgent agent = openAiClient.GetChatClient("m").AsAIAgent(new ChatClientAgentOptions { ChatOptions = chatOptions });
 
         await agent.RunAsync("hi");
