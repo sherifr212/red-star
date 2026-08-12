@@ -12,16 +12,19 @@ namespace RedStar.Base.Agents.LMStudio;
 public static class LMStudioAgentFactory
 {
     /// <summary>
-    /// Builds an <see cref="AIAgent"/> backed by an LM Studio local server. <paramref name="instructions"/>
-    /// becomes the agent's system prompt (merged into <see cref="ChatOptions.Instructions"/> on every run
-    /// by <see cref="ChatClientAgent"/>) rather than a message the caller has to manage. Unlike
-    /// <c>UnslothAgentFactory.Create</c>, there is no Unsloth-style <c>enable_tools</c>/<c>enabled_tools</c>
-    /// request customization -- LM Studio's chat completions endpoint needs no fields outside the standard
-    /// OpenAI schema that the OpenAI SDK/<c>Microsoft.Extensions.AI</c> don't already model directly. See
-    /// <see cref="CreateChatOptions"/> for the one request field it does add.
+    /// Builds an <see cref="AIAgent"/> backed by an LM Studio local server. <paramref name="httpClient"/> is
+    /// the transport used for every request -- callers own its construction/lifetime (e.g. via
+    /// <c>IHttpMessageHandlerFactory</c> wrapped in a <see cref="ConditionalAuthHandler"/>); this factory never
+    /// constructs one itself. <paramref name="instructions"/> becomes the agent's system prompt (merged into
+    /// <see cref="ChatOptions.Instructions"/> on every run by <see cref="ChatClientAgent"/>) rather than a
+    /// message the caller has to manage. Unlike <c>UnslothAgentFactory.Create</c>, there is no Unsloth-style
+    /// <c>enable_tools</c>/<c>enabled_tools</c> request customization -- LM Studio's chat completions endpoint
+    /// needs no fields outside the standard OpenAI schema that the OpenAI SDK/<c>Microsoft.Extensions.AI</c>
+    /// don't already model directly. See <see cref="CreateChatOptions"/> for the one request field it does add.
     /// </summary>
-    public static AIAgent Create(RedStarOptions options, string modelId, string? instructions = null)
+    public static AIAgent Create(HttpClient httpClient, RedStarOptions options, string modelId, string? instructions = null)
     {
+        ArgumentNullException.ThrowIfNull(httpClient);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentException.ThrowIfNullOrEmpty(modelId);
 
@@ -31,7 +34,6 @@ public static class LMStudioAgentFactory
         var lmStudio = options.Agents.LMStudio;
         var hasApiKey = !string.IsNullOrEmpty(lmStudio.ApiKey);
 
-        var httpClient = new HttpClient(new ConditionalAuthHandler(stripAuthHeader: !hasApiKey));
         var clientOptions = new OpenAIClientOptions
         {
             Endpoint = new Uri(lmStudio.BaseUrl),

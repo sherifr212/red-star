@@ -23,6 +23,7 @@ internal static class ModelsCommandHandler
     public static async Task<int> RunAsync(
         RedStarOptions options,
         CancellationToken cancellationToken,
+        IHttpClientFactory? httpClientFactory = null,
         Func<RedStarOptions, IModelsClient>? modelsClientFactory = null,
         string? runId = null)
     {
@@ -35,11 +36,16 @@ internal static class ModelsCommandHandler
 
         var isLMStudio = string.Equals(options.Agent, AgentNames.LMStudio, StringComparison.OrdinalIgnoreCase);
         var isClaudeCode = string.Equals(options.Agent, AgentNames.ClaudeCode, StringComparison.OrdinalIgnoreCase);
+
+        // httpClientFactory is only null in tests, which always supply modelsClientFactory directly and so
+        // never evaluate these lambdas; production always resolves ModelsCommand through DI (see Program.cs),
+        // so httpClientFactory is non-null whenever these bodies actually run. ClaudeCode is a subprocess
+        // agent, not an HTTP one, so it never touches httpClientFactory.
         modelsClientFactory ??= isClaudeCode
             ? static opts => new ClaudeCodeModelsClient()
             : isLMStudio
-                ? static opts => new LMStudioModelsClient(opts)
-                : static opts => new ModelsClient(opts);
+                ? opts => new LMStudioModelsClient(httpClientFactory!.CreateClient(AgentNames.LMStudio), opts)
+                : opts => new ModelsClient(httpClientFactory!.CreateClient(AgentNames.Unsloth), opts);
 
         var modelsClient = modelsClientFactory(options);
         try
@@ -72,10 +78,6 @@ internal static class ModelsCommandHandler
             logger.LogError(ex, "Run {RunId} failed to list models", runId);
             ConsoleOutput.Error.MarkupLine($"[red]Error listing models: {Markup.Escape(ex.Message)}[/]");
             return 1;
-        }
-        finally
-        {
-            (modelsClient as IDisposable)?.Dispose();
         }
     }
 

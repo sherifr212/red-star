@@ -9,6 +9,15 @@ namespace RedStar.Cli.Commands;
 /// </summary>
 public sealed class ChatCommand : AsyncCommand<ChatSettings>
 {
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IHttpMessageHandlerFactory _handlerFactory;
+
+    public ChatCommand(IHttpClientFactory httpClientFactory, IHttpMessageHandlerFactory handlerFactory)
+    {
+        _httpClientFactory = httpClientFactory;
+        _handlerFactory = handlerFactory;
+    }
+
     protected override async Task<int> ExecuteAsync(CommandContext context, ChatSettings settings, CancellationToken cancellationToken)
     {
         var claudeCode = new ClaudeCodeOverrides(
@@ -23,6 +32,9 @@ public sealed class ChatCommand : AsyncCommand<ChatSettings>
             MaxBudgetUsd: settings.ClaudeMaxBudgetUsd);
 
         var options = RedStarOptionsFactory.Build(settings.Agent, settings.Endpoint, settings.ApiKey, settings.Model, claudeCode);
-        return await ChatCommandHandler.RunAsync(options, settings.Prompt, settings.System, cancellationToken, runId: settings.RunId);
+        return await ChatCommandHandler.RunAsync(
+            options, settings.Prompt, settings.System, cancellationToken,
+            httpClientFactory: _httpClientFactory, handlerFactory: _handlerFactory,
+            runId: settings.RunId);
     }
 }

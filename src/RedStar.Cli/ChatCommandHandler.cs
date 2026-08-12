@@ -45,6 +45,8 @@ internal static class ChatCommandHandler
         string? oneShotPrompt,
         string? systemPrompt,
         CancellationToken cancellationToken,
+        IHttpClientFactory? httpClientFactory = null,
+        IHttpMessageHandlerFactory? handlerFactory = null,
         Func<RedStarOptions, string, string?, AIAgent>? agentFactory = null,
         Func<RedStarOptions, IModelsClient>? modelsClientFactory = null,
         IAgentResponseExtractor? responseExtractor = null,
@@ -61,19 +63,26 @@ internal static class ChatCommandHandler
         var isLMStudio = active.AgentName == AgentNames.LMStudio;
         var isClaudeCode = active.AgentName == AgentNames.ClaudeCode;
 
+        // httpClientFactory/handlerFactory are only null in tests, which always supply agentFactory/
+        // modelsClientFactory directly and so never evaluate these lambdas; production always resolves
+        // ChatCommand through DI (see Program.cs), so both are non-null whenever these bodies actually run.
+        // ClaudeCode is a subprocess agent, not an HTTP one (see ActiveAgentSettings' remarks), so it never
+        // touches httpClientFactory/handlerFactory.
         agentFactory ??= isClaudeCode
             ? static (opts, modelId, instructions) => ClaudeCodeAgentFactory.Create(opts, modelId, instructions)
             : isLMStudio
-                ? static (opts, modelId, instructions) => LMStudioAgentFactory.Create(opts, modelId, instructions)
-                : static (opts, modelId, instructions) => UnslothAgentFactory.Create(opts, modelId, instructions);
+                ? (opts, modelId, instructions) => LMStudioAgentFactory.Create(
+                    BuildAgentHttpClient(handlerFactory!, AgentNames.LMStudio, opts.Agents.LMStudio.ApiKey), opts, modelId, instructions)
+                : (opts, modelId, instructions) => UnslothAgentFactory.Create(
+                    BuildAgentHttpClient(handlerFactory!, AgentNames.Unsloth, opts.Agents.Unsloth.ApiKey), opts, modelId, instructions);
         responseExtractor ??= isClaudeCode
             ? new ClaudeCodeAgentResponseExtractor()
             : isLMStudio ? new LMStudioAgentResponseExtractor() : new UnslothAgentResponseExtractor();
         modelsClientFactory ??= isClaudeCode
             ? static opts => new ClaudeCodeModelsClient()
             : isLMStudio
-                ? static opts => new LMStudioModelsClient(opts)
-                : static opts => new ModelsClient(opts);
+                ? opts => new LMStudioModelsClient(httpClientFactory!.CreateClient(AgentNames.LMStudio), opts)
+                : opts => new ModelsClient(httpClientFactory!.CreateClient(AgentNames.Unsloth), opts);
 
         if (string.IsNullOrEmpty(active.ApiKey) && !isLMStudio && !isClaudeCode)
         {
@@ -1002,6 +1011,9 @@ internal static class ChatCommandHandler
     private readonly record struct ActiveAgentSettings(
         string AgentName, string BaseUrl, string ApiKey, IReadOnlyList<string>? Tools, IReadOnlyList<string>? KnownToolNames);
 
+    private static HttpClient BuildAgentHttpClient(IHttpMessageHandlerFactory handlerFactory, string clientName, string? apiKey) =>
+        new(new ConditionalAuthHandler(stripAuthHeader: string.IsNullOrEmpty(apiKey), handlerFactory.CreateHandler(clientName)));
+
     private static ActiveAgentSettings ResolveActiveAgentSettings(RedStarOptions options)
     {
         if (string.Equals(options.Agent, AgentNames.LMStudio, StringComparison.OrdinalIgnoreCase))
@@ -1085,10 +1097,6 @@ internal static class ChatCommandHandler
                         $"[red]Could not check available models ({Markup.Escape(ex.Message)}).[/] " +
                         "Check --endpoint/--api-key, or run 'redstar models'.");
                     return ModelSelectionResult.Fail($"Could not check available models: {ex.Message}");
-                }
-                finally
-                {
-                    (modelsClient as IDisposable)?.Dispose();
                 }
             });
     }

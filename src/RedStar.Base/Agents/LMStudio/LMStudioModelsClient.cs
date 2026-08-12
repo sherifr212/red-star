@@ -15,17 +15,18 @@ namespace RedStar.Base.Agents.LMStudio;
 /// <c>state</c> (loaded/not-loaded), <c>type</c> (llm/vlm/embeddings), <c>max_context_length</c>, and
 /// <c>quantization</c> per model, which is what <see cref="ModelInfo"/>/<see cref="ModelSelector"/> need.
 /// </summary>
-public sealed class LMStudioModelsClient : IModelsClient, IDisposable
+public sealed class LMStudioModelsClient : IModelsClient
 {
     private readonly HttpClient _httpClient;
 
-    /// <param name="handler">Custom transport, e.g. a fake for tests. Defaults to a real HTTP handler.</param>
-    public LMStudioModelsClient(RedStarOptions options, HttpMessageHandler? handler = null)
+    /// <param name="httpClient">Transport to use. Caller owns its construction/lifetime.</param>
+    public LMStudioModelsClient(HttpClient httpClient, RedStarOptions options)
     {
+        ArgumentNullException.ThrowIfNull(httpClient);
         ArgumentNullException.ThrowIfNull(options);
 
         var lmStudio = options.Agents.LMStudio;
-        _httpClient = handler is null ? new HttpClient() : new HttpClient(handler);
+        _httpClient = httpClient;
         _httpClient.BaseAddress = new Uri(EnsureTrailingSlash(ServerRoot(lmStudio.BaseUrl)));
         if (!string.IsNullOrEmpty(lmStudio.ApiKey))
         {
@@ -72,8 +73,6 @@ public sealed class LMStudioModelsClient : IModelsClient, IDisposable
             RedStarTelemetry.RequestDuration.Record(stopwatch.Elapsed.TotalMilliseconds, tags);
         }
     }
-
-    public void Dispose() => _httpClient.Dispose();
 
     private static ModelInfo ToModelInfo(LMStudioModelEntry entry) => new(
         entry.Id,

@@ -7,17 +7,18 @@ using RedStar.Base.Telemetry;
 
 namespace RedStar.Base;
 
-public sealed class ModelsClient : IModelsClient, IDisposable
+public sealed class ModelsClient : IModelsClient
 {
     private readonly HttpClient _httpClient;
 
-    /// <param name="handler">Custom transport, e.g. a fake for tests. Defaults to a real HTTP handler.</param>
-    public ModelsClient(RedStarOptions options, HttpMessageHandler? handler = null)
+    /// <param name="httpClient">Transport to use. Caller owns its construction/lifetime.</param>
+    public ModelsClient(HttpClient httpClient, RedStarOptions options)
     {
+        ArgumentNullException.ThrowIfNull(httpClient);
         ArgumentNullException.ThrowIfNull(options);
 
         var unsloth = options.Agents.Unsloth;
-        _httpClient = handler is null ? new HttpClient() : new HttpClient(handler);
+        _httpClient = httpClient;
         _httpClient.BaseAddress = new Uri(EnsureTrailingSlash(unsloth.BaseUrl));
         if (!string.IsNullOrEmpty(unsloth.ApiKey))
         {
@@ -64,8 +65,6 @@ public sealed class ModelsClient : IModelsClient, IDisposable
             RedStarTelemetry.RequestDuration.Record(stopwatch.Elapsed.TotalMilliseconds, tags);
         }
     }
-
-    public void Dispose() => _httpClient.Dispose();
 
     private static string EnsureTrailingSlash(string url) => url.EndsWith('/') ? url : url + "/";
 }
