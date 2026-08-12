@@ -11,7 +11,8 @@ public sealed class GoogleAIModelsClient : IModelsClient, IDisposable
 {
     private readonly HttpClient _httpClient;
 
-    public GoogleAIModelsClient(RedStarOptions options)
+    /// <param name="handler">Custom transport, e.g. a fake for tests. Defaults to a real HTTP handler.</param>
+    public GoogleAIModelsClient(RedStarOptions options, HttpMessageHandler? handler = null)
     {
         ArgumentNullException.ThrowIfNull(options);
 
@@ -23,11 +24,10 @@ public sealed class GoogleAIModelsClient : IModelsClient, IDisposable
                 "RedStar__Agents__GoogleAI__ApiKey or appsettings.local.json.");
         }
 
-        var baseUrl = googleAI.BaseUrl;
-        if (baseUrl.Contains("/openai/"))
+        var baseUrl = googleAI.BaseUrl.TrimEnd('/');
+        if (baseUrl.EndsWith("/openai", StringComparison.OrdinalIgnoreCase))
         {
-            baseUrl = baseUrl.Replace("/openai/", "/");
-            baseUrl = baseUrl.Replace("//", "/").Replace("https:/", "https://");
+            baseUrl = baseUrl[..^"/openai".Length];
         }
 
         if (!baseUrl.EndsWith('/'))
@@ -37,10 +37,8 @@ public sealed class GoogleAIModelsClient : IModelsClient, IDisposable
 
         baseUrl += "v1beta/";
 
-        _httpClient = new HttpClient
-        {
-            BaseAddress = new Uri(baseUrl)
-        };
+        _httpClient = handler is null ? new HttpClient() : new HttpClient(handler);
+        _httpClient.BaseAddress = new Uri(baseUrl);
         _httpClient.DefaultRequestHeaders.Add("x-goog-api-key", googleAI.ApiKey);
     }
 
