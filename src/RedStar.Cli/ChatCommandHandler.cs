@@ -995,7 +995,9 @@ internal static class ChatCommandHandler
         new(new ConditionalAuthHandler(stripAuthHeader: string.IsNullOrEmpty(apiKey), handlerFactory.CreateHandler(clientName)));
 
     private static ActiveAgentSettings ResolveActiveAgentSettings(RedStarOptions options) =>
-        string.Equals(options.Agent, AgentNames.LMStudio, StringComparison.OrdinalIgnoreCase)
+        string.Equals(options.Agent, AgentNames.GoogleAI, StringComparison.OrdinalIgnoreCase)
+            ? new ActiveAgentSettings(AgentNames.GoogleAI, options.Agents.GoogleAI.BaseUrl, options.Agents.GoogleAI.ApiKey, null)
+            : string.Equals(options.Agent, AgentNames.LMStudio, StringComparison.OrdinalIgnoreCase)
             ? new ActiveAgentSettings(AgentNames.LMStudio, options.Agents.LMStudio.BaseUrl, options.Agents.LMStudio.ApiKey, null)
             : new ActiveAgentSettings(
                 AgentNames.Unsloth, options.Agents.Unsloth.BaseUrl, options.Agents.Unsloth.ApiKey, options.Agents.Unsloth.EnabledTools);

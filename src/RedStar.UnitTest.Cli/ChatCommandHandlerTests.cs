@@ -385,4 +385,66 @@ public class ChatCommandHandlerTests
 
         Assert.Equal(0, exitCode);
     }
+
+    [Fact]
+    public async Task RunAsync_UsesGoogleAIAgentFactory_WhenAgentIsGoogleAI()
+    {
+        var googleAiOptions = new RedStarOptions
+        {
+            Agent = AgentNames.GoogleAI,
+            Agents = new AgentsOptions { GoogleAI = new GoogleAIAgentOptions { ApiKey = "test-key", DefaultModel = "gemini-1.5-pro" } },
+        };
+        Func<RedStarOptions, IModelsClient> modelsClientFactory = _ => new FakeModelsClient([new ModelInfo("gemini-1.5-pro", Loaded: true)]);
+        var factoryCalled = false;
+        Func<RedStarOptions, string, string?, AIAgent> agentFactory =
+            (_, modelId, instructions) =>
+            {
+                factoryCalled = true;
+                Assert.Equal("gemini-1.5-pro", modelId);
+                return new ChatClientAgent(new FakeChatClient("hi"), instructions: instructions);
+            };
+
+        var exitCode = await ChatCommandHandler.RunAsync(
+            googleAiOptions,
+            oneShotPrompt: "hi",
+            systemPrompt: null,
+            CancellationToken.None,
+            agentFactory: agentFactory,
+            modelsClientFactory: modelsClientFactory);
+
+        Assert.True(factoryCalled);
+        Assert.Equal(0, exitCode);
+    }
+
+    [Fact]
+    public async Task RunAsync_UsesGoogleAIDefaultModel_NotOtherAgentsModels_WhenAgentIsGoogleAI()
+    {
+        var googleAiOptions = new RedStarOptions
+        {
+            Agent = AgentNames.GoogleAI,
+            Agents = new AgentsOptions
+            {
+                Unsloth = new UnslothAgentOptions { DefaultModel = "unsloth-model" },
+                LMStudio = new LMStudioAgentOptions { DefaultModel = "lmstudio-model" },
+                GoogleAI = new GoogleAIAgentOptions { ApiKey = "test-key", DefaultModel = "gemini-1.5-pro" },
+            },
+        };
+        Func<RedStarOptions, IModelsClient> modelsClientFactory = _ => new FakeModelsClient([new ModelInfo("gemini-1.5-pro", Loaded: true)]);
+        Func<RedStarOptions, string, string?, AIAgent> agentFactory =
+            (_, modelId, instructions) =>
+            {
+                Assert.Equal("gemini-1.5-pro", modelId);
+                return new ChatClientAgent(new FakeChatClient("hi"), instructions: instructions);
+            };
+
+        var exitCode = await ChatCommandHandler.RunAsync(
+            googleAiOptions,
+            oneShotPrompt: "hi",
+            systemPrompt: null,
+            CancellationToken.None,
+            agentFactory: agentFactory,
+            modelsClientFactory: modelsClientFactory);
+
+        Assert.Equal(0, exitCode);
+    }
 }
