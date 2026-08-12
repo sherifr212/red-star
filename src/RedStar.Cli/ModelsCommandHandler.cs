@@ -9,6 +9,10 @@ namespace RedStar.Cli;
 
 internal static class ModelsCommandHandler
 {
+    /// <param name="httpClientFactory">
+    /// Factory for creating pre-configured HttpClient instances per agent. Only null in tests, which always
+    /// supply modelsClientFactory directly.
+    /// </param>
     /// <param name="modelsClientFactory">
     /// Builds the <see cref="IModelsClient"/> to query. Defaults to a real <see cref="ModelsClient"/> or
     /// <c>LMStudioModelsClient</c> depending on <see cref="RedStarOptions.Agent"/> (same per-agent switch

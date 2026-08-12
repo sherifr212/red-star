@@ -11,9 +11,9 @@ public sealed class GoogleAIModelsClient : IModelsClient, IDisposable
 {
     private readonly HttpClient _httpClient;
 
-    /// <param name="handler">Custom transport, e.g. a fake for tests. Defaults to a real HTTP handler.</param>
-    public GoogleAIModelsClient(RedStarOptions options, HttpMessageHandler? handler = null)
+    public GoogleAIModelsClient(HttpClient httpClient, RedStarOptions options)
     {
+        ArgumentNullException.ThrowIfNull(httpClient);
         ArgumentNullException.ThrowIfNull(options);
 
         var googleAI = options.Agents.GoogleAI;
@@ -37,7 +37,7 @@ public sealed class GoogleAIModelsClient : IModelsClient, IDisposable
 
         baseUrl += "v1beta/";
 
-        _httpClient = handler is null ? new HttpClient() : new HttpClient(handler);
+        _httpClient = httpClient;
         _httpClient.BaseAddress = new Uri(baseUrl);
         _httpClient.DefaultRequestHeaders.Add("x-goog-api-key", googleAI.ApiKey);
     }

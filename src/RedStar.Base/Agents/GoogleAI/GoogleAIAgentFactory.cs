@@ -22,8 +22,9 @@ public static class GoogleAIAgentFactory
     /// becomes the agent's system prompt (merged into <see cref="ChatOptions.Instructions"/> on every run
     /// by <see cref="ChatClientAgent"/>) rather than a message the caller has to manage.
     /// </summary>
-    public static AIAgent Create(RedStarOptions options, string modelId, string? instructions = null)
+    public static AIAgent Create(HttpClient httpClient, RedStarOptions options, string modelId, string? instructions = null)
     {
+        ArgumentNullException.ThrowIfNull(httpClient);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentException.ThrowIfNullOrEmpty(modelId);
 
@@ -40,7 +41,6 @@ public static class GoogleAIAgentFactory
                 "RedStar__Agents__GoogleAI__ApiKey environment variable, or appsettings.local.json.");
         }
 
-        var httpClient = new HttpClient();
         var clientOptions = new OpenAIClientOptions
         {
             Endpoint = new Uri(googleAI.BaseUrl),
