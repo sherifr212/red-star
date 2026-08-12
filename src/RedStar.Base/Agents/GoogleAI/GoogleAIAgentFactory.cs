@@ -17,8 +17,6 @@ namespace RedStar.Base.Agents.GoogleAI;
 /// </summary>
 public static class GoogleAIAgentFactory
 {
-    private const string ApiEndpoint = "https://generativelanguage.googleapis.com/openai/";
-
     /// <summary>
     /// Builds an <see cref="AIAgent"/> backed by Google AI Studio. <paramref name="instructions"/>
     /// becomes the agent's system prompt (merged into <see cref="ChatOptions.Instructions"/> on every run
@@ -45,7 +43,7 @@ public static class GoogleAIAgentFactory
         var httpClient = new HttpClient();
         var clientOptions = new OpenAIClientOptions
         {
-            Endpoint = new Uri(ApiEndpoint),
+            Endpoint = new Uri(googleAI.BaseUrl),
             Transport = new HttpClientPipelineTransport(httpClient),
         };
 

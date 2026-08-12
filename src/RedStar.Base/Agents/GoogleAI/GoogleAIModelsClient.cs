@@ -23,9 +23,23 @@ public sealed class GoogleAIModelsClient : IModelsClient, IDisposable
                 "RedStar__Agents__GoogleAI__ApiKey or appsettings.local.json.");
         }
 
+        var baseUrl = googleAI.BaseUrl;
+        if (baseUrl.Contains("/openai/"))
+        {
+            baseUrl = baseUrl.Replace("/openai/", "/");
+            baseUrl = baseUrl.Replace("//", "/").Replace("https:/", "https://");
+        }
+
+        if (!baseUrl.EndsWith('/'))
+        {
+            baseUrl += '/';
+        }
+
+        baseUrl += "v1beta/";
+
         _httpClient = new HttpClient
         {
-            BaseAddress = new Uri("https://generativelanguage.googleapis.com/v1beta/")
+            BaseAddress = new Uri(baseUrl)
         };
         _httpClient.DefaultRequestHeaders.Add("x-goog-api-key", googleAI.ApiKey);
     }

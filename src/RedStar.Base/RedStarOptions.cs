@@ -65,6 +65,7 @@ public sealed class RedStarOptions
             var googleAI = clone.Agents.GoogleAI;
             var overriddenGoogleAI = googleAI with
             {
+                BaseUrl = string.IsNullOrWhiteSpace(baseUrl) ? googleAI.BaseUrl : baseUrl,
                 ApiKey = string.IsNullOrWhiteSpace(apiKey) ? googleAI.ApiKey : apiKey,
                 DefaultModel = string.IsNullOrWhiteSpace(defaultModel) ? googleAI.DefaultModel : defaultModel,
             };
@@ -156,10 +157,17 @@ public sealed record LMStudioAgentOptions
 
 /// <summary>
 /// Google AI agent connection/behavior settings, nested at <c>RedStar:Agents:GoogleAI:*</c>.
+/// Google AI Studio provides an OpenAI-compatible API endpoint for chat completions and model listing.
 /// Default model is Gemma 4 31B which is available on Google AI Studio.
 /// </summary>
 public sealed record GoogleAIAgentOptions
 {
+    /// <summary>
+    /// Base URL for Google AI's OpenAI-compatible API endpoint. The default points to the official
+    /// Google AI Studio API. This can be customized if using a compatible endpoint.
+    /// </summary>
+    public string BaseUrl { get; set; } = "https://generativelanguage.googleapis.com/openai/";
+
     /// <summary>
     /// API key for Google AI Studio. Required to use the Google AI agent.
     /// Generate from https://aistudio.google.com/app/apikey
@@ -167,8 +175,9 @@ public sealed record GoogleAIAgentOptions
     public string ApiKey { get; set; } = "";
 
     /// <summary>
-    /// Model used when a command doesn't specify one explicitly. Defaults to "gemma-4-31b-001".
-    /// Other available models can be listed with the `models` command when GoogleAI agent is active.
+    /// Model used when a command doesn't specify one explicitly. Defaults to "gemma-4-31b-001"
+    /// (Google's Gemma 4 31B model). Other available models can be listed with the `models` command
+    /// when GoogleAI agent is active.
     /// </summary>
     public string DefaultModel { get; set; } = "gemma-4-31b-001";
 }
