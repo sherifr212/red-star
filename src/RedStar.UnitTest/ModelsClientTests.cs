@@ -16,7 +16,7 @@ public class ModelsClientTests
     {
         var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, """{"data": []}""");
         var options = WithBaseUrlAndApiKey("http://example.test/v1", "");
-        using var client = new ModelsClient(new HttpClient(handler), options);
+        var client = new ModelsClient(new HttpClient(handler), options);
 
         await client.ListAsync();
 
@@ -28,7 +28,7 @@ public class ModelsClientTests
     {
         var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, """{"data": []}""");
         var options = WithBaseUrlAndApiKey("http://example.test/v1", "secret-key");
-        using var client = new ModelsClient(new HttpClient(handler), options);
+        var client = new ModelsClient(new HttpClient(handler), options);
 
         await client.ListAsync();
 
@@ -42,7 +42,7 @@ public class ModelsClientTests
         var json = """{"data": [{"id": "model-a", "loaded": true}, {"id": "model-b", "loaded": false}]}""";
         var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, json);
         var options = WithBaseUrlAndApiKey("http://example.test/v1", "");
-        using var client = new ModelsClient(new HttpClient(handler), options);
+        var client = new ModelsClient(new HttpClient(handler), options);
 
         var models = await client.ListAsync();
 
@@ -59,7 +59,7 @@ public class ModelsClientTests
         var json = """{"data": [{"id": "model-a", "loaded": true}, {"id": "model-b", "loaded": false}]}""";
         var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, json);
         var options = WithBaseUrlAndApiKey("http://example.test/v1", "");
-        using var client = new ModelsClient(new HttpClient(handler), options);
+        var client = new ModelsClient(new HttpClient(handler), options);
 
         Activity? capturedActivity = null;
         using var listener = new ActivityListener
@@ -83,7 +83,7 @@ public class ModelsClientTests
     {
         var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, "{}");
         var options = WithBaseUrlAndApiKey("http://example.test/v1", "");
-        using var client = new ModelsClient(new HttpClient(handler), options);
+        var client = new ModelsClient(new HttpClient(handler), options);
 
         var models = await client.ListAsync();
 
@@ -95,7 +95,7 @@ public class ModelsClientTests
     {
         var handler = new FakeHttpMessageHandler(HttpStatusCode.Unauthorized, """{"detail": "no"}""");
         var options = WithBaseUrlAndApiKey("http://example.test/v1", "");
-        using var client = new ModelsClient(new HttpClient(handler), options);
+        var client = new ModelsClient(new HttpClient(handler), options);
 
         await Assert.ThrowsAsync<HttpRequestException>(() => client.ListAsync());
     }
@@ -107,7 +107,7 @@ public class ModelsClientTests
     {
         var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, """{"data": []}""");
         var options = WithBaseUrlAndApiKey(baseUrl, "");
-        using var client = new ModelsClient(new HttpClient(handler), options);
+        var client = new ModelsClient(new HttpClient(handler), options);
 
         await client.ListAsync();
 
