@@ -1001,9 +1001,6 @@ internal static class ChatCommandHandler
     /// can tell "no tools enabled" apart from "not applicable" and omit the row entirely for the latter.</summary>
     private readonly record struct ActiveAgentSettings(string AgentName, string BaseUrl, string ApiKey, IReadOnlyList<string>? EnabledTools);
 
-    private static HttpClient BuildAgentHttpClient(IHttpMessageHandlerFactory handlerFactory, string clientName, string? apiKey) =>
-        new(new ConditionalAuthHandler(stripAuthHeader: string.IsNullOrEmpty(apiKey), handlerFactory.CreateHandler(clientName)));
-
     private static ActiveAgentSettings ResolveActiveAgentSettings(RedStarOptions options) =>
         string.Equals(options.Agent, AgentNames.GoogleAI, StringComparison.OrdinalIgnoreCase)
             ? new ActiveAgentSettings(AgentNames.GoogleAI, options.Agents.GoogleAI.BaseUrl, options.Agents.GoogleAI.ApiKey, null)
