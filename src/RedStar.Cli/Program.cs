@@ -1,6 +1,9 @@
 using System.Text;
+using Microsoft.Extensions.DependencyInjection;
+using RedStar.Base;
 using RedStar.Cli;
 using RedStar.Cli.Commands;
+using RedStar.Cli.Infrastructure;
 using RedStar.Cli.Telemetry;
 using Spectre.Console.Cli;
 
@@ -26,7 +29,14 @@ Console.CancelKeyPress += (_, e) =>
     cts.Cancel();
 };
 
-var app = new CommandApp<ChatCommand>();
+var services = new ServiceCollection();
+services.AddHttpClient(AgentNames.Unsloth);
+services.AddHttpClient(AgentNames.LMStudio);
+services.AddTransient<ChatCommand>();
+services.AddTransient<ModelsCommand>();
+var registrar = new TypeRegistrar(services);
+
+var app = new CommandApp<ChatCommand>(registrar);
 app.Configure(config =>
 {
     config.SetApplicationName("redstar");

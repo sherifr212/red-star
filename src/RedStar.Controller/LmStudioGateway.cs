@@ -5,22 +5,23 @@ using Microsoft.Extensions.Options;
 namespace RedStar.Controller;
 
 /// <summary>
-/// Hand-rolled HttpClient gateway to a real LM Studio server, same shape as RedStar.Base's
-/// ModelsClient (constructor takes an optional <see cref="HttpMessageHandler"/> so tests can
-/// substitute a fake transport instead of hitting the network). Every call forwards the request body
-/// verbatim and returns LM Studio's status code/body verbatim -- no DTO (de)serialization in either
-/// direction, so this can never drop or mis-map a field LM Studio's schema adds later.
+/// Hand-rolled HttpClient gateway to a real LM Studio server. Caller owns the <see cref="HttpClient"/>
+/// construction/lifetime (e.g. via ASP.NET Core's <c>AddHttpClient&lt;ILmStudioGateway, LmStudioGateway&gt;()</c>
+/// typed-client registration). Every call forwards the request body verbatim and returns LM Studio's status
+/// code/body verbatim -- no DTO (de)serialization in either direction, so this can never drop or mis-map a
+/// field LM Studio's schema adds later.
 /// </summary>
-public sealed class LmStudioGateway : ILmStudioGateway, IDisposable
+public sealed class LmStudioGateway : ILmStudioGateway
 {
     private readonly HttpClient _httpClient;
 
-    public LmStudioGateway(IOptions<LmStudioOptions> options, HttpMessageHandler? handler = null)
+    public LmStudioGateway(HttpClient httpClient, IOptions<LmStudioOptions> options)
     {
+        ArgumentNullException.ThrowIfNull(httpClient);
         ArgumentNullException.ThrowIfNull(options);
 
         var lmStudio = options.Value;
-        _httpClient = handler is null ? new HttpClient() : new HttpClient(handler);
+        _httpClient = httpClient;
         _httpClient.BaseAddress = new Uri(EnsureTrailingSlash(lmStudio.BaseUrl));
         if (!string.IsNullOrEmpty(lmStudio.ApiKey))
         {
@@ -56,8 +57,6 @@ public sealed class LmStudioGateway : ILmStudioGateway, IDisposable
 
         return new LmStudioResponse((int)response.StatusCode, responseBody);
     }
-
-    public void Dispose() => _httpClient.Dispose();
 
     private static string EnsureTrailingSlash(string url) => url.EndsWith('/') ? url : url + "/";
 }
