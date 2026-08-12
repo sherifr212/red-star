@@ -14,23 +14,33 @@ namespace RedStar.UnitTest;
 public class GoogleAIAgentFactoryTests
 {
     [Fact]
+    public void Create_Throws_WhenHttpClientIsNull()
+    {
+        var options = new RedStarOptions { Agents = new AgentsOptions { GoogleAI = new GoogleAIAgentOptions { ApiKey = "test-key" } } };
+        Assert.Throws<ArgumentNullException>(() => GoogleAIAgentFactory.Create(null!, options, "model"));
+    }
+
+    [Fact]
     public void Create_Throws_WhenOptionsIsNull()
     {
-        Assert.Throws<ArgumentNullException>(() => GoogleAIAgentFactory.Create(null!, "model"));
+        var httpClient = new HttpClient();
+        Assert.Throws<ArgumentNullException>(() => GoogleAIAgentFactory.Create(httpClient, null!, "model"));
     }
 
     [Fact]
     public void Create_Throws_WhenModelIdIsNullOrEmpty()
     {
+        var httpClient = new HttpClient();
         var options = new RedStarOptions { Agents = new AgentsOptions { GoogleAI = new GoogleAIAgentOptions { ApiKey = "test-key" } } };
-        Assert.Throws<ArgumentException>(() => GoogleAIAgentFactory.Create(options, ""));
+        Assert.Throws<ArgumentException>(() => GoogleAIAgentFactory.Create(httpClient, options, ""));
     }
 
     [Fact]
     public void Create_ReturnsAgent_WithInstructionsSetFromParameter()
     {
+        var httpClient = new HttpClient();
         var options = new RedStarOptions { Agents = new AgentsOptions { GoogleAI = new GoogleAIAgentOptions { ApiKey = "test-key" } } };
-        var agent = GoogleAIAgentFactory.Create(options, "m", "be terse");
+        var agent = GoogleAIAgentFactory.Create(httpClient, options, "m", "be terse");
 
         var chatClientAgent = Assert.IsType<ChatClientAgent>(agent);
         Assert.Equal("be terse", chatClientAgent.Instructions);
@@ -39,8 +49,9 @@ public class GoogleAIAgentFactoryTests
     [Fact]
     public void Create_ReturnsAgent_WithNullInstructions_WhenNoneProvided()
     {
+        var httpClient = new HttpClient();
         var options = new RedStarOptions { Agents = new AgentsOptions { GoogleAI = new GoogleAIAgentOptions { ApiKey = "test-key" } } };
-        var agent = GoogleAIAgentFactory.Create(options, "m");
+        var agent = GoogleAIAgentFactory.Create(httpClient, options, "m");
 
         var chatClientAgent = Assert.IsType<ChatClientAgent>(agent);
         Assert.Null(chatClientAgent.Instructions);
@@ -55,14 +66,8 @@ public class GoogleAIAgentFactoryTests
             Agents = new AgentsOptions { GoogleAI = new GoogleAIAgentOptions { BaseUrl = "https://generativelanguage.googleapis.com/openai/", ApiKey = "test-key" } },
         };
 
-        var clientOptions = new OpenAIClientOptions
-        {
-            Endpoint = new Uri("https://generativelanguage.googleapis.com/v1beta/"),
-            Transport = new HttpClientPipelineTransport(new HttpClient(handler)),
-        };
-        var openAiClient = new OpenAIClient(new ApiKeyCredential("not-needed"), clientOptions);
-        var chatOptions = new ChatOptions { Instructions = "be terse" };
-        AIAgent agent = openAiClient.GetChatClient("my-model").AsAIAgent(new ChatClientAgentOptions { ChatOptions = chatOptions });
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://generativelanguage.googleapis.com/v1beta/") };
+        var agent = GoogleAIAgentFactory.Create(httpClient, options, "my-model", "be terse");
 
         await agent.RunAsync("hi");
 

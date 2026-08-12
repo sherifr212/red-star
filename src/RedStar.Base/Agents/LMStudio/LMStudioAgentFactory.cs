@@ -32,15 +32,13 @@ public static class LMStudioAgentFactory
             .LogInformation("Building chat agent for model {ModelId}", modelId);
 
         var lmStudio = options.Agents.LMStudio;
-        var hasApiKey = !string.IsNullOrEmpty(lmStudio.ApiKey);
-
         var clientOptions = new OpenAIClientOptions
         {
             Endpoint = new Uri(lmStudio.BaseUrl),
             Transport = new HttpClientPipelineTransport(httpClient),
         };
 
-        var credential = new ApiKeyCredential(hasApiKey ? lmStudio.ApiKey : "not-needed");
+        var credential = new ApiKeyCredential(!string.IsNullOrEmpty(lmStudio.ApiKey) ? lmStudio.ApiKey : "not-needed");
         var openAiClient = new OpenAIClient(credential, clientOptions);
 
         var chatOptions = CreateChatOptions();

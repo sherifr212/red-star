@@ -11,19 +11,29 @@ public class GoogleAIModelsClientTests
         new() { Agents = new AgentsOptions { GoogleAI = new GoogleAIAgentOptions { BaseUrl = baseUrl, ApiKey = apiKey } } };
 
     [Fact]
+    public void Constructor_Throws_WhenHttpClientIsNull()
+    {
+        var options = WithBaseUrlAndApiKey("https://generativelanguage.googleapis.com/openai/", "test-key");
+
+        Assert.Throws<ArgumentNullException>(() => new GoogleAIModelsClient(null!, options));
+    }
+
+    [Fact]
     public void Constructor_Throws_WhenApiKeyIsEmpty()
     {
+        var httpClient = new HttpClient();
         var options = WithBaseUrlAndApiKey("https://generativelanguage.googleapis.com/openai/", "");
 
-        Assert.Throws<InvalidOperationException>(() => new GoogleAIModelsClient(options));
+        Assert.Throws<InvalidOperationException>(() => new GoogleAIModelsClient(httpClient, options));
     }
 
     [Fact]
     public async Task ListAsync_SendsApiKeyInHeader()
     {
         var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, """{"models": []}""");
+        var httpClient = new HttpClient(handler);
         var options = WithBaseUrlAndApiKey("https://generativelanguage.googleapis.com/openai/", "test-key");
-        using var client = new GoogleAIModelsClient(options, handler);
+        using var client = new GoogleAIModelsClient(httpClient, options);
 
         await client.ListAsync();
 
@@ -40,8 +50,9 @@ public class GoogleAIModelsClientTests
             ]}
             """;
         var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, json);
+        var httpClient = new HttpClient(handler);
         var options = WithBaseUrlAndApiKey("https://generativelanguage.googleapis.com/openai/", "test-key");
-        using var client = new GoogleAIModelsClient(options, handler);
+        using var client = new GoogleAIModelsClient(httpClient, options);
 
         var models = await client.ListAsync();
 
@@ -56,8 +67,9 @@ public class GoogleAIModelsClientTests
     public async Task ListAsync_ReturnsEmptyList_WhenResponseHasNoModels()
     {
         var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, "{}");
+        var httpClient = new HttpClient(handler);
         var options = WithBaseUrlAndApiKey("https://generativelanguage.googleapis.com/openai/", "test-key");
-        using var client = new GoogleAIModelsClient(options, handler);
+        using var client = new GoogleAIModelsClient(httpClient, options);
 
         var models = await client.ListAsync();
 
@@ -68,8 +80,9 @@ public class GoogleAIModelsClientTests
     public async Task ListAsync_Throws_OnNonSuccessStatusCode()
     {
         var handler = new FakeHttpMessageHandler(HttpStatusCode.Unauthorized, """{"error": "invalid key"}""");
+        var httpClient = new HttpClient(handler);
         var options = WithBaseUrlAndApiKey("https://generativelanguage.googleapis.com/openai/", "bad-key");
-        using var client = new GoogleAIModelsClient(options, handler);
+        using var client = new GoogleAIModelsClient(httpClient, options);
 
         await Assert.ThrowsAsync<HttpRequestException>(() => client.ListAsync());
     }
@@ -81,8 +94,9 @@ public class GoogleAIModelsClientTests
     public async Task Constructor_BuildsCorrectModelsEndpointUrl(string baseUrl, string expectedModelsUrl)
     {
         var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, """{"models": []}""");
+        var httpClient = new HttpClient(handler);
         var options = WithBaseUrlAndApiKey(baseUrl, "test-key");
-        using var client = new GoogleAIModelsClient(options, handler);
+        using var client = new GoogleAIModelsClient(httpClient, options);
 
         await client.ListAsync();
 

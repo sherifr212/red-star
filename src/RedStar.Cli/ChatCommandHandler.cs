@@ -34,6 +34,13 @@ internal static class ChatCommandHandler
     /// <c>LMStudioAgentResponseExtractor</c>, same per-agent switch as <paramref name="agentFactory"/>;
     /// tests can substitute a fake here without depending on real Unsloth SSE JSON shapes.
     /// </param>
+    /// <param name="httpClientFactory">
+    /// Factory for creating pre-configured HttpClient instances per agent. Only null in tests, which always
+    /// supply agentFactory/modelsClientFactory directly.
+    /// </param>
+    /// <param name="handlerFactory">
+    /// Factory for creating HttpMessageHandler instances that apply auth logic. Only null in tests.
+    /// </param>
     /// <param name="runId">
     /// Correlation ID tagged onto this run's root OTel span (<c>run.correlation.id</c>). Falls back to the
     /// <c>REDSTAR_RUN_ID</c> environment variable, then a generated GUID -- every child span created for the
@@ -984,10 +991,13 @@ internal static class ChatCommandHandler
     private static void PrintBoxBottomBorder(int width, Color color) =>
         AnsiConsole.MarkupLine($"[{color.ToMarkup()}]╰{new string('─', width - 2)}╯[/]");
 
+    private static HttpClient BuildAgentHttpClient(IHttpMessageHandlerFactory handlerFactory, string clientName, string? apiKey) =>
+        new(new ConditionalAuthHandler(stripAuthHeader: string.IsNullOrEmpty(apiKey), handlerFactory.CreateHandler(clientName)));
+
     /// <summary>One agent's resolved connection settings for this run, picked from <see cref="RedStarOptions.Agent"/>
     /// once at the top of <see cref="RunAsync"/> instead of every call site reaching into
     /// <c>options.Agents.Unsloth</c>/<c>options.Agents.LMStudio</c> directly. <see cref="EnabledTools"/> is
-    /// null for an agent with no such concept (LM Studio), rather than an empty list, so <see cref="PrintStartupInfoBox"/>
+    /// null for an agent with no such concept (LM Studio, GoogleAI), rather than an empty list, so <see cref="PrintStartupInfoBox"/>
     /// can tell "no tools enabled" apart from "not applicable" and omit the row entirely for the latter.</summary>
     private readonly record struct ActiveAgentSettings(string AgentName, string BaseUrl, string ApiKey, IReadOnlyList<string>? EnabledTools);
 
