@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using RedStar.Base;
+using RedStar.Base.Agents.GoogleAI;
 using RedStar.Base.Agents.LMStudio;
 using RedStar.Base.Telemetry;
 using Spectre.Console;
@@ -34,11 +35,14 @@ internal static class ModelsCommandHandler
         logger.LogInformation("Starting redstar models run {RunId}", runId);
 
         var isLMStudio = string.Equals(options.Agent, AgentNames.LMStudio, StringComparison.OrdinalIgnoreCase);
+        var isGoogleAI = string.Equals(options.Agent, AgentNames.GoogleAI, StringComparison.OrdinalIgnoreCase);
 
         // httpClientFactory is only null in tests, which always supply modelsClientFactory directly and so
         // never evaluate this lambda; production always resolves ModelsCommand through DI (see Program.cs),
         // so httpClientFactory is non-null whenever this body actually runs.
-        modelsClientFactory ??= isLMStudio
+        modelsClientFactory ??= isGoogleAI
+            ? opts => new GoogleAIModelsClient(httpClientFactory!.CreateClient(AgentNames.GoogleAI), opts)
+            : isLMStudio
             ? opts => new LMStudioModelsClient(httpClientFactory!.CreateClient(AgentNames.LMStudio), opts)
             : opts => new ModelsClient(httpClientFactory!.CreateClient(AgentNames.Unsloth), opts);
 

@@ -6,6 +6,7 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using RedStar.Base;
+using RedStar.Base.Agents.GoogleAI;
 using RedStar.Base.Agents.LMStudio;
 using RedStar.Base.Agents.Unsloth;
 using RedStar.Base.Telemetry;
@@ -60,21 +61,29 @@ internal static class ChatCommandHandler
 
         var active = ResolveActiveAgentSettings(options);
         var isLMStudio = active.AgentName == AgentNames.LMStudio;
+        var isGoogleAI = active.AgentName == AgentNames.GoogleAI;
 
         // httpClientFactory/handlerFactory are only null in tests, which always supply agentFactory/
         // modelsClientFactory directly and so never evaluate these lambdas; production always resolves
         // ChatCommand through DI (see Program.cs), so both are non-null whenever these bodies actually run.
-        agentFactory ??= isLMStudio
+        agentFactory ??= isGoogleAI
+            ? (opts, modelId, instructions) => GoogleAIAgentFactory.Create(
+                httpClientFactory!.CreateClient(AgentNames.GoogleAI), opts, modelId, instructions)
+            : isLMStudio
             ? (opts, modelId, instructions) => LMStudioAgentFactory.Create(
                 BuildAgentHttpClient(handlerFactory!, AgentNames.LMStudio, opts.Agents.LMStudio.ApiKey), opts, modelId, instructions)
             : (opts, modelId, instructions) => UnslothAgentFactory.Create(
                 BuildAgentHttpClient(handlerFactory!, AgentNames.Unsloth, opts.Agents.Unsloth.ApiKey), opts, modelId, instructions);
-        modelsClientFactory ??= isLMStudio
+        modelsClientFactory ??= isGoogleAI
+            ? opts => new GoogleAIModelsClient(httpClientFactory!.CreateClient(AgentNames.GoogleAI), opts)
+            : isLMStudio
             ? opts => new LMStudioModelsClient(httpClientFactory!.CreateClient(AgentNames.LMStudio), opts)
             : opts => new ModelsClient(httpClientFactory!.CreateClient(AgentNames.Unsloth), opts);
-        responseExtractor ??= isLMStudio ? new LMStudioAgentResponseExtractor() : new UnslothAgentResponseExtractor();
+        responseExtractor ??= isGoogleAI
+            ? new GoogleAIAgentResponseExtractor()
+            : isLMStudio ? new LMStudioAgentResponseExtractor() : new UnslothAgentResponseExtractor();
 
-        if (string.IsNullOrEmpty(active.ApiKey) && !isLMStudio)
+        if (string.IsNullOrEmpty(active.ApiKey) && !isLMStudio && !isGoogleAI)
         {
             ConsoleOutput.Error.MarkupLine(
                 "[yellow]Warning: no API key configured.[/] Unsloth Studio requires a bearer token for /v1 calls.\n" +
@@ -82,8 +91,21 @@ internal static class ChatCommandHandler
                 "--api-key, the RedStar__Agents__Unsloth__ApiKey environment variable, or appsettings.local.json.\n");
         }
 
-        var configuredDefault = isLMStudio ? options.Agents.LMStudio.DefaultModel : options.Agents.Unsloth.DefaultModel;
-        var selection = await ResolveModelAsync(configuredDefault, isLMStudio, options, cancellationToken, modelsClientFactory);
+        string configuredDefault;
+        if (isGoogleAI)
+        {
+            configuredDefault = options.Agents.GoogleAI.DefaultModel;
+        }
+        else if (isLMStudio)
+        {
+            configuredDefault = options.Agents.LMStudio.DefaultModel;
+        }
+        else
+        {
+            configuredDefault = options.Agents.Unsloth.DefaultModel;
+        }
+        var allowJitLoad = isLMStudio; // Only LM Studio supports just-in-time loading
+        var selection = await ResolveModelAsync(configuredDefault, allowJitLoad, options, cancellationToken, modelsClientFactory);
         if (!selection.Succeeded)
         {
             logger.LogWarning("Run {RunId} aborted: model resolution failed ({Reason})", runId, selection.ErrorMessage);
