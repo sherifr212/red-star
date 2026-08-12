@@ -44,6 +44,8 @@ internal static class ChatCommandHandler
         string? oneShotPrompt,
         string? systemPrompt,
         CancellationToken cancellationToken,
+        IHttpClientFactory? httpClientFactory = null,
+        IHttpMessageHandlerFactory? handlerFactory = null,
         Func<RedStarOptions, string, string?, AIAgent>? agentFactory = null,
         Func<RedStarOptions, IModelsClient>? modelsClientFactory = null,
         IAgentResponseExtractor? responseExtractor = null,
@@ -59,13 +61,27 @@ internal static class ChatCommandHandler
         var active = ResolveActiveAgentSettings(options);
         var isLMStudio = active.AgentName == AgentNames.LMStudio;
 
-        agentFactory ??= isLMStudio
-            ? static (opts, modelId, instructions) => LMStudioAgentFactory.Create(opts, modelId, instructions)
-            : static (opts, modelId, instructions) => UnslothAgentFactory.Create(opts, modelId, instructions);
+        if (httpClientFactory != null && handlerFactory != null)
+        {
+            agentFactory ??= isLMStudio
+                ? (opts, modelId, instructions) => LMStudioAgentFactory.Create(
+                    BuildAgentHttpClient(handlerFactory, AgentNames.LMStudio, opts.Agents.LMStudio.ApiKey), opts, modelId, instructions)
+                : (opts, modelId, instructions) => UnslothAgentFactory.Create(
+                    BuildAgentHttpClient(handlerFactory, AgentNames.Unsloth, opts.Agents.Unsloth.ApiKey), opts, modelId, instructions);
+            modelsClientFactory ??= isLMStudio
+                ? opts => new LMStudioModelsClient(httpClientFactory.CreateClient(AgentNames.LMStudio), opts)
+                : opts => new ModelsClient(httpClientFactory.CreateClient(AgentNames.Unsloth), opts);
+        }
+        else
+        {
+            agentFactory ??= isLMStudio
+                ? static (opts, modelId, instructions) => LMStudioAgentFactory.Create(new HttpClient(), opts, modelId, instructions)
+                : static (opts, modelId, instructions) => UnslothAgentFactory.Create(new HttpClient(), opts, modelId, instructions);
+            modelsClientFactory ??= isLMStudio
+                ? static opts => new LMStudioModelsClient(new HttpClient(), opts)
+                : static opts => new ModelsClient(new HttpClient(), opts);
+        }
         responseExtractor ??= isLMStudio ? new LMStudioAgentResponseExtractor() : new UnslothAgentResponseExtractor();
-        modelsClientFactory ??= isLMStudio
-            ? static opts => new LMStudioModelsClient(opts)
-            : static opts => new ModelsClient(opts);
 
         if (string.IsNullOrEmpty(active.ApiKey) && !isLMStudio)
         {
@@ -962,6 +978,9 @@ internal static class ChatCommandHandler
     /// can tell "no tools enabled" apart from "not applicable" and omit the row entirely for the latter.</summary>
     private readonly record struct ActiveAgentSettings(string AgentName, string BaseUrl, string ApiKey, IReadOnlyList<string>? EnabledTools);
 
+    private static HttpClient BuildAgentHttpClient(IHttpMessageHandlerFactory handlerFactory, string clientName, string? apiKey) =>
+        new(new ConditionalAuthHandler(stripAuthHeader: string.IsNullOrEmpty(apiKey), handlerFactory.CreateHandler(clientName)));
+
     private static ActiveAgentSettings ResolveActiveAgentSettings(RedStarOptions options) =>
         string.Equals(options.Agent, AgentNames.LMStudio, StringComparison.OrdinalIgnoreCase)
             ? new ActiveAgentSettings(AgentNames.LMStudio, options.Agents.LMStudio.BaseUrl, options.Agents.LMStudio.ApiKey, null)
@@ -1002,10 +1021,6 @@ internal static class ChatCommandHandler
                         $"[red]Could not check available models ({Markup.Escape(ex.Message)}).[/] " +
                         "Check --endpoint/--api-key, or run 'redstar models'.");
                     return ModelSelectionResult.Fail($"Could not check available models: {ex.Message}");
-                }
-                finally
-                {
-                    (modelsClient as IDisposable)?.Dispose();
                 }
             });
     }

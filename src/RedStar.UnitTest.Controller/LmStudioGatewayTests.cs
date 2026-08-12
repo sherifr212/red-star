@@ -14,7 +14,7 @@ public class LmStudioGatewayTests
     public async Task GetModelsAsync_SendsNoAuthorizationHeader_WhenApiKeyIsEmpty()
     {
         var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, """{"models": []}""");
-        using var gateway = new LmStudioGateway(WithBaseUrlAndApiKey("http://example.test", ""), handler);
+        var gateway = new LmStudioGateway(new HttpClient(handler), WithBaseUrlAndApiKey("http://example.test", ""));
 
         await gateway.GetModelsAsync();
 
@@ -25,7 +25,7 @@ public class LmStudioGatewayTests
     public async Task GetModelsAsync_SendsBearerHeader_WhenApiKeyIsConfigured()
     {
         var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, """{"models": []}""");
-        using var gateway = new LmStudioGateway(WithBaseUrlAndApiKey("http://example.test", "secret-key"), handler);
+        var gateway = new LmStudioGateway(new HttpClient(handler), WithBaseUrlAndApiKey("http://example.test", "secret-key"));
 
         await gateway.GetModelsAsync();
 
@@ -39,7 +39,7 @@ public class LmStudioGatewayTests
     public async Task GetModelsAsync_RequestsModelsEndpoint_RegardlessOfBaseUrlTrailingSlash(string baseUrl)
     {
         var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, """{"models": []}""");
-        using var gateway = new LmStudioGateway(WithBaseUrlAndApiKey(baseUrl, ""), handler);
+        var gateway = new LmStudioGateway(new HttpClient(handler), WithBaseUrlAndApiKey(baseUrl, ""));
 
         await gateway.GetModelsAsync();
 
@@ -52,7 +52,7 @@ public class LmStudioGatewayTests
     {
         var json = """{"models": [{"key": "some/model"}]}""";
         var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, json);
-        using var gateway = new LmStudioGateway(WithBaseUrlAndApiKey("http://example.test", ""), handler);
+        var gateway = new LmStudioGateway(new HttpClient(handler), WithBaseUrlAndApiKey("http://example.test", ""));
 
         var response = await gateway.GetModelsAsync();
 
@@ -64,7 +64,7 @@ public class LmStudioGatewayTests
     public async Task GetModelsAsync_ReturnsNonSuccessStatusCodeVerbatim_WithoutThrowing()
     {
         var handler = new FakeHttpMessageHandler(HttpStatusCode.Unauthorized, """{"error": "no token"}""");
-        using var gateway = new LmStudioGateway(WithBaseUrlAndApiKey("http://example.test", ""), handler);
+        var gateway = new LmStudioGateway(new HttpClient(handler), WithBaseUrlAndApiKey("http://example.test", ""));
 
         var response = await gateway.GetModelsAsync();
 
@@ -76,7 +76,7 @@ public class LmStudioGatewayTests
     public async Task LoadModelAsync_PostsToLoadEndpoint_ForwardingRequestBodyVerbatim()
     {
         var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, """{"status": "loaded"}""");
-        using var gateway = new LmStudioGateway(WithBaseUrlAndApiKey("http://example.test", ""), handler);
+        var gateway = new LmStudioGateway(new HttpClient(handler), WithBaseUrlAndApiKey("http://example.test", ""));
         var requestBody = """{"model": "openai/gpt-oss-20b", "context_length": 8000}""";
 
         var response = await gateway.LoadModelAsync(requestBody);
@@ -92,7 +92,7 @@ public class LmStudioGatewayTests
     public async Task UnloadModelAsync_PostsToUnloadEndpoint_ForwardingRequestBodyVerbatim()
     {
         var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, """{"instance_id": "openai/gpt-oss-20b"}""");
-        using var gateway = new LmStudioGateway(WithBaseUrlAndApiKey("http://example.test", ""), handler);
+        var gateway = new LmStudioGateway(new HttpClient(handler), WithBaseUrlAndApiKey("http://example.test", ""));
         var requestBody = """{"instance_id": "openai/gpt-oss-20b"}""";
 
         await gateway.UnloadModelAsync(requestBody);
@@ -106,7 +106,7 @@ public class LmStudioGatewayTests
     public async Task DownloadModelAsync_PostsToDownloadEndpoint_ForwardingRequestBodyVerbatim()
     {
         var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, """{"job_id": "job_1"}""");
-        using var gateway = new LmStudioGateway(WithBaseUrlAndApiKey("http://example.test", ""), handler);
+        var gateway = new LmStudioGateway(new HttpClient(handler), WithBaseUrlAndApiKey("http://example.test", ""));
         var requestBody = """{"model": "ibm/granite-4-micro"}""";
 
         await gateway.DownloadModelAsync(requestBody);
@@ -120,7 +120,7 @@ public class LmStudioGatewayTests
     public async Task GetDownloadStatusAsync_RequestsDownloadStatusEndpoint_WithJobIdInPath()
     {
         var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, """{"status": "downloading"}""");
-        using var gateway = new LmStudioGateway(WithBaseUrlAndApiKey("http://example.test", ""), handler);
+        var gateway = new LmStudioGateway(new HttpClient(handler), WithBaseUrlAndApiKey("http://example.test", ""));
 
         await gateway.GetDownloadStatusAsync("job_493c7c9ded");
 
@@ -132,7 +132,7 @@ public class LmStudioGatewayTests
     public async Task GetDownloadStatusAsync_EscapesJobIdInPath()
     {
         var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, """{"status": "downloading"}""");
-        using var gateway = new LmStudioGateway(WithBaseUrlAndApiKey("http://example.test", ""), handler);
+        var gateway = new LmStudioGateway(new HttpClient(handler), WithBaseUrlAndApiKey("http://example.test", ""));
 
         await gateway.GetDownloadStatusAsync("job/with spaces");
 

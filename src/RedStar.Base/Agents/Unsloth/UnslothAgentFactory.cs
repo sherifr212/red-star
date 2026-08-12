@@ -13,12 +13,16 @@ namespace RedStar.Base.Agents.Unsloth;
 public static class UnslothAgentFactory
 {
     /// <summary>
-    /// Builds an <see cref="AIAgent"/> backed by the Unsloth Studio server. <paramref name="instructions"/>
-    /// becomes the agent's system prompt (merged into <see cref="ChatOptions.Instructions"/> on every run
-    /// by <see cref="ChatClientAgent"/>) rather than a message the caller has to manage.
+    /// Builds an <see cref="AIAgent"/> backed by the Unsloth Studio server. <paramref name="httpClient"/> is
+    /// the transport used for every request -- callers own its construction/lifetime (e.g. via
+    /// <c>IHttpMessageHandlerFactory</c> wrapped in a <see cref="ConditionalAuthHandler"/>); this factory never
+    /// constructs one itself. <paramref name="instructions"/> becomes the agent's system prompt (merged into
+    /// <see cref="ChatOptions.Instructions"/> on every run by <see cref="ChatClientAgent"/>) rather than a
+    /// message the caller has to manage.
     /// </summary>
-    public static AIAgent Create(RedStarOptions options, string modelId, string? instructions = null)
+    public static AIAgent Create(HttpClient httpClient, RedStarOptions options, string modelId, string? instructions = null)
     {
+        ArgumentNullException.ThrowIfNull(httpClient);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentException.ThrowIfNullOrEmpty(modelId);
 
@@ -28,7 +32,6 @@ public static class UnslothAgentFactory
         var unsloth = options.Agents.Unsloth;
         var hasApiKey = !string.IsNullOrEmpty(unsloth.ApiKey);
 
-        var httpClient = new HttpClient(new ConditionalAuthHandler(stripAuthHeader: !hasApiKey));
         var clientOptions = new OpenAIClientOptions
         {
             Endpoint = new Uri(unsloth.BaseUrl),

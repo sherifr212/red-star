@@ -22,6 +22,7 @@ internal static class ModelsCommandHandler
     public static async Task<int> RunAsync(
         RedStarOptions options,
         CancellationToken cancellationToken,
+        IHttpClientFactory? httpClientFactory = null,
         Func<RedStarOptions, IModelsClient>? modelsClientFactory = null,
         string? runId = null)
     {
@@ -33,9 +34,18 @@ internal static class ModelsCommandHandler
         logger.LogInformation("Starting redstar models run {RunId}", runId);
 
         var isLMStudio = string.Equals(options.Agent, AgentNames.LMStudio, StringComparison.OrdinalIgnoreCase);
-        modelsClientFactory ??= isLMStudio
-            ? static opts => new LMStudioModelsClient(opts)
-            : static opts => new ModelsClient(opts);
+        if (httpClientFactory != null)
+        {
+            modelsClientFactory ??= isLMStudio
+                ? opts => new LMStudioModelsClient(httpClientFactory.CreateClient(AgentNames.LMStudio), opts)
+                : opts => new ModelsClient(httpClientFactory.CreateClient(AgentNames.Unsloth), opts);
+        }
+        else
+        {
+            modelsClientFactory ??= isLMStudio
+                ? static opts => new LMStudioModelsClient(new HttpClient(), opts)
+                : static opts => new ModelsClient(new HttpClient(), opts);
+        }
 
         var modelsClient = modelsClientFactory(options);
         try
@@ -68,10 +78,6 @@ internal static class ModelsCommandHandler
             logger.LogError(ex, "Run {RunId} failed to list models", runId);
             ConsoleOutput.Error.MarkupLine($"[red]Error listing models: {Markup.Escape(ex.Message)}[/]");
             return 1;
-        }
-        finally
-        {
-            (modelsClient as IDisposable)?.Dispose();
         }
     }
 

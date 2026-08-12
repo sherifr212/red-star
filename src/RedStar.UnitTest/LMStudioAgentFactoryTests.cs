@@ -16,19 +16,19 @@ public class LMStudioAgentFactoryTests
     [Fact]
     public void Create_Throws_WhenOptionsIsNull()
     {
-        Assert.Throws<ArgumentNullException>(() => LMStudioAgentFactory.Create(null!, "model"));
+        Assert.Throws<ArgumentNullException>(() => LMStudioAgentFactory.Create(new HttpClient(), null!, "model"));
     }
 
     [Fact]
     public void Create_Throws_WhenModelIdIsNullOrEmpty()
     {
-        Assert.Throws<ArgumentException>(() => LMStudioAgentFactory.Create(new RedStarOptions(), ""));
+        Assert.Throws<ArgumentException>(() => LMStudioAgentFactory.Create(new HttpClient(), new RedStarOptions(), ""));
     }
 
     [Fact]
     public void Create_ReturnsAgent_WithInstructionsSetFromParameter()
     {
-        var agent = LMStudioAgentFactory.Create(new RedStarOptions(), "m", "be terse");
+        var agent = LMStudioAgentFactory.Create(new HttpClient(), new RedStarOptions(), "m", "be terse");
 
         var chatClientAgent = Assert.IsType<ChatClientAgent>(agent);
         Assert.Equal("be terse", chatClientAgent.Instructions);
@@ -37,7 +37,7 @@ public class LMStudioAgentFactoryTests
     [Fact]
     public void Create_ReturnsAgent_WithNullInstructions_WhenNoneProvided()
     {
-        var agent = LMStudioAgentFactory.Create(new RedStarOptions(), "m");
+        var agent = LMStudioAgentFactory.Create(new HttpClient(), new RedStarOptions(), "m");
 
         var chatClientAgent = Assert.IsType<ChatClientAgent>(agent);
         Assert.Null(chatClientAgent.Instructions);
@@ -57,19 +57,8 @@ public class LMStudioAgentFactoryTests
             Agents = new AgentsOptions { LMStudio = new LMStudioAgentOptions { BaseUrl = "http://127.0.0.1:1234/v1" } },
         };
 
-        // LMStudioAgentFactory.Create builds its own real HttpClient internally, so this test swaps in the
-        // capturing transport the same way UnslothAgentFactoryTests does for its own request-capture test:
-        // by composing the OpenAI SDK client directly with CapturingHandler, using the same ChatOptions
-        // LMStudioAgentFactory.Create would build.
-        var clientOptions = new OpenAIClientOptions
-        {
-            Endpoint = new Uri(options.Agents.LMStudio.BaseUrl),
-            Transport = new HttpClientPipelineTransport(new HttpClient(handler)),
-        };
-        var openAiClient = new OpenAIClient(new ApiKeyCredential("not-needed"), clientOptions);
-        var chatOptions = LMStudioAgentFactory.CreateChatOptions();
-        chatOptions.Instructions = "be terse";
-        AIAgent agent = openAiClient.GetChatClient("my-model").AsAIAgent(new ChatClientAgentOptions { ChatOptions = chatOptions });
+        var httpClient = new HttpClient(handler);
+        var agent = LMStudioAgentFactory.Create(httpClient, options, "my-model", "be terse");
 
         await agent.RunAsync("hi");
 
