@@ -61,26 +61,17 @@ internal static class ChatCommandHandler
         var active = ResolveActiveAgentSettings(options);
         var isLMStudio = active.AgentName == AgentNames.LMStudio;
 
-        if (httpClientFactory != null && handlerFactory != null)
-        {
-            agentFactory ??= isLMStudio
-                ? (opts, modelId, instructions) => LMStudioAgentFactory.Create(
-                    BuildAgentHttpClient(handlerFactory, AgentNames.LMStudio, opts.Agents.LMStudio.ApiKey), opts, modelId, instructions)
-                : (opts, modelId, instructions) => UnslothAgentFactory.Create(
-                    BuildAgentHttpClient(handlerFactory, AgentNames.Unsloth, opts.Agents.Unsloth.ApiKey), opts, modelId, instructions);
-            modelsClientFactory ??= isLMStudio
-                ? opts => new LMStudioModelsClient(httpClientFactory.CreateClient(AgentNames.LMStudio), opts)
-                : opts => new ModelsClient(httpClientFactory.CreateClient(AgentNames.Unsloth), opts);
-        }
-        else
-        {
-            agentFactory ??= isLMStudio
-                ? static (opts, modelId, instructions) => LMStudioAgentFactory.Create(new HttpClient(), opts, modelId, instructions)
-                : static (opts, modelId, instructions) => UnslothAgentFactory.Create(new HttpClient(), opts, modelId, instructions);
-            modelsClientFactory ??= isLMStudio
-                ? static opts => new LMStudioModelsClient(new HttpClient(), opts)
-                : static opts => new ModelsClient(new HttpClient(), opts);
-        }
+        // httpClientFactory/handlerFactory are only null in tests, which always supply agentFactory/
+        // modelsClientFactory directly and so never evaluate these lambdas; production always resolves
+        // ChatCommand through DI (see Program.cs), so both are non-null whenever these bodies actually run.
+        agentFactory ??= isLMStudio
+            ? (opts, modelId, instructions) => LMStudioAgentFactory.Create(
+                BuildAgentHttpClient(handlerFactory!, AgentNames.LMStudio, opts.Agents.LMStudio.ApiKey), opts, modelId, instructions)
+            : (opts, modelId, instructions) => UnslothAgentFactory.Create(
+                BuildAgentHttpClient(handlerFactory!, AgentNames.Unsloth, opts.Agents.Unsloth.ApiKey), opts, modelId, instructions);
+        modelsClientFactory ??= isLMStudio
+            ? opts => new LMStudioModelsClient(httpClientFactory!.CreateClient(AgentNames.LMStudio), opts)
+            : opts => new ModelsClient(httpClientFactory!.CreateClient(AgentNames.Unsloth), opts);
         responseExtractor ??= isLMStudio ? new LMStudioAgentResponseExtractor() : new UnslothAgentResponseExtractor();
 
         if (string.IsNullOrEmpty(active.ApiKey) && !isLMStudio)

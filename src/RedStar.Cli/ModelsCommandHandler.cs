@@ -34,18 +34,13 @@ internal static class ModelsCommandHandler
         logger.LogInformation("Starting redstar models run {RunId}", runId);
 
         var isLMStudio = string.Equals(options.Agent, AgentNames.LMStudio, StringComparison.OrdinalIgnoreCase);
-        if (httpClientFactory != null)
-        {
-            modelsClientFactory ??= isLMStudio
-                ? opts => new LMStudioModelsClient(httpClientFactory.CreateClient(AgentNames.LMStudio), opts)
-                : opts => new ModelsClient(httpClientFactory.CreateClient(AgentNames.Unsloth), opts);
-        }
-        else
-        {
-            modelsClientFactory ??= isLMStudio
-                ? static opts => new LMStudioModelsClient(new HttpClient(), opts)
-                : static opts => new ModelsClient(new HttpClient(), opts);
-        }
+
+        // httpClientFactory is only null in tests, which always supply modelsClientFactory directly and so
+        // never evaluate this lambda; production always resolves ModelsCommand through DI (see Program.cs),
+        // so httpClientFactory is non-null whenever this body actually runs.
+        modelsClientFactory ??= isLMStudio
+            ? opts => new LMStudioModelsClient(httpClientFactory!.CreateClient(AgentNames.LMStudio), opts)
+            : opts => new ModelsClient(httpClientFactory!.CreateClient(AgentNames.Unsloth), opts);
 
         var modelsClient = modelsClientFactory(options);
         try
