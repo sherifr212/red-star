@@ -8,7 +8,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddJsonFile("appsettings.local.json", optional: true, reloadOnChange: false);
 
 builder.Services.Configure<LmStudioOptions>(builder.Configuration.GetSection(LmStudioOptions.SectionName));
-builder.Services.AddSingleton<ILmStudioGateway, LmStudioGateway>();
+builder.Services.AddHttpClient<ILmStudioGateway, LmStudioGateway>();
 builder.Services.AddControllers();
 
 var app = builder.Build();

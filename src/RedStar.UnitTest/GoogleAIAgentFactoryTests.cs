@@ -7,28 +7,40 @@ using Microsoft.Extensions.AI;
 using OpenAI;
 using OpenAI.Chat;
 using RedStar.Base;
-using RedStar.Base.Agents.LMStudio;
+using RedStar.Base.Agents.GoogleAI;
 
 namespace RedStar.UnitTest;
 
-public class LMStudioAgentFactoryTests
+public class GoogleAIAgentFactoryTests
 {
+    [Fact]
+    public void Create_Throws_WhenHttpClientIsNull()
+    {
+        var options = new RedStarOptions { Agents = new AgentsOptions { GoogleAI = new GoogleAIAgentOptions { ApiKey = "test-key" } } };
+        Assert.Throws<ArgumentNullException>(() => GoogleAIAgentFactory.Create(null!, options, "model"));
+    }
+
     [Fact]
     public void Create_Throws_WhenOptionsIsNull()
     {
-        Assert.Throws<ArgumentNullException>(() => LMStudioAgentFactory.Create(new HttpClient(), null!, "model"));
+        var httpClient = new HttpClient();
+        Assert.Throws<ArgumentNullException>(() => GoogleAIAgentFactory.Create(httpClient, null!, "model"));
     }
 
     [Fact]
     public void Create_Throws_WhenModelIdIsNullOrEmpty()
     {
-        Assert.Throws<ArgumentException>(() => LMStudioAgentFactory.Create(new HttpClient(), new RedStarOptions(), ""));
+        var httpClient = new HttpClient();
+        var options = new RedStarOptions { Agents = new AgentsOptions { GoogleAI = new GoogleAIAgentOptions { ApiKey = "test-key" } } };
+        Assert.Throws<ArgumentException>(() => GoogleAIAgentFactory.Create(httpClient, options, ""));
     }
 
     [Fact]
     public void Create_ReturnsAgent_WithInstructionsSetFromParameter()
     {
-        var agent = LMStudioAgentFactory.Create(new HttpClient(), new RedStarOptions(), "m", "be terse");
+        var httpClient = new HttpClient();
+        var options = new RedStarOptions { Agents = new AgentsOptions { GoogleAI = new GoogleAIAgentOptions { ApiKey = "test-key" } } };
+        var agent = GoogleAIAgentFactory.Create(httpClient, options, "m", "be terse");
 
         var chatClientAgent = Assert.IsType<ChatClientAgent>(agent);
         Assert.Equal("be terse", chatClientAgent.Instructions);
@@ -37,37 +49,32 @@ public class LMStudioAgentFactoryTests
     [Fact]
     public void Create_ReturnsAgent_WithNullInstructions_WhenNoneProvided()
     {
-        var agent = LMStudioAgentFactory.Create(new HttpClient(), new RedStarOptions(), "m");
+        var httpClient = new HttpClient();
+        var options = new RedStarOptions { Agents = new AgentsOptions { GoogleAI = new GoogleAIAgentOptions { ApiKey = "test-key" } } };
+        var agent = GoogleAIAgentFactory.Create(httpClient, options, "m");
 
         var chatClientAgent = Assert.IsType<ChatClientAgent>(agent);
         Assert.Null(chatClientAgent.Instructions);
     }
 
-    /// <summary>
-    /// Proves a built agent's outgoing request actually reaches the configured endpoint/model, and carries
-    /// <c>stream_options.include_usage</c> (see <see cref="LMStudioAgentFactory.CreateChatOptions"/>) but no
-    /// Unsloth-only fields.
-    /// </summary>
     [Fact]
     public async Task Create_BuiltAgent_SendsRequestToConfiguredEndpointAndModel()
     {
         var handler = new CapturingHandler();
         var options = new RedStarOptions
         {
-            Agents = new AgentsOptions { LMStudio = new LMStudioAgentOptions { BaseUrl = "http://127.0.0.1:1234/v1" } },
+            Agents = new AgentsOptions { GoogleAI = new GoogleAIAgentOptions { BaseUrl = "https://generativelanguage.googleapis.com/openai/", ApiKey = "test-key" } },
         };
 
-        var httpClient = new HttpClient(handler);
-        var agent = LMStudioAgentFactory.Create(httpClient, options, "my-model", "be terse");
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://generativelanguage.googleapis.com/v1beta/") };
+        var agent = GoogleAIAgentFactory.Create(httpClient, options, "my-model", "be terse");
 
         await agent.RunAsync("hi");
 
         Assert.NotNull(handler.CapturedRequestUri);
-        Assert.EndsWith("/v1/chat/completions", handler.CapturedRequestUri!.ToString());
+        Assert.EndsWith("/chat/completions", handler.CapturedRequestUri!.ToString());
         Assert.NotNull(handler.CapturedRequestBody);
         Assert.Contains("\"model\":\"my-model\"", handler.CapturedRequestBody);
-        Assert.Contains("\"stream_options\":{\"include_usage\":true}", handler.CapturedRequestBody);
-        Assert.DoesNotContain("enable_tools", handler.CapturedRequestBody);
     }
 
     private sealed class CapturingHandler : HttpMessageHandler

@@ -19,19 +19,19 @@ public class UnslothAgentFactoryTests
     [Fact]
     public void Create_Throws_WhenOptionsIsNull()
     {
-        Assert.Throws<ArgumentNullException>(() => UnslothAgentFactory.Create(null!, "model"));
+        Assert.Throws<ArgumentNullException>(() => UnslothAgentFactory.Create(new HttpClient(), null!, "model"));
     }
 
     [Fact]
     public void Create_Throws_WhenModelIdIsNullOrEmpty()
     {
-        Assert.Throws<ArgumentException>(() => UnslothAgentFactory.Create(new RedStarOptions(), ""));
+        Assert.Throws<ArgumentException>(() => UnslothAgentFactory.Create(new HttpClient(), new RedStarOptions(), ""));
     }
 
     [Fact]
     public void Create_ReturnsAgent_WithInstructionsSetFromParameter()
     {
-        var agent = UnslothAgentFactory.Create(new RedStarOptions(), "m", "be terse");
+        var agent = UnslothAgentFactory.Create(new HttpClient(), new RedStarOptions(), "m", "be terse");
 
         var chatClientAgent = Assert.IsType<ChatClientAgent>(agent);
         Assert.Equal("be terse", chatClientAgent.Instructions);
@@ -40,7 +40,7 @@ public class UnslothAgentFactoryTests
     [Fact]
     public void Create_ReturnsAgent_WithNullInstructions_WhenNoneProvided()
     {
-        var agent = UnslothAgentFactory.Create(new RedStarOptions(), "m");
+        var agent = UnslothAgentFactory.Create(new HttpClient(), new RedStarOptions(), "m");
 
         var chatClientAgent = Assert.IsType<ChatClientAgent>(agent);
         Assert.Null(chatClientAgent.Instructions);
@@ -147,16 +147,9 @@ public class UnslothAgentFactoryTests
     {
         var handler = new CapturingHandler();
         var httpClient = new HttpClient(handler);
-        var clientOptions = new OpenAIClientOptions
-        {
-            Endpoint = new Uri("http://127.0.0.1:8888/v1"),
-            Transport = new HttpClientPipelineTransport(httpClient),
-        };
-        var openAiClient = new OpenAIClient(new ApiKeyCredential("test"), clientOptions);
+        var options = WithEnabledTools("web_search");
 
-        var chatOptions = UnslothAgentFactory.CreateChatOptions(WithEnabledTools("web_search"));
-        AIAgent agent = openAiClient.GetChatClient("m").AsAIAgent(new ChatClientAgentOptions { ChatOptions = chatOptions });
-
+        var agent = UnslothAgentFactory.Create(httpClient, options, "m");
         await agent.RunAsync("hi");
 
         Assert.NotNull(handler.CapturedRequestBody);

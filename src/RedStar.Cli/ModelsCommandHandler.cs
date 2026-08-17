@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using RedStar.Base;
+using RedStar.Base.Agents.GoogleAI;
 using RedStar.Base.Agents.LMStudio;
 using RedStar.Base.Telemetry;
 using Spectre.Console;
@@ -8,6 +9,10 @@ namespace RedStar.Cli;
 
 internal static class ModelsCommandHandler
 {
+    /// <param name="httpClientFactory">
+    /// Factory for creating pre-configured HttpClient instances per agent. Only null in tests, which always
+    /// supply modelsClientFactory directly.
+    /// </param>
     /// <param name="modelsClientFactory">
     /// Builds the <see cref="IModelsClient"/> to query. Defaults to a real <see cref="ModelsClient"/> or
     /// <c>LMStudioModelsClient</c> depending on <see cref="RedStarOptions.Agent"/> (same per-agent switch
@@ -22,6 +27,7 @@ internal static class ModelsCommandHandler
     public static async Task<int> RunAsync(
         RedStarOptions options,
         CancellationToken cancellationToken,
+        IHttpClientFactory? httpClientFactory = null,
         Func<RedStarOptions, IModelsClient>? modelsClientFactory = null,
         string? runId = null)
     {
@@ -33,9 +39,16 @@ internal static class ModelsCommandHandler
         logger.LogInformation("Starting redstar models run {RunId}", runId);
 
         var isLMStudio = string.Equals(options.Agent, AgentNames.LMStudio, StringComparison.OrdinalIgnoreCase);
-        modelsClientFactory ??= isLMStudio
-            ? static opts => new LMStudioModelsClient(opts)
-            : static opts => new ModelsClient(opts);
+        var isGoogleAI = string.Equals(options.Agent, AgentNames.GoogleAI, StringComparison.OrdinalIgnoreCase);
+
+        // httpClientFactory is only null in tests, which always supply modelsClientFactory directly and so
+        // never evaluate this lambda; production always resolves ModelsCommand through DI (see Program.cs),
+        // so httpClientFactory is non-null whenever this body actually runs.
+        modelsClientFactory ??= isGoogleAI
+            ? opts => new GoogleAIModelsClient(httpClientFactory!.CreateClient(AgentNames.GoogleAI), opts)
+            : isLMStudio
+            ? opts => new LMStudioModelsClient(httpClientFactory!.CreateClient(AgentNames.LMStudio), opts)
+            : opts => new ModelsClient(httpClientFactory!.CreateClient(AgentNames.Unsloth), opts);
 
         var modelsClient = modelsClientFactory(options);
         try
@@ -68,10 +81,6 @@ internal static class ModelsCommandHandler
             logger.LogError(ex, "Run {RunId} failed to list models", runId);
             ConsoleOutput.Error.MarkupLine($"[red]Error listing models: {Markup.Escape(ex.Message)}[/]");
             return 1;
-        }
-        finally
-        {
-            (modelsClient as IDisposable)?.Dispose();
         }
     }
 
