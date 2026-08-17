@@ -69,9 +69,7 @@ public sealed class ChatSession
             }
 
             activity?.SetTag("chat.response.length", responseText.Length);
-            logger.LogInformation(
-                "Chat turn completed in {ElapsedMs}ms, {ResponseLength} response chars",
-                stopwatch.Elapsed.TotalMilliseconds, responseText.Length);
+            logger.LogChatTurnCompleted(stopwatch.Elapsed.TotalMilliseconds, responseText.Length);
 
             return responseText.ToString();
         }
@@ -79,7 +77,7 @@ public sealed class ChatSession
         {
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             activity?.AddException(ex);
-            logger.LogError(ex, "Chat turn failed after {ElapsedMs}ms", stopwatch.Elapsed.TotalMilliseconds);
+            logger.LogChatTurnFailed(ex, stopwatch.Elapsed.TotalMilliseconds);
             throw;
         }
         finally

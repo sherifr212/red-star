@@ -29,7 +29,7 @@ public static class GoogleAIAgentFactory
         ArgumentException.ThrowIfNullOrEmpty(modelId);
 
         RedStarTelemetry.CreateLogger("RedStar.Base.Agents.GoogleAI.GoogleAIAgentFactory")
-            .LogInformation("Building chat agent for model {ModelId}", modelId);
+            .LogBuildingAgent(modelId);
 
         var googleAI = options.Agents.GoogleAI;
         var apiKey = googleAI.ApiKey;

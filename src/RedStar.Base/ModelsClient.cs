@@ -46,9 +46,7 @@ public sealed class ModelsClient : IModelsClient
             activity?.SetTag("models.count", models.Count);
             activity?.SetTag("models.ids", modelIds);
             activity?.SetTag("models.loaded_ids", loadedModelIds);
-            logger.LogInformation(
-                "Listed {ModelCount} models in {ElapsedMs}ms: {ModelIds} (loaded: {LoadedModelIds})",
-                models.Count, stopwatch.Elapsed.TotalMilliseconds, modelIds, loadedModelIds);
+            logger.LogModelsListedWithLoaded(models.Count, stopwatch.Elapsed.TotalMilliseconds, modelIds, loadedModelIds);
 
             return models;
         }
@@ -56,7 +54,7 @@ public sealed class ModelsClient : IModelsClient
         {
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             activity?.AddException(ex);
-            logger.LogError(ex, "Listing models failed after {ElapsedMs}ms", stopwatch.Elapsed.TotalMilliseconds);
+            logger.LogModelsListFailed(ex, stopwatch.Elapsed.TotalMilliseconds);
             throw;
         }
         finally

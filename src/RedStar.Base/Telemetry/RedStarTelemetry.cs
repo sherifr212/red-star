@@ -14,7 +14,7 @@ namespace RedStar.Base.Telemetry;
 /// return null harmlessly) so library code and tests that never call the bootstrapper work unchanged --
 /// same ambient-fallback shape as <see cref="Activity.Current"/> itself.
 /// </summary>
-public static class RedStarTelemetry
+public static partial class RedStarTelemetry
 {
     public const string ServiceName = "RedStar";
 
@@ -43,4 +43,25 @@ public static class RedStarTelemetry
     public static ILoggerFactory LoggerFactory { get; set; } = NullLoggerFactory.Instance;
 
     public static ILogger CreateLogger(string categoryName) => LoggerFactory.CreateLogger(categoryName);
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Building chat agent for model {ModelId} (process mode {ProcessMode})")]
+    public static partial void LogBuildingClaudeCodeAgent(this ILogger logger, string modelId, string processMode);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Building chat agent for model {ModelId}")]
+    public static partial void LogBuildingAgent(this ILogger logger, string modelId);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Listed {ModelCount} models in {ElapsedMs}ms: {ModelIds}")]
+    public static partial void LogModelsListed(this ILogger logger, int modelCount, double elapsedMs, string modelIds);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Listed {ModelCount} models in {ElapsedMs}ms: {ModelIds} (loaded: {LoadedModelIds})")]
+    public static partial void LogModelsListedWithLoaded(this ILogger logger, int modelCount, double elapsedMs, string modelIds, string loadedModelIds);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Error, Message = "Listing models failed after {ElapsedMs}ms")]
+    public static partial void LogModelsListFailed(this ILogger logger, Exception ex, double elapsedMs);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "Chat turn completed in {ElapsedMs}ms, {ResponseLength} response chars")]
+    public static partial void LogChatTurnCompleted(this ILogger logger, double elapsedMs, int responseLength);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Error, Message = "Chat turn failed after {ElapsedMs}ms")]
+    public static partial void LogChatTurnFailed(this ILogger logger, Exception ex, double elapsedMs);
 }
