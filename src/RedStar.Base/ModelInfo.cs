@@ -10,7 +10,7 @@ namespace RedStar.Base;
 /// care about them (see <see cref="ModelSelector"/>'s embeddings-model filtering) must treat null as
 /// "unknown/not applicable", not "definitely not an embeddings model".
 /// </summary>
-public sealed record ModelInfo(
+public record ModelInfo(
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("loaded")] bool Loaded,
     [property: JsonPropertyName("type")] string? Type = null,
