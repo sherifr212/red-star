@@ -14,9 +14,9 @@ public static class UnslothAgentFactory
 {
     /// <summary>
     /// Builds an <see cref="AIAgent"/> backed by the Unsloth Studio server. <paramref name="httpClient"/> is
-    /// the transport used for every request -- callers own its construction/lifetime (e.g. via
-    /// <c>IHttpMessageHandlerFactory</c> wrapped in a <see cref="ConditionalAuthHandler"/>); this factory never
-    /// constructs one itself. <paramref name="instructions"/> becomes the agent's system prompt (merged into
+    /// the transport used for every request -- callers own its construction/lifetime (typically a named
+    /// <see cref="IHttpClientFactory"/> client with a <see cref="ConditionalAuthHandler"/> in its pipeline);
+    /// this factory never constructs one itself. <paramref name="instructions"/> becomes the agent's system prompt (merged into
     /// <see cref="ChatOptions.Instructions"/> on every run by <see cref="ChatClientAgent"/>) rather than a
     /// message the caller has to manage.
     /// </summary>
@@ -36,7 +36,8 @@ public static class UnslothAgentFactory
             Transport = new HttpClientPipelineTransport(httpClient),
         };
 
-        var credential = new ApiKeyCredential(!string.IsNullOrEmpty(unsloth.ApiKey) ? unsloth.ApiKey : "not-needed");
+        var credential = new ApiKeyCredential(
+            !string.IsNullOrEmpty(unsloth.ApiKey) ? unsloth.ApiKey : ConditionalAuthHandler.NoAuthPlaceholder);
         var openAiClient = new OpenAIClient(credential, clientOptions);
 
         var chatOptions = CreateChatOptions(options);

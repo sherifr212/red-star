@@ -10,12 +10,10 @@ namespace RedStar.Cli.Commands;
 public sealed class ChatCommand : AsyncCommand<ChatSettings>
 {
     private readonly IHttpClientFactory _httpClientFactory;
-    private readonly IHttpMessageHandlerFactory _handlerFactory;
 
-    public ChatCommand(IHttpClientFactory httpClientFactory, IHttpMessageHandlerFactory handlerFactory)
+    public ChatCommand(IHttpClientFactory httpClientFactory)
     {
         _httpClientFactory = httpClientFactory;
-        _handlerFactory = handlerFactory;
     }
 
     protected override async Task<int> ExecuteAsync(CommandContext context, ChatSettings settings, CancellationToken cancellationToken)
@@ -34,7 +32,7 @@ public sealed class ChatCommand : AsyncCommand<ChatSettings>
         var options = RedStarOptionsFactory.Build(settings.Agent, settings.Endpoint, settings.ApiKey, settings.Model, claudeCode);
         return await ChatCommandHandler.RunAsync(
             options, settings.Prompt, settings.System, cancellationToken,
-            httpClientFactory: _httpClientFactory, handlerFactory: _handlerFactory,
+            httpClientFactory: _httpClientFactory,
             runId: settings.RunId);
     }
 }
