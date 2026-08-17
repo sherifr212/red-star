@@ -65,45 +65,8 @@ internal static class ModelsCommandHandler
                 return 0;
             }
 
-            Table table;
-            if (isLMStudio)
-            {
-                table = new Table().Border(TableBorder.Rounded);
-                table.AddColumn(string.Empty);
-                table.AddColumn("Model");
-                table.AddColumn("Publisher");
-                table.AddColumn("Architecture");
-                table.AddColumn("Format");
-                table.AddColumn("Details");
-
-                foreach (var model in models)
-                {
-                    var lmModel = model as LMStudioModelInfo;
-                    var id = Markup.Escape(model.Id);
-                    table.AddRow(
-                        model.Loaded ? "[green]●[/]" : string.Empty,
-                        model.Loaded ? $"[green]{id}[/] [dim](loaded)[/]" : id,
-                        Markup.Escape(lmModel?.Publisher ?? "-"),
-                        Markup.Escape(lmModel?.Architecture ?? "-"),
-                        Markup.Escape(lmModel?.Format ?? "-"),
-                        Markup.Escape(FormatDetails(model)));
-                }
-            }
-            else
-            {
-                table = new Table().Border(TableBorder.Rounded);
-                table.AddColumn(string.Empty);
-                table.AddColumn("Model");
-                table.AddColumn("Details");
-                foreach (var model in models)
-                {
-                    var id = Markup.Escape(model.Id);
-                    table.AddRow(
-                        model.Loaded ? "[green]●[/]" : string.Empty,
-                        model.Loaded ? $"[green]{id}[/] [dim](loaded)[/]" : id,
-                        Markup.Escape(FormatDetails(model)));
-                }
-            }
+            IModelTableRenderer renderer = isLMStudio ? new LMStudioModelTableRenderer() : new DefaultModelTableRenderer();
+            var table = renderer.Render(models);
 
             AnsiConsole.Write(table);
             return 0;
@@ -116,10 +79,7 @@ internal static class ModelsCommandHandler
         }
     }
 
-    /// <summary>Builds the "Details" column from whichever of <see cref="ModelInfo.Type"/>/
-    /// <see cref="ModelInfo.MaxContextLength"/>/<see cref="ModelInfo.Quantization"/> are present -- always
-    /// empty for Unsloth's entries (which report none of them), populated for LM Studio's.</summary>
-    private static string FormatDetails(ModelInfo model)
+    internal static string FormatDetails(ModelInfo model)
     {
         var parts = new List<string>();
         if (model.Type is { Length: > 0 })
@@ -138,5 +98,58 @@ internal static class ModelsCommandHandler
         }
 
         return string.Join(" · ", parts);
+    }
+}
+
+internal interface IModelTableRenderer
+{
+    Table Render(IReadOnlyList<ModelInfo> models);
+}
+
+internal sealed class DefaultModelTableRenderer : IModelTableRenderer
+{
+    public Table Render(IReadOnlyList<ModelInfo> models)
+    {
+        var table = new Table().Border(TableBorder.Rounded);
+        table.AddColumn(string.Empty);
+        table.AddColumn("Model");
+        table.AddColumn("Details");
+        foreach (var model in models)
+        {
+            var id = Markup.Escape(model.Id);
+            table.AddRow(
+                model.Loaded ? "[green]●[/]" : string.Empty,
+                model.Loaded ? $"[green]{id}[/] [dim](loaded)[/]" : id,
+                Markup.Escape(ModelsCommandHandler.FormatDetails(model)));
+        }
+        return table;
+    }
+}
+
+internal sealed class LMStudioModelTableRenderer : IModelTableRenderer
+{
+    public Table Render(IReadOnlyList<ModelInfo> models)
+    {
+        var table = new Table().Border(TableBorder.Rounded);
+        table.AddColumn(string.Empty);
+        table.AddColumn("Model");
+        table.AddColumn("Publisher");
+        table.AddColumn("Architecture");
+        table.AddColumn("Format");
+        table.AddColumn("Details");
+
+        foreach (var model in models)
+        {
+            var lmModel = model as LMStudioModelInfo;
+            var id = Markup.Escape(model.Id);
+            table.AddRow(
+                model.Loaded ? "[green]●[/]" : string.Empty,
+                model.Loaded ? $"[green]{id}[/] [dim](loaded)[/]" : id,
+                Markup.Escape(lmModel?.Publisher ?? "-"),
+                Markup.Escape(lmModel?.Architecture ?? "-"),
+                Markup.Escape(lmModel?.Format ?? "-"),
+                Markup.Escape(ModelsCommandHandler.FormatDetails(model)));
+        }
+        return table;
     }
 }
