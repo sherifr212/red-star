@@ -46,7 +46,9 @@ public sealed class LMStudioModelsClient : IModelsClient
             using var response = await _httpClient.GetAsync("api/v1/models", cancellationToken);
             response.EnsureSuccessStatusCode();
 
-            var payload = await response.Content.ReadFromJsonAsync<LMStudioModelListResponse>(cancellationToken: cancellationToken);
+            var rawJson = await response.Content.ReadAsStringAsync(cancellationToken);
+            var payload = System.Text.Json.JsonSerializer.Deserialize<LMStudioModelListResponse>(rawJson);
+
             var models = (payload?.Models ?? []).Select(ToModelInfo).ToList();
             var modelIds = string.Join(", ", models.Select(m => m.Id));
             var loadedModelIds = string.Join(", ", models.Where(m => m.Loaded).Select(m => m.Id));
@@ -54,6 +56,7 @@ public sealed class LMStudioModelsClient : IModelsClient
             activity?.SetTag("models.count", models.Count);
             activity?.SetTag("models.ids", modelIds);
             activity?.SetTag("models.loaded_ids", loadedModelIds);
+            activity?.SetTag("models.raw_json", rawJson);
             logger.LogInformation(
                 "Listed {ModelCount} models in {ElapsedMs}ms: {ModelIds} (loaded: {LoadedModelIds})",
                 models.Count, stopwatch.Elapsed.TotalMilliseconds, modelIds, loadedModelIds);
