@@ -43,11 +43,11 @@ public sealed class LMStudioModelsClient : IModelsClient
 
         try
         {
-            using var response = await _httpClient.GetAsync("api/v0/models", cancellationToken);
+            using var response = await _httpClient.GetAsync("api/v1/models", cancellationToken);
             response.EnsureSuccessStatusCode();
 
             var payload = await response.Content.ReadFromJsonAsync<LMStudioModelListResponse>(cancellationToken: cancellationToken);
-            var models = (payload?.Data ?? []).Select(ToModelInfo).ToList();
+            var models = (payload?.Models ?? []).Select(ToModelInfo).ToList();
             var modelIds = string.Join(", ", models.Select(m => m.Id));
             var loadedModelIds = string.Join(", ", models.Where(m => m.Loaded).Select(m => m.Id));
 
@@ -76,18 +76,18 @@ public sealed class LMStudioModelsClient : IModelsClient
 
     private static ModelInfo ToModelInfo(LMStudioModelEntry entry) => new(
         entry.Id,
-        string.Equals(entry.State, "loaded", StringComparison.OrdinalIgnoreCase),
+        entry.LoadedInstances != null && entry.LoadedInstances.Count > 0,
         entry.Type,
         entry.MaxContextLength,
-        entry.Quantization);
+        entry.Quantization?.Name);
 
     /// <summary>
-    /// LM Studio's native <c>/api/v0/*</c> endpoints hang off the server root (e.g.
+    /// LM Studio's native <c>/api/v1/*</c> endpoints hang off the server root (e.g.
     /// <c>http://127.0.0.1:1234/</c>), not the <c>/v1</c> OpenAI-compatible prefix that
     /// <see cref="LMStudioAgentOptions.BaseUrl"/> is configured with (same shape as Unsloth's BaseUrl, for
     /// consistency and so both endpoint families can be reached from one configured URL) -- strips a
     /// trailing <c>/v1</c> (with or without a trailing slash) so the result can be combined with
-    /// <c>api/v0/models</c> above.
+    /// <c>api/v1/models</c> above.
     /// </summary>
     private static string ServerRoot(string baseUrl)
     {
@@ -99,11 +99,17 @@ public sealed class LMStudioModelsClient : IModelsClient
 }
 
 internal sealed record LMStudioModelListResponse(
-    [property: JsonPropertyName("data")] List<LMStudioModelEntry> Data);
+    [property: JsonPropertyName("models")] List<LMStudioModelEntry> Models);
 
 internal sealed record LMStudioModelEntry(
-    [property: JsonPropertyName("id")] string Id,
-    [property: JsonPropertyName("state")] string State,
+    [property: JsonPropertyName("key")] string Id,
+    [property: JsonPropertyName("loaded_instances")] List<LMStudioLoadedInstance>? LoadedInstances,
     [property: JsonPropertyName("type")] string? Type,
     [property: JsonPropertyName("max_context_length")] int? MaxContextLength,
-    [property: JsonPropertyName("quantization")] string? Quantization);
+    [property: JsonPropertyName("quantization")] LMStudioQuantization? Quantization);
+
+internal sealed record LMStudioLoadedInstance(
+    [property: JsonPropertyName("id")] string Id);
+
+internal sealed record LMStudioQuantization(
+    [property: JsonPropertyName("name")] string? Name);
