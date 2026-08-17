@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using RedStar.Base;
 using RedStar.Base.Agents.ClaudeCode;
+using RedStar.Base.Agents.GoogleAI;
 using RedStar.Base.Agents.LMStudio;
 using RedStar.Base.Telemetry;
 using Spectre.Console;
@@ -9,6 +10,10 @@ namespace RedStar.Cli;
 
 internal static class ModelsCommandHandler
 {
+    /// <param name="httpClientFactory">
+    /// Factory for creating pre-configured HttpClient instances per agent. Only null in tests, which always
+    /// supply modelsClientFactory directly.
+    /// </param>
     /// <param name="modelsClientFactory">
     /// Builds the <see cref="IModelsClient"/> to query. Defaults to a real <see cref="ModelsClient"/> or
     /// <c>LMStudioModelsClient</c> depending on <see cref="RedStarOptions.Agent"/> (same per-agent switch
@@ -36,6 +41,7 @@ internal static class ModelsCommandHandler
 
         var isLMStudio = string.Equals(options.Agent, AgentNames.LMStudio, StringComparison.OrdinalIgnoreCase);
         var isClaudeCode = string.Equals(options.Agent, AgentNames.ClaudeCode, StringComparison.OrdinalIgnoreCase);
+        var isGoogleAI = string.Equals(options.Agent, AgentNames.GoogleAI, StringComparison.OrdinalIgnoreCase);
 
         // httpClientFactory is only null in tests, which always supply modelsClientFactory directly and so
         // never evaluate these lambdas; production always resolves ModelsCommand through DI (see Program.cs),
@@ -43,9 +49,11 @@ internal static class ModelsCommandHandler
         // agent, not an HTTP one, so it never touches httpClientFactory.
         modelsClientFactory ??= isClaudeCode
             ? static opts => new ClaudeCodeModelsClient()
-            : isLMStudio
-                ? opts => new LMStudioModelsClient(httpClientFactory!.CreateClient(AgentNames.LMStudio), opts)
-                : opts => new ModelsClient(httpClientFactory!.CreateClient(AgentNames.Unsloth), opts);
+            : isGoogleAI
+                ? opts => new GoogleAIModelsClient(httpClientFactory!.CreateClient(AgentNames.GoogleAI), opts)
+                : isLMStudio
+                    ? opts => new LMStudioModelsClient(httpClientFactory!.CreateClient(AgentNames.LMStudio), opts)
+                    : opts => new ModelsClient(httpClientFactory!.CreateClient(AgentNames.Unsloth), opts);
 
         var modelsClient = modelsClientFactory(options);
         try

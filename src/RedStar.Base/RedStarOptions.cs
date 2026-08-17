@@ -34,7 +34,8 @@ public sealed class RedStarOptions
     /// Returns a copy with any non-blank overrides applied. <paramref name="agent"/> (if non-blank) is applied
     /// first and determines which single nested agent section under <see cref="Agents"/> the remaining
     /// overrides land on -- <see cref="AgentNames.LMStudio"/> (case-insensitive) routes to
-    /// <see cref="AgentsOptions.LMStudio"/>, <see cref="AgentNames.ClaudeCode"/> routes to
+    /// <see cref="AgentsOptions.LMStudio"/>, <see cref="AgentNames.GoogleAI"/> routes to
+    /// <see cref="AgentsOptions.GoogleAI"/>, <see cref="AgentNames.ClaudeCode"/> routes to
     /// <see cref="AgentsOptions.ClaudeCode"/> (<paramref name="baseUrl"/> is meaningless there -- ClaudeCode is
     /// a subprocess agent, not an HTTP one -- and is silently ignored; <paramref name="claudeCode"/> carries
     /// its own extra overrides instead), anything else (including no override, meaning whatever
@@ -65,6 +66,19 @@ public sealed class RedStarOptions
 
         if (!hasCommonOverride && !hasClaudeCodeOverride)
         {
+            return clone;
+        }
+
+        if (string.Equals(clone.Agent, AgentNames.GoogleAI, StringComparison.OrdinalIgnoreCase))
+        {
+            var googleAI = clone.Agents.GoogleAI;
+            var overriddenGoogleAI = googleAI with
+            {
+                BaseUrl = string.IsNullOrWhiteSpace(baseUrl) ? googleAI.BaseUrl : baseUrl,
+                ApiKey = string.IsNullOrWhiteSpace(apiKey) ? googleAI.ApiKey : apiKey,
+                DefaultModel = string.IsNullOrWhiteSpace(defaultModel) ? googleAI.DefaultModel : defaultModel,
+            };
+            clone.Agents = clone.Agents with { GoogleAI = overriddenGoogleAI };
             return clone;
         }
 
@@ -127,6 +141,7 @@ public sealed record AgentsOptions
     public UnslothAgentOptions Unsloth { get; set; } = new();
     public LMStudioAgentOptions LMStudio { get; set; } = new();
     public ClaudeCodeAgentOptions ClaudeCode { get; set; } = new();
+    public GoogleAIAgentOptions GoogleAI { get; set; } = new();
 }
 
 /// <summary>Unsloth agent connection/behavior settings, nested at <c>RedStar:Agents:Unsloth:*</c>.</summary>
@@ -287,6 +302,33 @@ public sealed record ClaudeCodeOverrides(
         ProcessMode is { Length: > 0 } || WorkingDirectory is { Length: > 0 } ||
         AllowedTools is { Count: > 0 } || DisallowedTools is { Count: > 0 } ||
         PermissionMode is { Length: > 0 } || MaxBudgetUsd is not null;
+}
+
+/// <summary>
+/// Google AI agent connection/behavior settings, nested at <c>RedStar:Agents:GoogleAI:*</c>.
+/// Google AI Studio provides an OpenAI-compatible API endpoint for chat completions and model listing.
+/// Default model is Gemma 4 31B which is available on Google AI Studio.
+/// </summary>
+public sealed record GoogleAIAgentOptions
+{
+    /// <summary>
+    /// Base URL for Google AI's OpenAI-compatible API endpoint. The default points to the official
+    /// Google AI Studio API. This can be customized if using a compatible endpoint.
+    /// </summary>
+    public string BaseUrl { get; set; } = "https://generativelanguage.googleapis.com/openai/";
+
+    /// <summary>
+    /// API key for Google AI Studio. Required to use the Google AI agent.
+    /// Generate from https://aistudio.google.com/app/apikey
+    /// </summary>
+    public string ApiKey { get; set; } = "";
+
+    /// <summary>
+    /// Model used when a command doesn't specify one explicitly. Defaults to "gemma-4-31b-001"
+    /// (Google's Gemma 4 31B model). Other available models can be listed with the `models` command
+    /// when GoogleAI agent is active.
+    /// </summary>
+    public string DefaultModel { get; set; } = "gemma-4-31b-001";
 }
 
 /// <summary>OpenTelemetry OTLP export settings. See <see cref="RedStarOptions.Otel"/>.</summary>

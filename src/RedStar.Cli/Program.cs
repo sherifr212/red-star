@@ -32,6 +32,7 @@ Console.CancelKeyPress += (_, e) =>
 var services = new ServiceCollection();
 services.AddHttpClient(AgentNames.Unsloth);
 services.AddHttpClient(AgentNames.LMStudio);
+services.AddHttpClient(AgentNames.GoogleAI);
 services.AddTransient<ChatCommand>();
 services.AddTransient<ModelsCommand>();
 var registrar = new TypeRegistrar(services);

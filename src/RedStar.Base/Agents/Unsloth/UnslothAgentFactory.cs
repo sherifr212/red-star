@@ -30,15 +30,13 @@ public static class UnslothAgentFactory
             .LogInformation("Building chat agent for model {ModelId}", modelId);
 
         var unsloth = options.Agents.Unsloth;
-        var hasApiKey = !string.IsNullOrEmpty(unsloth.ApiKey);
-
         var clientOptions = new OpenAIClientOptions
         {
             Endpoint = new Uri(unsloth.BaseUrl),
             Transport = new HttpClientPipelineTransport(httpClient),
         };
 
-        var credential = new ApiKeyCredential(hasApiKey ? unsloth.ApiKey : "not-needed");
+        var credential = new ApiKeyCredential(!string.IsNullOrEmpty(unsloth.ApiKey) ? unsloth.ApiKey : "not-needed");
         var openAiClient = new OpenAIClient(credential, clientOptions);
 
         var chatOptions = CreateChatOptions(options);

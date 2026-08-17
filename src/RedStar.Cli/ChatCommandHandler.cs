@@ -7,6 +7,7 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using RedStar.Base;
 using RedStar.Base.Agents.ClaudeCode;
+using RedStar.Base.Agents.GoogleAI;
 using RedStar.Base.Agents.LMStudio;
 using RedStar.Base.Agents.Unsloth;
 using RedStar.Base.Telemetry;
@@ -33,6 +34,13 @@ internal static class ChatCommandHandler
     /// <see cref="ProduceStageEventsAsync"/>). Defaults to <see cref="UnslothAgentResponseExtractor"/> or
     /// <c>LMStudioAgentResponseExtractor</c>, same per-agent switch as <paramref name="agentFactory"/>;
     /// tests can substitute a fake here without depending on real Unsloth SSE JSON shapes.
+    /// </param>
+    /// <param name="httpClientFactory">
+    /// Factory for creating pre-configured HttpClient instances per agent. Only null in tests, which always
+    /// supply agentFactory/modelsClientFactory directly.
+    /// </param>
+    /// <param name="handlerFactory">
+    /// Factory for creating HttpMessageHandler instances that apply auth logic. Only null in tests.
     /// </param>
     /// <param name="runId">
     /// Correlation ID tagged onto this run's root OTel span (<c>run.correlation.id</c>). Falls back to the
@@ -62,6 +70,7 @@ internal static class ChatCommandHandler
         var active = ResolveActiveAgentSettings(options);
         var isLMStudio = active.AgentName == AgentNames.LMStudio;
         var isClaudeCode = active.AgentName == AgentNames.ClaudeCode;
+        var isGoogleAI = active.AgentName == AgentNames.GoogleAI;
 
         // httpClientFactory/handlerFactory are only null in tests, which always supply agentFactory/
         // modelsClientFactory directly and so never evaluate these lambdas; production always resolves
@@ -70,21 +79,28 @@ internal static class ChatCommandHandler
         // touches httpClientFactory/handlerFactory.
         agentFactory ??= isClaudeCode
             ? static (opts, modelId, instructions) => ClaudeCodeAgentFactory.Create(opts, modelId, instructions)
-            : isLMStudio
-                ? (opts, modelId, instructions) => LMStudioAgentFactory.Create(
-                    BuildAgentHttpClient(handlerFactory!, AgentNames.LMStudio, opts.Agents.LMStudio.ApiKey), opts, modelId, instructions)
-                : (opts, modelId, instructions) => UnslothAgentFactory.Create(
-                    BuildAgentHttpClient(handlerFactory!, AgentNames.Unsloth, opts.Agents.Unsloth.ApiKey), opts, modelId, instructions);
+            : isGoogleAI
+                ? (opts, modelId, instructions) => GoogleAIAgentFactory.Create(
+                    httpClientFactory!.CreateClient(AgentNames.GoogleAI), opts, modelId, instructions)
+                : isLMStudio
+                    ? (opts, modelId, instructions) => LMStudioAgentFactory.Create(
+                        BuildAgentHttpClient(handlerFactory!, AgentNames.LMStudio, opts.Agents.LMStudio.ApiKey), opts, modelId, instructions)
+                    : (opts, modelId, instructions) => UnslothAgentFactory.Create(
+                        BuildAgentHttpClient(handlerFactory!, AgentNames.Unsloth, opts.Agents.Unsloth.ApiKey), opts, modelId, instructions);
         responseExtractor ??= isClaudeCode
             ? new ClaudeCodeAgentResponseExtractor()
-            : isLMStudio ? new LMStudioAgentResponseExtractor() : new UnslothAgentResponseExtractor();
+            : isGoogleAI
+                ? new GoogleAIAgentResponseExtractor()
+                : isLMStudio ? new LMStudioAgentResponseExtractor() : new UnslothAgentResponseExtractor();
         modelsClientFactory ??= isClaudeCode
             ? static opts => new ClaudeCodeModelsClient()
-            : isLMStudio
-                ? opts => new LMStudioModelsClient(httpClientFactory!.CreateClient(AgentNames.LMStudio), opts)
-                : opts => new ModelsClient(httpClientFactory!.CreateClient(AgentNames.Unsloth), opts);
+            : isGoogleAI
+                ? opts => new GoogleAIModelsClient(httpClientFactory!.CreateClient(AgentNames.GoogleAI), opts)
+                : isLMStudio
+                    ? opts => new LMStudioModelsClient(httpClientFactory!.CreateClient(AgentNames.LMStudio), opts)
+                    : opts => new ModelsClient(httpClientFactory!.CreateClient(AgentNames.Unsloth), opts);
 
-        if (string.IsNullOrEmpty(active.ApiKey) && !isLMStudio && !isClaudeCode)
+        if (string.IsNullOrEmpty(active.ApiKey) && !isLMStudio && !isClaudeCode && !isGoogleAI)
         {
             ConsoleOutput.Error.MarkupLine(
                 "[yellow]Warning: no API key configured.[/] Unsloth Studio requires a bearer token for /v1 calls.\n" +
@@ -111,7 +127,9 @@ internal static class ChatCommandHandler
         }
         else
         {
-            var configuredDefault = isLMStudio ? options.Agents.LMStudio.DefaultModel : options.Agents.Unsloth.DefaultModel;
+            var configuredDefault = isGoogleAI
+                ? options.Agents.GoogleAI.DefaultModel
+                : isLMStudio ? options.Agents.LMStudio.DefaultModel : options.Agents.Unsloth.DefaultModel;
             var selection = await ResolveModelAsync(configuredDefault, isLMStudio, options, cancellationToken, modelsClientFactory);
             if (!selection.Succeeded)
             {
@@ -1000,7 +1018,8 @@ internal static class ChatCommandHandler
 
     /// <summary>One agent's resolved connection settings for this run, picked from <see cref="RedStarOptions.Agent"/>
     /// once at the top of <see cref="RunAsync"/> instead of every call site reaching into
-    /// <c>options.Agents.Unsloth</c>/<c>options.Agents.LMStudio</c>/<c>options.Agents.ClaudeCode</c> directly.
+    /// <c>options.Agents.Unsloth</c>/<c>options.Agents.LMStudio</c>/<c>options.Agents.GoogleAI</c>/
+    /// <c>options.Agents.ClaudeCode</c> directly.
     /// <see cref="Tools"/> is null for an agent with no such concept, rather than an empty list, so
     /// <see cref="PrintStartupInfoBox"/> can tell "no tools enabled" apart from "not applicable" and omit the
     /// row entirely for the latter; <see cref="KnownToolNames"/> is the catalog <see cref="FormatToolsSummary"/>
@@ -1019,6 +1038,11 @@ internal static class ChatCommandHandler
         if (string.Equals(options.Agent, AgentNames.LMStudio, StringComparison.OrdinalIgnoreCase))
         {
             return new ActiveAgentSettings(AgentNames.LMStudio, options.Agents.LMStudio.BaseUrl, options.Agents.LMStudio.ApiKey, null, null);
+        }
+
+        if (string.Equals(options.Agent, AgentNames.GoogleAI, StringComparison.OrdinalIgnoreCase))
+        {
+            return new ActiveAgentSettings(AgentNames.GoogleAI, options.Agents.GoogleAI.BaseUrl, options.Agents.GoogleAI.ApiKey, null, null);
         }
 
         if (string.Equals(options.Agent, AgentNames.ClaudeCode, StringComparison.OrdinalIgnoreCase))
