@@ -41,6 +41,7 @@ var app = new CommandApp<ChatCommand>(registrar);
 app.Configure(config =>
 {
     config.SetApplicationName("redstar");
+    config.Settings.StrictParsing = true;
     config.AddCommand<ChatCommand>("chat")
         .WithDescription("Chat with the locally hosted LLM (Unsloth Studio).");
     config.AddCommand<ModelsCommand>("models")
