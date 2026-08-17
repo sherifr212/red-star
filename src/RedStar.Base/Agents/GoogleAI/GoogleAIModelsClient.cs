@@ -57,9 +57,7 @@ public sealed class GoogleAIModelsClient : IModelsClient, IDisposable
             var modelIds = string.Join(", ", models.Select(m => m.Name));
             activity?.SetTag("models.count", models.Count);
             activity?.SetTag("models.ids", modelIds);
-            logger.LogInformation(
-                "Listed {ModelCount} models in {ElapsedMs}ms: {ModelIds}",
-                models.Count, stopwatch.Elapsed.TotalMilliseconds, modelIds);
+            logger.LogModelsListed(models.Count, stopwatch.Elapsed.TotalMilliseconds, modelIds);
 
             var result = models.Select(m => new ModelInfo(
                 Id: m.Name,
@@ -75,7 +73,7 @@ public sealed class GoogleAIModelsClient : IModelsClient, IDisposable
         {
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             activity?.AddException(ex);
-            logger.LogError(ex, "Listing models failed after {ElapsedMs}ms", stopwatch.Elapsed.TotalMilliseconds);
+            logger.LogModelsListFailed(ex, stopwatch.Elapsed.TotalMilliseconds);
             throw;
         }
         finally

@@ -29,7 +29,7 @@ public static class LMStudioAgentFactory
         ArgumentException.ThrowIfNullOrEmpty(modelId);
 
         RedStarTelemetry.CreateLogger("RedStar.Base.Agents.LMStudio.LMStudioAgentFactory")
-            .LogInformation("Building chat agent for model {ModelId}", modelId);
+            .LogBuildingAgent(modelId);
 
         var lmStudio = options.Agents.LMStudio;
         var clientOptions = new OpenAIClientOptions

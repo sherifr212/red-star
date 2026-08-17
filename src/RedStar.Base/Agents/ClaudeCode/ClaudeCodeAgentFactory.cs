@@ -32,9 +32,7 @@ public static class ClaudeCodeAgentFactory
         var claudeCode = options.Agents.ClaudeCode;
 
         RedStarTelemetry.CreateLogger("RedStar.Base.Agents.ClaudeCode.ClaudeCodeAgentFactory")
-            .LogInformation(
-                "Building chat agent for model {ModelId} (process mode {ProcessMode})",
-                modelId.Length == 0 ? "(CLI default)" : modelId, claudeCode.ProcessMode);
+            .LogBuildingClaudeCodeAgent(modelId.Length == 0 ? "(CLI default)" : modelId, claudeCode.ProcessMode);
 
         IClaudeCodeProcessRunner runner = string.Equals(claudeCode.ProcessMode, ClaudeCodeProcessModes.LongLived, StringComparison.OrdinalIgnoreCase)
             ? new LongLivedClaudeCodeProcessRunner(claudeCode, modelId)

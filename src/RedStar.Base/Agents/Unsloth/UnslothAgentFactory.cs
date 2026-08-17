@@ -27,7 +27,7 @@ public static class UnslothAgentFactory
         ArgumentException.ThrowIfNullOrEmpty(modelId);
 
         RedStarTelemetry.CreateLogger("RedStar.Base.Agents.Unsloth.UnslothAgentFactory")
-            .LogInformation("Building chat agent for model {ModelId}", modelId);
+            .LogBuildingAgent(modelId);
 
         var unsloth = options.Agents.Unsloth;
         var clientOptions = new OpenAIClientOptions
