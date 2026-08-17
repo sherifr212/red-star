@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Http;
 using RedStar.Base;
 using RedStar.Cli;
 using RedStar.Cli.Commands;
@@ -30,8 +31,8 @@ Console.CancelKeyPress += (_, e) =>
 };
 
 var services = new ServiceCollection();
-services.AddHttpClient(AgentNames.Unsloth);
-services.AddHttpClient(AgentNames.LMStudio);
+services.AddHttpClient(AgentNames.Unsloth).AddHttpMessageHandler(() => new ConditionalAuthHandler());
+services.AddHttpClient(AgentNames.LMStudio).AddHttpMessageHandler(() => new ConditionalAuthHandler());
 services.AddHttpClient(AgentNames.GoogleAI);
 services.AddTransient<ChatCommand>();
 services.AddTransient<ModelsCommand>();

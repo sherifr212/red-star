@@ -8,13 +8,13 @@ namespace RedStar.UnitTest;
 public class ConditionalAuthHandlerTests
 {
     [Fact]
-    public async Task SendAsync_RemovesAuthorizationHeader_WhenStripEnabled()
+    public async Task SendAsync_RemovesAuthorizationHeader_WhenCredentialIsPlaceholder()
     {
         var inner = new FakeHttpMessageHandler(HttpStatusCode.OK);
-        var handler = new ConditionalAuthHandler(stripAuthHeader: true, innerHandler: inner);
+        var handler = new ConditionalAuthHandler { InnerHandler = inner };
         using var client = new HttpClient(handler);
         using var request = new HttpRequestMessage(HttpMethod.Get, "http://example.test/v1/models");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "should-be-removed");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", ConditionalAuthHandler.NoAuthPlaceholder);
 
         await client.SendAsync(request);
 
@@ -22,10 +22,10 @@ public class ConditionalAuthHandlerTests
     }
 
     [Fact]
-    public async Task SendAsync_PreservesAuthorizationHeader_WhenStripDisabled()
+    public async Task SendAsync_PreservesAuthorizationHeader_WhenCredentialIsReal()
     {
         var inner = new FakeHttpMessageHandler(HttpStatusCode.OK);
-        var handler = new ConditionalAuthHandler(stripAuthHeader: false, innerHandler: inner);
+        var handler = new ConditionalAuthHandler { InnerHandler = inner };
         using var client = new HttpClient(handler);
         using var request = new HttpRequestMessage(HttpMethod.Get, "http://example.test/v1/models");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "keep-me");
@@ -36,10 +36,10 @@ public class ConditionalAuthHandlerTests
     }
 
     [Fact]
-    public async Task SendAsync_StripEnabled_IsHarmless_WhenNoAuthorizationHeaderWasSet()
+    public async Task SendAsync_IsHarmless_WhenNoAuthorizationHeaderWasSet()
     {
         var inner = new FakeHttpMessageHandler(HttpStatusCode.OK);
-        var handler = new ConditionalAuthHandler(stripAuthHeader: true, innerHandler: inner);
+        var handler = new ConditionalAuthHandler { InnerHandler = inner };
         using var client = new HttpClient(handler);
         using var request = new HttpRequestMessage(HttpMethod.Get, "http://example.test/v1/models");
 

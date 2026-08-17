@@ -38,11 +38,10 @@ internal static class ChatCommandHandler
     /// tests can substitute a fake here without depending on real Unsloth SSE JSON shapes.
     /// </param>
     /// <param name="httpClientFactory">
-    /// Factory for creating pre-configured HttpClient instances per agent. Only null in tests, which always
+    /// Factory for creating pre-configured HttpClient instances per agent (Unsloth/LMStudio's named clients
+    /// carry a <see cref="ConditionalAuthHandler"/> in their pipeline, registered in Program.cs -- see its
+    /// remarks for why the handler itself needs no per-call configuration). Only null in tests, which always
     /// supply agentFactory/modelsClientFactory directly.
-    /// </param>
-    /// <param name="handlerFactory">
-    /// Factory for creating HttpMessageHandler instances that apply auth logic. Only null in tests.
     /// </param>
     /// <param name="runId">
     /// Correlation ID tagged onto this run's root OTel span (<c>run.correlation.id</c>). Falls back to the
@@ -56,7 +55,6 @@ internal static class ChatCommandHandler
         string? systemPrompt,
         CancellationToken cancellationToken,
         IHttpClientFactory? httpClientFactory = null,
-        IHttpMessageHandlerFactory? handlerFactory = null,
         Func<RedStarOptions, string, string?, AIAgent>? agentFactory = null,
         Func<RedStarOptions, IModelsClient>? modelsClientFactory = null,
         IAgentResponseExtractor? responseExtractor = null,
@@ -74,11 +72,10 @@ internal static class ChatCommandHandler
         var isClaudeCode = active.AgentName == AgentNames.ClaudeCode;
         var isGoogleAI = active.AgentName == AgentNames.GoogleAI;
 
-        // httpClientFactory/handlerFactory are only null in tests, which always supply agentFactory/
-        // modelsClientFactory directly and so never evaluate these lambdas; production always resolves
-        // ChatCommand through DI (see Program.cs), so both are non-null whenever these bodies actually run.
-        // ClaudeCode is a subprocess agent, not an HTTP one (see ActiveAgentSettings' remarks), so it never
-        // touches httpClientFactory/handlerFactory.
+        // httpClientFactory is only null in tests, which always supply agentFactory/modelsClientFactory
+        // directly and so never evaluate these lambdas; production always resolves ChatCommand through DI
+        // (see Program.cs), so it's non-null whenever these bodies actually run. ClaudeCode is a subprocess
+        // agent, not an HTTP one (see ActiveAgentSettings' remarks), so it never touches httpClientFactory.
         agentFactory ??= isClaudeCode
             ? static (opts, modelId, instructions) => ClaudeCodeAgentFactory.Create(opts, modelId, instructions)
             : isGoogleAI
@@ -86,9 +83,9 @@ internal static class ChatCommandHandler
                     httpClientFactory!.CreateClient(AgentNames.GoogleAI), opts, modelId, instructions)
                 : isLMStudio
                     ? (opts, modelId, instructions) => LMStudioAgentFactory.Create(
-                        BuildAgentHttpClient(handlerFactory!, AgentNames.LMStudio, opts.Agents.LMStudio.ApiKey), opts, modelId, instructions)
+                        httpClientFactory!.CreateClient(AgentNames.LMStudio), opts, modelId, instructions)
                     : (opts, modelId, instructions) => UnslothAgentFactory.Create(
-                        BuildAgentHttpClient(handlerFactory!, AgentNames.Unsloth, opts.Agents.Unsloth.ApiKey), opts, modelId, instructions);
+                        httpClientFactory!.CreateClient(AgentNames.Unsloth), opts, modelId, instructions);
         responseExtractor ??= isClaudeCode
             ? new ClaudeCodeAgentResponseExtractor()
             : isGoogleAI
@@ -199,14 +196,6 @@ internal static class ChatCommandHandler
 
         return 0;
     }
-
-    /// <summary>
-    /// Draws an open "You" box (top border, then a "&gt; " prompt on the unclosed line) and reads one line
-    /// with the console's normal line editor, then closes the box with a bottom border -- so the same box
-    /// frames both the typing area and, once Enter is pressed, the submitted message.
-    /// </summary>
-    private static HttpClient BuildAgentHttpClient(IHttpMessageHandlerFactory handlerFactory, string clientName, string? apiKey) =>
-        new(new ConditionalAuthHandler(stripAuthHeader: string.IsNullOrEmpty(apiKey), handlerFactory.CreateHandler(clientName)));
 
     /// <summary>
     /// Warns (doesn't fail the run -- the CLI itself will surface the real auth error once it runs) about two
