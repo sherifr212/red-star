@@ -1,49 +1,36 @@
 # RedStar
 
-RedStar is a .NET CLI for chatting with a locally or self-hosted LLM server — [Unsloth
-Studio](https://unsloth.ai/) or [LM Studio](https://lmstudio.ai/) — over its OpenAI-compatible `/v1`
-API. Pick which one a run talks to with `--agent Unsloth` (the default) or `--agent LMStudio`.
+RedStar is a .NET toolkit and CLI for chatting with multiple AI agents—including local self-hosted LLM servers like [Unsloth Studio](https://unsloth.ai/) and [LM Studio](https://lmstudio.ai/), cloud providers like [Google AI](https://aistudio.google.com/), and subprocess-based agents like [Claude Code](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview).
 
-It's a thin client: `RedStar.Cli` (the `redstar` executable) drives `RedStar.Base` (the client
-library), which wraps the official [`OpenAI` .NET SDK](https://github.com/openai/openai-dotnet) via
-the [Microsoft Agent Framework](https://github.com/microsoft/agent-framework)'s `AIAgent`
-abstraction (`Microsoft.Agents.AI`), rather than talking HTTP directly for chat. `AIAgent` itself
-wraps `Microsoft.Extensions.AI`'s `IChatClient` — RedStar builds the `IChatClient` exactly as before
-and wraps it one layer higher instead of consuming it directly.
+At its core is `RedStar.Base`, a client library that wraps the official [`OpenAI` .NET SDK](https://github.com/openai/openai-dotnet) (and other clients) via the [Microsoft Agent Framework](https://github.com/microsoft/agent-framework)'s `AIAgent` abstraction (`Microsoft.Agents.AI`), providing a unified interface across very different backends.
+
+## Components
+
+The repository is structured into several projects:
+
+- **`RedStar.Cli`**: A rich command-line client (`redstar` executable) offering interactive REPL sessions or one-shot chats. It features a multi-box streaming console UI that renders reasoning, tool status, web search hits, and answers live as they stream in.
+- **`RedStar.Base`**: The core client library housing multiple agents (`Unsloth`, `LMStudio`, `ClaudeCode`, `GoogleAI`), chat sessions, model resolution, telemetry, and configuration.
+- **`RedStar.Controller`**: An ASP.NET Core gateway API that acts as a proxy to local AI server management endpoints (e.g., LM Studio's native models API).
+- **`RedStar.WebApp`**: An ASP.NET Core MVC web frontend built with TypeScript, Lit web components, Vite, and Tailwind CSS. (See [`src/RedStar.WebApp/GETTING_STARTED.md`](src/RedStar.WebApp/GETTING_STARTED.md) for detailed frontend setup instructions).
 
 ## Features
 
-- **Interactive and one-shot chat** — start a REPL session, or pass `--prompt` for a single
-  exchange and exit.
-- **Rich streaming console UI** — reasoning, tool status, web search hits, and the answer itself
-  each render as their own live-updating boxed panel as they stream in.
-- **Automatic model resolution** — before every run, RedStar checks which model(s) are actually
-  loaded on the server and fails fast with a clear error instead of silently sending requests to a
-  model that isn't there.
-- **Layered configuration** — `appsettings.json` → `appsettings.local.json` → environment
-  variables → CLI flags, each layer overriding the last.
-- **No-auth friendly** — works against a server with no API key configured (LM Studio's default).
-- **Two agent backends** — Unsloth Studio and LM Studio, selected with `--agent`; each keeps its own
-  endpoint/API key/default model, so switching one never disturbs the other's settings.
-- **Unsloth extensions** — opt into Unsloth's server-side tools (`python`, `bash`, `web_search`) via
-  its extended chat-completions fields; any tool name the server recognizes works, not just the
-  documented three.
-- **LM Studio just-in-time loading** — a configured default model that isn't currently loaded doesn't
-  have to be a hard failure like it is for Unsloth; LM Studio can load it on the first request, and
-  RedStar's model resolution knows to trust that instead of erroring. `redstar models --agent
-  LMStudio` also surfaces LM Studio's richer per-model info (type, context length, quantization) that
-  Unsloth's API doesn't report.
-- **OpenTelemetry built in** — traces, metrics, and structured logs export to any OTLP collector
-  (e.g. the [Aspire Dashboard](https://learn.microsoft.com/dotnet/aspire/fundamentals/dashboard/standalone)),
-  correlated per run.
+- **Four agent backends**:
+  - `Unsloth` (default): Talks to a local Unsloth Studio OpenAI-compatible API. Supports Unsloth's custom server-side tools (`python`, `bash`, `web_search`).
+  - `LMStudio`: Talks to a local LM Studio OpenAI-compatible API. Supports just-in-time model loading (models don't need to be pre-loaded).
+  - `GoogleAI`: Talks to Google's Gemini models via the Gemini API.
+  - `ClaudeCode`: Drives the local `claude` subprocess agent via its JSON stream protocol instead of HTTP.
+- **Interactive and one-shot chat** (CLI): Start a REPL session, or pass `--prompt` for a single exchange.
+- **Rich streaming console UI** (CLI): Reasoning, tool status, and the answer itself render as live-updating boxed panels.
+- **Automatic model resolution**: Before every run, RedStar checks which model(s) are actually available or loaded on the server and fails fast with a clear error if ambiguous.
+- **Layered configuration**: `appsettings.json` → `appsettings.local.json` → environment variables → CLI flags, each layer overriding the last.
+- **OpenTelemetry built in**: Traces, metrics, and structured logs export to any OTLP collector (e.g. the Aspire Dashboard), correlated per run.
 
 ## Requirements
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- An OpenAI-compatible LLM server reachable over HTTP (e.g. Unsloth Studio or LM Studio running
-  locally, with its API server enabled)
-- Node.js (current Active LTS) — only needed for `RedStar.WebApp`; see
-  [`RedStar.WebApp/GETTING_STARTED.md`](src/RedStar.WebApp/GETTING_STARTED.md) for setup
+- For local agents: An OpenAI-compatible LLM server reachable over HTTP (Unsloth Studio or LM Studio)
+- Node.js (current Active LTS) — only needed for `RedStar.WebApp`
 
 ## Getting started
 
@@ -54,9 +41,7 @@ cd src
 dotnet build RedStar.slnx
 ```
 
-Configure how RedStar reaches your server. The quickest way is `src/RedStar.Cli/appsettings.local.json`
-(git-tracked as a template for local overrides — fill in your own values, don't commit real secrets).
-Each agent has its own section; `RedStar:Agent` picks which one a run without `--agent` uses:
+Configure how RedStar reaches your agents. The quickest way is to configure `appsettings.local.json` in the respective project (e.g., `src/RedStar.Cli/appsettings.local.json`, which is git-tracked as a template).
 
 ```json
 {
@@ -72,33 +57,30 @@ Each agent has its own section; `RedStar:Agent` picks which one a run without `-
         "BaseUrl": "http://127.0.0.1:1234/v1",
         "ApiKey": "",
         "DefaultModel": ""
+      },
+      "GoogleAI": {
+        "ApiKey": "YOUR_GEMINI_API_KEY",
+        "DefaultModel": "gemini-1.5-pro"
+      },
+      "ClaudeCode": {
+        "AuthMode": "CliLogin",
+        "ProcessMode": "PerTurn"
       }
     }
   }
 }
 ```
 
-LM Studio's server has no auth by default, so `ApiKey` can usually stay empty — only fill it in if
-you've enabled an API token under LM Studio's Server Settings.
-
 Or override any of these per-invocation with CLI flags, or via `RedStar__*` environment variables.
 
-## Usage
+## Usage (CLI)
 
 ```bash
-# Interactive session
+# Interactive session (uses default Agent in config)
 dotnet run --project RedStar.Cli
 
 # One-shot prompt
 dotnet run --project RedStar.Cli -- chat -p "hello"
-
-# With an explicit endpoint, key, model, and system prompt
-dotnet run --project RedStar.Cli -- chat \
-  --endpoint "http://127.0.0.1:8888/v1" \
-  --api-key "ab-..." \
-  -m "unsloth/gemma-4-E4B-it-GGUF" \
-  -p "hello" \
-  -s "be terse"
 
 # List models available on the server
 dotnet run --project RedStar.Cli -- models
@@ -106,106 +88,43 @@ dotnet run --project RedStar.Cli -- models
 # Talk to LM Studio instead of Unsloth
 dotnet run --project RedStar.Cli -- chat --agent LMStudio -p "hello"
 dotnet run --project RedStar.Cli -- models --agent LMStudio
-```
 
-The root command and the `chat` subcommand behave identically — `redstar -p "hi"` is the same as
-`redstar chat -p "hi"`. Omit `--prompt`/`-p` for an interactive session instead of a one-shot
-exchange.
+# Talk to Claude Code (subprocess agent)
+dotnet run --project RedStar.Cli -- chat --agent ClaudeCode -p "hello"
+
+# Talk to Google AI
+dotnet run --project RedStar.Cli -- chat --agent GoogleAI -p "hello"
+```
 
 | Flag | Short | Applies to | Description |
 |---|---|---|---|
-| `--agent` | | `chat`, `models` | Which agent backend to talk to: `Unsloth` (default) or `LMStudio`. |
-| `--endpoint` | | `chat`, `models` | Base URL of the active agent's OpenAI-compatible API. |
-| `--api-key` | | `chat`, `models` | Bearer API key for the active agent's server. |
+| `--agent` | | `chat`, `models` | Which agent backend to talk to: `Unsloth` (default), `LMStudio`, `ClaudeCode`, or `GoogleAI`. |
+| `--endpoint` | | `chat`, `models` | Base URL of the active agent's API. |
+| `--api-key` | | `chat`, `models` | Bearer API key for the active agent's API. |
 | `--model` | `-m` | `chat` | Model id to use for this call. |
 | `--prompt` | `-p` | `chat` | Send a single prompt and print the response, then exit. |
 | `--system` | `-s` | `chat` | Optional system prompt to prime the conversation. |
 | `--run-id` | | `chat`, `models` | Correlation ID tagged onto this run's telemetry trace. |
 
-`--endpoint`/`--api-key`/`--model` always apply to whichever agent `--agent` resolves to (the flag if
-passed, else `RedStar:Agent` config/env, else `Unsloth`) — they never touch the other agent's
-settings.
+Settings like `--endpoint`, `--api-key`, and `--model` always apply to whichever agent `--agent` resolves to.
 
-Any flag left out falls back through the configuration layers described below.
-
-## Configuration
-
-Options bind from the `RedStar` section and are layered, each overriding the last:
-
-1. `appsettings.json` — checked-in template listing every key with its default.
-2. `appsettings.local.json` — local overrides (e.g. your real API key/model). Git-tracked, so
-   double-check its contents before committing/pushing if you've put a real key in it.
-3. Environment variables, prefixed `RedStar__` (e.g. `RedStar__Agents__Unsloth__ApiKey`,
-   `RedStar__Agents__LMStudio__DefaultModel`).
-4. CLI flags (`--agent`, `--endpoint`, `--api-key`, `--model`) — take precedence over everything else.
-
-RedStar treats `RedStar.Base` as a home for multiple agents, so agent-specific settings live under
-their own agent's section rather than flat at the top level — `RedStar:Agents:Unsloth:*` and
-`RedStar:Agents:LMStudio:*` today, with room for a sibling `RedStar:Agents:<AgentName>` section per
-future agent. `RedStar:Agent` picks which one is active. Settings that are genuinely agent-agnostic,
-like telemetry, stay top-level.
-
-| Key | Default | Description |
-|---|---|---|
-| `RedStar:Agent` | `Unsloth` | Which agent backend to use: `Unsloth` or `LMStudio`. |
-| `RedStar:Agents:Unsloth:BaseUrl` | `http://127.0.0.1:8888/v1` | Base URL of Unsloth's OpenAI-compatible API. |
-| `RedStar:Agents:Unsloth:ApiKey` | *(empty)* | Bearer API key. Empty means "talk to a server with no auth." |
-| `RedStar:Agents:Unsloth:DefaultModel` | *(empty)* | Model to use when none is specified. If left empty, the currently loaded model is auto-detected (fails if zero or more than one model is loaded). |
-| `RedStar:Agents:Unsloth:EnabledTools` | `[]` | Names of Unsloth server-side tools to opt into, e.g. `["web_search", "python"]` (documented names: `python`, `bash`, `web_search`, but any name the server recognizes works). Config/env-only, no CLI flag. |
-| `RedStar:Agents:LMStudio:BaseUrl` | `http://127.0.0.1:1234/v1` | Base URL of LM Studio's OpenAI-compatible API. |
-| `RedStar:Agents:LMStudio:ApiKey` | *(empty)* | Bearer API key. LM Studio has no auth by default, so this is usually left empty. |
-| `RedStar:Agents:LMStudio:DefaultModel` | *(empty)* | Model to use when none is specified. Unlike Unsloth, this doesn't have to already be loaded — LM Studio can load it just-in-time on the first request. Auto-detects the same way as Unsloth if left empty. |
-| `RedStar:Otel:Enabled` | `true` | Enables OpenTelemetry export. |
-| `RedStar:Otel:Endpoint` | `http://localhost:4317` | OTLP gRPC endpoint traces/metrics/logs export to. |
+See CLI-specific options (e.g. Claude Code tool constraints) by running `dotnet run --project RedStar.Cli -- chat --help`.
 
 ## Testing
 
 ```bash
 cd src
 dotnet test RedStar.slnx
-
-# Run a single test class or test
-dotnet test RedStar.slnx --filter "FullyQualifiedName~ChatSessionTests"
-dotnet test RedStar.slnx --filter "FullyQualifiedName~SendAsync_MergesInstructions_IntoChatOptions"
 ```
 
-Tests use xUnit, split across two projects: `RedStar.UnitTest` (tests `RedStar.Base` only) and
-`RedStar.UnitTest.Cli` (tests `RedStar.Cli`). Both fake the underlying model/HTTP clients rather than
-hitting a real server. The interactive REPL loop isn't covered, since it isn't cheaply testable
-without redirecting stdin — the one-shot chat path and model-resolution logic are.
+Tests use xUnit, split across unit test projects (e.g. `RedStar.UnitTest`, `RedStar.UnitTest.Cli`, `RedStar.UnitTest.Controller`). They fake the underlying model/HTTP/subprocess clients rather than hitting real servers.
 
-## Project layout
+## Further Reading
 
-```
-src/
-├── RedStar.Base/      # Client library: agents, chat session, model resolution, telemetry, config
-│   └── Agents/
-│       ├── Unsloth/    # Unsloth-specific agent construction (UnslothAgentFactory)
-│       └── LMStudio/   # LM Studio-specific agent construction (LMStudioAgentFactory)
-├── RedStar.Cli/        # `redstar` executable: Spectre.Console.Cli commands, console rendering
-├── RedStar.UnitTest/   # xUnit tests for RedStar.Base
-├── RedStar.UnitTest.Cli/ # xUnit tests for RedStar.Cli
-└── RedStar.WebApp/     # ASP.NET Core MVC web frontend: Lit + Vite + Tailwind, references RedStar.Base
-```
-
-- **`RedStar.Base`** is a host for multiple agents — Unsloth and LM Studio today. Agent-specific
-  code lives under `RedStar.Base/Agents/<AgentName>/` (e.g. `Agents/Unsloth/UnslothAgentFactory.cs`,
-  `Agents/LMStudio/LMStudioAgentFactory.cs`, each wrapping the OpenAI SDK's chat completions behind
-  `Microsoft.Agents.AI`'s `AIAgent`); everything agent-agnostic — `ChatSession`, model resolution,
-  config, telemetry — stays in the top-level `RedStar.Base` namespace. `RedStarOptions.Agent`
-  selects between them; `ChatCommandHandler`/`ModelsCommandHandler` pick the matching
-  factory/response-extractor/models-client with an explicit switch, not a plugin registry.
-- **`RedStar.Cli`** is thin Spectre.Console.Cli glue over `RedStar.Base`, plus the multi-box
-  streaming console UI that renders reasoning, tool status, and answer text as they arrive.
-- **`RedStar.WebApp`** hosts multiple pages, each client-rendered by TypeScript (Lit web components)
-  with a plain static navbar — no SPA router. See
-  [`RedStar.WebApp/CLAUDE.md`](src/RedStar.WebApp/CLAUDE.md) for its architecture and
-  [`RedStar.WebApp/GETTING_STARTED.md`](src/RedStar.WebApp/GETTING_STARTED.md) for setup, commands,
-  and troubleshooting.
-
-See [`CLAUDE.md`](CLAUDE.md) for a deeper architectural walkthrough.
+- [`CLAUDE.md`](CLAUDE.md) — The main architectural walkthrough for the backend projects (`RedStar.Base`, `RedStar.Cli`).
+- [`src/RedStar.WebApp/CLAUDE.md`](src/RedStar.WebApp/CLAUDE.md) — Architectural overview of the Vite/Lit frontend pipeline.
+- [`src/RedStar.WebApp/GETTING_STARTED.md`](src/RedStar.WebApp/GETTING_STARTED.md) — How to run and work on the WebApp.
 
 ## Contributing
 
-Issues and pull requests are welcome. Please make sure `dotnet build RedStar.slnx` and
-`dotnet test RedStar.slnx` pass before submitting a change.
+Issues and pull requests are welcome. Please make sure `dotnet build RedStar.slnx` and `dotnet test RedStar.slnx` pass before submitting a change.
