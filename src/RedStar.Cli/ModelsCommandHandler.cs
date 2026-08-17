@@ -65,17 +65,44 @@ internal static class ModelsCommandHandler
                 return 0;
             }
 
-            var table = new Table().Border(TableBorder.Rounded);
-            table.AddColumn(string.Empty);
-            table.AddColumn("Model");
-            table.AddColumn("Details");
-            foreach (var model in models)
+            Table table;
+            if (isLMStudio)
             {
-                var id = Markup.Escape(model.Id);
-                table.AddRow(
-                    model.Loaded ? "[green]●[/]" : string.Empty,
-                    model.Loaded ? $"[green]{id}[/] [dim](loaded)[/]" : id,
-                    Markup.Escape(FormatDetails(model)));
+                table = new Table().Border(TableBorder.Rounded);
+                table.AddColumn(string.Empty);
+                table.AddColumn("Model");
+                table.AddColumn("Publisher");
+                table.AddColumn("Architecture");
+                table.AddColumn("Format");
+                table.AddColumn("Details");
+
+                foreach (var model in models)
+                {
+                    var lmModel = model as LMStudioModelInfo;
+                    var id = Markup.Escape(model.Id);
+                    table.AddRow(
+                        model.Loaded ? "[green]●[/]" : string.Empty,
+                        model.Loaded ? $"[green]{id}[/] [dim](loaded)[/]" : id,
+                        Markup.Escape(lmModel?.Publisher ?? "-"),
+                        Markup.Escape(lmModel?.Architecture ?? "-"),
+                        Markup.Escape(lmModel?.Format ?? "-"),
+                        Markup.Escape(FormatDetails(model)));
+                }
+            }
+            else
+            {
+                table = new Table().Border(TableBorder.Rounded);
+                table.AddColumn(string.Empty);
+                table.AddColumn("Model");
+                table.AddColumn("Details");
+                foreach (var model in models)
+                {
+                    var id = Markup.Escape(model.Id);
+                    table.AddRow(
+                        model.Loaded ? "[green]●[/]" : string.Empty,
+                        model.Loaded ? $"[green]{id}[/] [dim](loaded)[/]" : id,
+                        Markup.Escape(FormatDetails(model)));
+                }
             }
 
             AnsiConsole.Write(table);

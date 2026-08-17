@@ -77,12 +77,19 @@ public sealed class LMStudioModelsClient : IModelsClient
         }
     }
 
-    private static ModelInfo ToModelInfo(LMStudioModelEntry entry) => new(
+    private static ModelInfo ToModelInfo(LMStudioModelEntry entry) => new LMStudioModelInfo(
         entry.Id,
         entry.LoadedInstances != null && entry.LoadedInstances.Count > 0,
         entry.Type,
         entry.MaxContextLength,
-        entry.Quantization?.Name);
+        entry.Quantization?.Name,
+        entry.Publisher,
+        entry.Architecture,
+        entry.SizeBytes,
+        entry.ParamsString,
+        entry.Format,
+        entry.Capabilities?.Vision,
+        entry.Capabilities?.TrainedForToolUse);
 
     /// <summary>
     /// LM Studio's native <c>/api/v1/*</c> endpoints hang off the server root (e.g.
@@ -109,10 +116,55 @@ internal sealed record LMStudioModelEntry(
     [property: JsonPropertyName("loaded_instances")] List<LMStudioLoadedInstance>? LoadedInstances,
     [property: JsonPropertyName("type")] string? Type,
     [property: JsonPropertyName("max_context_length")] int? MaxContextLength,
-    [property: JsonPropertyName("quantization")] LMStudioQuantization? Quantization);
+    [property: JsonPropertyName("quantization")] LMStudioQuantization? Quantization,
+    [property: JsonPropertyName("publisher")] string? Publisher,
+    [property: JsonPropertyName("architecture")] string? Architecture,
+    [property: JsonPropertyName("size_bytes")] long? SizeBytes,
+    [property: JsonPropertyName("params_string")] string? ParamsString,
+    [property: JsonPropertyName("format")] string? Format,
+    [property: JsonPropertyName("capabilities")] LMStudioCapabilities? Capabilities);
+
+internal sealed record LMStudioCapabilities(
+    [property: JsonPropertyName("vision")] bool? Vision,
+    [property: JsonPropertyName("trained_for_tool_use")] bool? TrainedForToolUse);
 
 internal sealed record LMStudioLoadedInstance(
     [property: JsonPropertyName("id")] string Id);
 
 internal sealed record LMStudioQuantization(
     [property: JsonPropertyName("name")] string? Name);
+
+public sealed record LMStudioModelInfo : ModelInfo
+{
+    public string? Publisher { get; }
+    public string? Architecture { get; }
+    public long? SizeBytes { get; }
+    public string? ParamsString { get; }
+    public string? Format { get; }
+    public bool? SupportsVision { get; }
+    public bool? TrainedForToolUse { get; }
+
+    public LMStudioModelInfo(
+        string id,
+        bool loaded,
+        string? type,
+        int? maxContextLength,
+        string? quantization,
+        string? publisher,
+        string? architecture,
+        long? sizeBytes,
+        string? paramsString,
+        string? format,
+        bool? supportsVision,
+        bool? trainedForToolUse)
+        : base(id, loaded, type, maxContextLength, quantization)
+    {
+        Publisher = publisher;
+        Architecture = architecture;
+        SizeBytes = sizeBytes;
+        ParamsString = paramsString;
+        Format = format;
+        SupportsVision = supportsVision;
+        TrainedForToolUse = trainedForToolUse;
+    }
+}
