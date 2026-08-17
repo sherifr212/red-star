@@ -11,5 +11,6 @@ public static class AgentNames
 {
     public const string Unsloth = "Unsloth";
     public const string LMStudio = "LMStudio";
+    public const string ClaudeCode = "ClaudeCode";
     public const string GoogleAI = "GoogleAI";
 }
