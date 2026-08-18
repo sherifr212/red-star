@@ -18,7 +18,7 @@ The repository is structured into several projects:
 - **Four agent backends**:
   - `Unsloth` (default): Talks to a local Unsloth Studio OpenAI-compatible API. Supports Unsloth's custom server-side tools (`python`, `bash`, `web_search`).
   - `LMStudio`: Talks to a local LM Studio OpenAI-compatible API. Supports just-in-time model loading (models don't need to be pre-loaded).
-  - `GoogleAI`: Talks to Google's Gemini models via the Gemini API.
+  - `GoogleAI`: Talks to Google's Gemini models via the native `Google.GenAI` .NET SDK (not an OpenAI-compatible shim), so Gemini-specific behavior like thinking-mode reasoning output round-trips correctly.
   - `ClaudeCode`: Drives the local `claude` subprocess agent via its JSON stream protocol instead of HTTP.
 - **Interactive and one-shot chat** (CLI): Start a REPL session, or pass `--prompt` for a single exchange.
 - **Rich streaming console UI** (CLI): Reasoning, tool status, and the answer itself render as live-updating boxed panels.
@@ -60,7 +60,9 @@ Configure how RedStar reaches your agents. The quickest way is to configure `app
       },
       "GoogleAI": {
         "ApiKey": "YOUR_GEMINI_API_KEY",
-        "DefaultModel": "gemini-1.5-pro"
+        "DefaultModel": "gemini-2.0-flash",
+        "ThinkingEffort": "",
+        "IncludeThoughts": true
       },
       "ClaudeCode": {
         "AuthMode": "CliLogin",

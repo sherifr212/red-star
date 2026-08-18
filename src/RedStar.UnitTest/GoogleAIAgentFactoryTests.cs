@@ -1,11 +1,5 @@
-using System.ClientModel;
-using System.ClientModel.Primitives;
-using System.Net;
-using System.Net.Http.Headers;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
-using OpenAI;
-using OpenAI.Chat;
 using RedStar.Base;
 using RedStar.Base.Agents.GoogleAI;
 
@@ -36,6 +30,14 @@ public class GoogleAIAgentFactoryTests
     }
 
     [Fact]
+    public void Create_Throws_WhenApiKeyIsMissing()
+    {
+        var httpClient = new HttpClient();
+        var options = new RedStarOptions { Agents = new AgentsOptions { GoogleAI = new GoogleAIAgentOptions { ApiKey = "" } } };
+        Assert.Throws<InvalidOperationException>(() => GoogleAIAgentFactory.Create(httpClient, options, "model"));
+    }
+
+    [Fact]
     public void Create_ReturnsAgent_WithInstructionsSetFromParameter()
     {
         var httpClient = new HttpClient();
@@ -58,54 +60,80 @@ public class GoogleAIAgentFactoryTests
     }
 
     [Fact]
-    public async Task Create_BuiltAgent_SendsRequestToConfiguredEndpointAndModel()
+    public void CreateChatOptions_Throws_WhenOptionsIsNull()
     {
-        var handler = new CapturingHandler();
-        var options = new RedStarOptions
-        {
-            Agents = new AgentsOptions { GoogleAI = new GoogleAIAgentOptions { BaseUrl = "https://generativelanguage.googleapis.com/openai/", ApiKey = "test-key" } },
-        };
-
-        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://generativelanguage.googleapis.com/v1beta/") };
-        var agent = GoogleAIAgentFactory.Create(httpClient, options, "my-model", "be terse");
-
-        await agent.RunAsync("hi");
-
-        Assert.NotNull(handler.CapturedRequestUri);
-        Assert.EndsWith("/chat/completions", handler.CapturedRequestUri!.ToString());
-        Assert.NotNull(handler.CapturedRequestBody);
-        Assert.Contains("\"model\":\"my-model\"", handler.CapturedRequestBody);
+        Assert.Throws<ArgumentNullException>(() => GoogleAIAgentFactory.CreateChatOptions(null!));
     }
 
-    private sealed class CapturingHandler : HttpMessageHandler
+    [Fact]
+    public void CreateChatOptions_SetsReasoningOutputOnly_WhenThinkingEffortBlank_AndIncludeThoughtsDefaultTrue()
     {
-        public string? CapturedRequestBody { get; private set; }
+        var options = WithGoogleAI();
+        var chatOptions = GoogleAIAgentFactory.CreateChatOptions(options);
 
-        public Uri? CapturedRequestUri { get; private set; }
+        Assert.NotNull(chatOptions.Reasoning);
+        Assert.Null(chatOptions.Reasoning!.Effort);
+        Assert.Equal(ReasoningOutput.Summary, chatOptions.Reasoning.Output);
+    }
 
-        protected override async Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request, CancellationToken cancellationToken)
+    [Fact]
+    public void CreateChatOptions_SetsReasoningEffort_WhenThinkingEffortConfigured()
+    {
+        var options = WithGoogleAI(thinkingEffort: "Low");
+        var chatOptions = GoogleAIAgentFactory.CreateChatOptions(options);
+
+        Assert.NotNull(chatOptions.Reasoning);
+        Assert.Equal(ReasoningEffort.Low, chatOptions.Reasoning!.Effort);
+    }
+
+    [Fact]
+    public void CreateChatOptions_MatchesThinkingEffort_CaseInsensitively()
+    {
+        var options = WithGoogleAI(thinkingEffort: "hIgH");
+        var chatOptions = GoogleAIAgentFactory.CreateChatOptions(options);
+
+        Assert.Equal(ReasoningEffort.High, chatOptions.Reasoning!.Effort);
+    }
+
+    [Fact]
+    public void CreateChatOptions_LeavesEffortNull_WhenThinkingEffortUnrecognized()
+    {
+        var options = WithGoogleAI(thinkingEffort: "bogus");
+        var chatOptions = GoogleAIAgentFactory.CreateChatOptions(options);
+
+        Assert.Null(chatOptions.Reasoning!.Effort);
+    }
+
+    [Fact]
+    public void CreateChatOptions_SetsReasoningOutputNone_WhenIncludeThoughtsFalse()
+    {
+        var options = WithGoogleAI(thinkingEffort: "Low", includeThoughts: false);
+        var chatOptions = GoogleAIAgentFactory.CreateChatOptions(options);
+
+        Assert.NotNull(chatOptions.Reasoning);
+        Assert.Equal(ReasoningOutput.None, chatOptions.Reasoning!.Output);
+    }
+
+    [Fact]
+    public void CreateChatOptions_LeavesReasoningNull_WhenNoThinkingEffortAndIncludeThoughtsFalse()
+    {
+        var options = WithGoogleAI(includeThoughts: false, thinkingEffort: "");
+        var chatOptions = GoogleAIAgentFactory.CreateChatOptions(options);
+
+        Assert.Null(chatOptions.Reasoning);
+    }
+
+    private static RedStarOptions WithGoogleAI(string thinkingEffort = "", bool includeThoughts = true) =>
+        new()
         {
-            CapturedRequestUri = request.RequestUri;
-            if (request.Content is not null)
+            Agents = new AgentsOptions
             {
-                CapturedRequestBody = await request.Content.ReadAsStringAsync(cancellationToken);
-            }
-
-            var response = new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent("""
+                GoogleAI = new GoogleAIAgentOptions
                 {
-                  "id": "chatcmpl-1",
-                  "object": "chat.completion",
-                  "created": 0,
-                  "model": "my-model",
-                  "choices": [{"index":0,"message":{"role":"assistant","content":"hi"},"finish_reason":"stop"}]
-                }
-                """),
-            };
-            response.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
-            return response;
-        }
-    }
+                    ApiKey = "test-key",
+                    ThinkingEffort = thinkingEffort,
+                    IncludeThoughts = includeThoughts,
+                },
+            },
+        };
 }

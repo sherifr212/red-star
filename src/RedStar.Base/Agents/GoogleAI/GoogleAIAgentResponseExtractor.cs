@@ -4,11 +4,12 @@ using Microsoft.Extensions.AI;
 namespace RedStar.Base.Agents.GoogleAI;
 
 /// <summary>
-/// <see cref="IAgentResponseExtractor"/> implementation for Google AI-backed agents.
-/// Google AI Studio's standard chat API follows the OpenAI-compatible schema for basic
-/// completions but does not include tool-status or web-search result extraction support
-/// at this time. Both methods return null as there are no Google AI-specific SSE events
-/// to unwrap beyond the standard OpenAI schema.
+/// <see cref="IAgentResponseExtractor"/> implementation for Google AI-backed agents. Gemini's
+/// "thinking mode" reasoning trace is not routed through this extractor -- the <c>Google.GenAI</c>
+/// SDK's <c>IChatClient</c> already surfaces it as a distinct <c>TextReasoningContent</c>, which
+/// <c>RedStar.Cli.ChatEngine</c> picks up generically for every agent. This extractor exists only for
+/// tool-status labels and completed web-search hits, neither of which Gemini exposes as a side-channel
+/// SSE event the way Unsloth does, so both methods return null.
 /// </summary>
 public sealed class GoogleAIAgentResponseExtractor : IAgentResponseExtractor
 {

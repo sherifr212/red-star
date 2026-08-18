@@ -305,17 +305,17 @@ public sealed record ClaudeCodeOverrides(
 }
 
 /// <summary>
-/// Google AI agent connection/behavior settings, nested at <c>RedStar:Agents:GoogleAI:*</c>.
-/// Google AI Studio provides an OpenAI-compatible API endpoint for chat completions and model listing.
-/// Default model is Gemma 4 31B which is available on Google AI Studio.
+/// Google AI agent connection/behavior settings, nested at <c>RedStar:Agents:GoogleAI:*</c>. Backed by
+/// the native <c>Google.GenAI</c> SDK (<see cref="RedStar.Base.Agents.GoogleAI.GoogleAIAgentFactory"/>)
+/// talking to Gemini's own API, not an OpenAI-compatible shim -- see that factory's remarks for why.
 /// </summary>
 public sealed record GoogleAIAgentOptions
 {
     /// <summary>
-    /// Base URL for Google AI's OpenAI-compatible API endpoint. The default points to the official
-    /// Google AI Studio API. This can be customized if using a compatible endpoint.
+    /// Base URL for Gemini's native API. The default points to the official Google AI Studio
+    /// (Gemini Developer API) endpoint. This can be customized if using a compatible endpoint.
     /// </summary>
-    public string BaseUrl { get; set; } = "https://generativelanguage.googleapis.com/openai/";
+    public string BaseUrl { get; set; } = "https://generativelanguage.googleapis.com/";
 
     /// <summary>
     /// API key for Google AI Studio. Required to use the Google AI agent.
@@ -324,11 +324,32 @@ public sealed record GoogleAIAgentOptions
     public string ApiKey { get; set; } = "";
 
     /// <summary>
-    /// Model used when a command doesn't specify one explicitly. Defaults to "gemma-4-31b-001"
-    /// (Google's Gemma 4 31B model). Other available models can be listed with the `models` command
-    /// when GoogleAI agent is active.
+    /// Model used when a command doesn't specify one explicitly. Other available models can be
+    /// listed with the `models` command when the GoogleAI agent is active.
     /// </summary>
-    public string DefaultModel { get; set; } = "gemma-4-31b-001";
+    public string DefaultModel { get; set; } = "gemini-2.0-flash";
+
+    /// <summary>
+    /// One of <see cref="Microsoft.Extensions.AI.ReasoningEffort"/>'s well-known values
+    /// (<c>None</c>/<c>Low</c>/<c>Medium</c>/<c>High</c>), matched case-insensitively. Maps to
+    /// Gemini's "thinking mode" via <c>ChatOptions.Reasoning.Effort</c> -- see
+    /// <see cref="RedStar.Base.Agents.GoogleAI.GoogleAIAgentFactory.CreateChatOptions"/>. Empty (the
+    /// default) means don't set it at all, leaving the model's own default thinking budget in effect;
+    /// an unrecognized value is treated the same as empty, matching <see cref="RedStarOptions.Agent"/>'s
+    /// permissive-parsing precedent. Config/env-only, no CLI flag -- same rationale as
+    /// <see cref="UnslothAgentOptions.EnabledTools"/>.
+    /// </summary>
+    public string ThinkingEffort { get; set; } = "";
+
+    /// <summary>
+    /// Whether Gemini's thought/reasoning trace should be requested and surfaced as a distinct
+    /// <c>TextReasoningContent</c> block (rendered as its own "Reasoning" stage box by
+    /// <c>RedStar.Cli.ChatEngine</c>) rather than silently dropped. Defaults to <c>true</c> -- losing
+    /// thinking-mode output by default is the exact gap this agent's SDK swap closes (see
+    /// <see cref="RedStar.Base.Agents.GoogleAI.GoogleAIAgentFactory.CreateChatOptions"/>). Config/env-only,
+    /// no CLI flag.
+    /// </summary>
+    public bool IncludeThoughts { get; set; } = true;
 }
 
 /// <summary>OpenTelemetry OTLP export settings. See <see cref="RedStarOptions.Otel"/>.</summary>

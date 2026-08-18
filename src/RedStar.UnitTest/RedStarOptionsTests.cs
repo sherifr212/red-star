@@ -88,6 +88,24 @@ public class RedStarOptionsTests
     }
 
     [Fact]
+    public void ApplyOverrides_PreservesGoogleAIThinkingConfig_WhichHasNoCliOverride()
+    {
+        var original = Original();
+        original.Agent = AgentNames.GoogleAI;
+        original.Agents.GoogleAI.ThinkingEffort = "Low";
+        original.Agents.GoogleAI.IncludeThoughts = false;
+
+        var result = original.ApplyOverrides(
+            baseUrl: "http://override/v1beta", apiKey: "override-key", defaultModel: "override-model");
+
+        Assert.Equal("Low", result.Agents.GoogleAI.ThinkingEffort);
+        Assert.False(result.Agents.GoogleAI.IncludeThoughts);
+        Assert.Equal("http://override/v1beta", result.Agents.GoogleAI.BaseUrl);
+        Assert.Equal("override-key", result.Agents.GoogleAI.ApiKey);
+        Assert.Equal("override-model", result.Agents.GoogleAI.DefaultModel);
+    }
+
+    [Fact]
     public void Otel_DefaultsToEnabledWithLocalhostEndpoint()
     {
         var otel = new RedStarOptions().Otel;

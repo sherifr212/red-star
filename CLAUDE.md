@@ -362,15 +362,54 @@ LM Studio's server also has authentication disabled by default (unlike Unsloth, 
 bearer token) — `ChatCommandHandler` skips the "no API key configured" warning entirely for this
 agent rather than printing Unsloth's wording, which would be actively wrong here.
 
+### Google AI agent
+
+`RedStar.Base.Agents.GoogleAI.GoogleAIAgentFactory.Create` builds the Gemini agent on the native
+`Google.GenAI` .NET SDK (`Client.AsIChatClient(modelId)`, `Microsoft.Extensions.AI.GoogleGenAIExtensions`)
+rather than the OpenAI SDK Unsloth/LMStudio use — Microsoft Agent Framework's OpenAI-shaped
+abstractions don't cleanly cover Gemini/Gemma-family quirks (role handling, tool-declaration format,
+and especially "thinking mode": Gemma's reasoning trace is supposed to come back as a distinct block,
+but that separation isn't reliable through an OpenAI-compatible shim). `Google.GenAI`'s own
+`IChatClient` implementation maps `ChatOptions.Reasoning` directly onto Gemini's native
+`ThinkingConfig` and emits thought text as a distinct `TextReasoningContent` (vs. plain `TextContent`
+for the answer) — `RedStar.Cli.ChatEngine`'s existing `TextReasoningContent` handling (added for
+Unsloth but agent-agnostic) picks this up for free, so no `ChatEngine`/`IAgentResponseExtractor`
+changes were needed to wire thinking mode up; `GoogleAIAgentResponseExtractor` stays a no-op, same as
+`LMStudioAgentResponseExtractor`.
+
+`GoogleAIAgentFactory.Create` still takes the caller's named `HttpClient` (same
+`IHttpClientFactory` pipeline as Unsloth/LMStudio), but plugs it into `Google.GenAI.Types.ClientOptions
+.HttpClientFactory` (a `Func<HttpClient>`, lazily invoked and cached by the SDK's `ApiClient`) instead
+of `OpenAIClientOptions.Transport`/`HttpClientPipelineTransport`. No `ConditionalAuthHandler` is
+registered on this agent's named client (`Program.cs`) — unlike Unsloth/LMStudio's optional no-auth
+mode, Gemini always requires a real API key, and the SDK sets its own `x-goog-api-key` header
+directly rather than via a `DelegatingHandler`; `GoogleAIAgentFactory.Create` throws
+`InvalidOperationException` up front when `Agents.GoogleAI.ApiKey` is empty rather than silently
+sending an unauthenticated request.
+
+`Agents.GoogleAI.ThinkingEffort` (one of `Microsoft.Extensions.AI.ReasoningEffort`'s
+`None`/`Low`/`Medium`/`High`, matched case-insensitively; blank/unrecognized means "don't set it,
+let the model default apply") and `Agents.GoogleAI.IncludeThoughts` (default `true`) are mapped onto
+`ChatOptions.Reasoning` by `GoogleAIAgentFactory.CreateChatOptions` — config/env-only, no CLI flag,
+same precedent as `UnslothAgentOptions.EnabledTools`. `IncludeThoughts` defaulting to `true` is
+deliberate: silently losing thinking-mode output is exactly the bug this SDK swap fixes, so the safe
+default surfaces it rather than dropping it.
+
+`GoogleAIModelsClient` is unaffected by this SDK swap — it already talks to Gemini's native
+`GET v1beta/models` REST endpoint by hand (never went through the OpenAI SDK), so it needs no change;
+see [Two HTTP paths, not one](#two-http-paths-not-one).
+
 ### Two HTTP paths, not one
 
 `ModelsClient` (Unsloth, `GET /v1/models`) and `LMStudioModelsClient` (LM Studio, `GET /api/v0/models`
 — see [LM Studio agent](#lm-studio-agent) for why a different endpoint) are both plain hand-rolled
-`HttpClient`/`System.Text.Json` clients — neither goes through the OpenAI SDK or `IChatClient`,
-because model listing isn't part of that abstraction. Chat completions go through
-`UnslothAgentFactory`/`LMStudioAgentFactory` → OpenAI SDK → `IChatClient` → `AIAgent`. Keep that split
-in mind when adding features: "does this belong on the models endpoint or the chat endpoint"
-determines which client it touches.
+`HttpClient`/`System.Text.Json` clients — neither goes through the OpenAI SDK, the `Google.GenAI` SDK,
+or `IChatClient`, because model listing isn't part of that abstraction (`GoogleAIModelsClient` follows
+the same pattern — see [Google AI agent](#google-ai-agent)). Chat completions go through
+`UnslothAgentFactory`/`LMStudioAgentFactory` → OpenAI SDK → `IChatClient` → `AIAgent`, or
+`GoogleAIAgentFactory` → `Google.GenAI` SDK → `IChatClient` → `AIAgent`. Keep that split in mind when
+adding features: "does this belong on the models endpoint or the chat endpoint" determines which
+client it touches.
 
 ### `ChatSession`
 
