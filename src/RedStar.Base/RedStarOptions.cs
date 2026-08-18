@@ -445,8 +445,19 @@ public sealed record GoogleAIAgentOptions
     /// erroring, matching this codebase's generally permissive config-parsing precedent. Config/env-only,
     /// no CLI flag.
     /// </summary>
+    /// <remarks>
+    /// Uses <see cref="StringComparer.OrdinalIgnoreCase"/> so a config author writing the natural camelCase
+    /// spelling (<c>"googleSearch"</c>, matching Gemini's own REST field naming) still matches the
+    /// PascalCase key this dictionary is pre-populated with (<c>"GoogleSearch"</c>), rather than silently
+    /// creating an unrelated second entry that <see cref="RedStar.Base.Agents.GoogleAI.GoogleAIAgentFactory.CreateChatOptions"/>
+    /// never looks up -- every other config value matched by name in this codebase
+    /// (<see cref="RedStarOptions.Agent"/>, <see cref="ThinkingEffort"/>, ClaudeCode's <c>AuthMode</c>/
+    /// <c>ProcessMode</c>) is already case-insensitive; this dictionary is not an exception to that.
+    /// <c>Microsoft.Extensions.Configuration</c>'s binder mutates this existing dictionary instance in place
+    /// (rather than constructing a fresh one), so the comparer set here is preserved through binding.
+    /// </remarks>
     public Dictionary<string, bool> HostedTools { get; set; } =
-        GoogleAIHostedTools.Known.ToDictionary(name => name, _ => false);
+        GoogleAIHostedTools.Known.ToDictionary(name => name, _ => false, StringComparer.OrdinalIgnoreCase);
 }
 
 /// <summary>OpenTelemetry OTLP export settings. See <see cref="RedStarOptions.Otel"/>.</summary>
