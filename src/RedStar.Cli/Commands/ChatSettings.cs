@@ -57,4 +57,16 @@ public sealed class ChatSettings : CommonSettings
     [CommandOption("--claude-max-budget-usd")]
     [Description("ClaudeCode only: passed as --max-budget-usd. Unset means no budget cap.")]
     public double? ClaudeMaxBudgetUsd { get; set; }
+
+    // --- GoogleAI-only options below. No effect for --agent Unsloth/LMStudio/ClaudeCode. Each mirrors a
+    // RedStar:Agents:GoogleAI:* config key/RedStar__Agents__GoogleAI__* env var one-for-one -- see
+    // RedStarOptionsFactory.Build and GoogleAIOverrides.
+
+    [CommandOption("--thinking-effort")]
+    [Description("GoogleAI only: Gemini \"thinking mode\" effort -- None/Low/Medium/High, case-insensitive. Overrides RedStar__Agents__GoogleAI__ThinkingEffort (default: unset, i.e. the model's own default).")]
+    public string? ThinkingEffort { get; set; }
+
+    [CommandOption("--include-thoughts")]
+    [Description("GoogleAI only: whether Gemini's thought/reasoning trace is requested and surfaced as its own \"Reasoning\" box. Overrides RedStar__Agents__GoogleAI__IncludeThoughts (default: true).")]
+    public bool? IncludeThoughts { get; set; }
 }

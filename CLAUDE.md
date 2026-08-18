@@ -362,15 +362,118 @@ LM Studio's server also has authentication disabled by default (unlike Unsloth, 
 bearer token) — `ChatCommandHandler` skips the "no API key configured" warning entirely for this
 agent rather than printing Unsloth's wording, which would be actively wrong here.
 
+### Google AI agent
+
+`RedStar.Base.Agents.GoogleAI.GoogleAIAgentFactory.Create` builds the Gemini agent on the native
+`Google.GenAI` .NET SDK (`Client.AsIChatClient(modelId)`, `Microsoft.Extensions.AI.GoogleGenAIExtensions`)
+rather than the OpenAI SDK Unsloth/LMStudio use — Microsoft Agent Framework's OpenAI-shaped
+abstractions don't cleanly cover Gemini/Gemma-family quirks (role handling, tool-declaration format,
+and especially "thinking mode": Gemma's reasoning trace is supposed to come back as a distinct block,
+but that separation isn't reliable through an OpenAI-compatible shim). `Google.GenAI`'s own
+`IChatClient` implementation maps `ChatOptions.Reasoning` directly onto Gemini's native
+`ThinkingConfig` and emits thought text as a distinct `TextReasoningContent` (vs. plain `TextContent`
+for the answer) — `RedStar.Cli.ChatEngine`'s existing `TextReasoningContent` handling (added for
+Unsloth but agent-agnostic) picks this up for free, so no `ChatEngine`/`IAgentResponseExtractor`
+changes were needed to wire thinking mode up; `GoogleAIAgentResponseExtractor` stays a no-op, same as
+`LMStudioAgentResponseExtractor`.
+
+`GoogleAIAgentFactory.Create` still takes the caller's named `HttpClient` (same
+`IHttpClientFactory` pipeline as Unsloth/LMStudio), but plugs it into `Google.GenAI.Types.ClientOptions
+.HttpClientFactory` (a `Func<HttpClient>`, lazily invoked and cached by the SDK's `ApiClient`) instead
+of `OpenAIClientOptions.Transport`/`HttpClientPipelineTransport`. No `ConditionalAuthHandler` is
+registered on this agent's named client (`Program.cs`) — unlike Unsloth/LMStudio's optional no-auth
+mode, Gemini always requires a real API key, and the SDK sets its own `x-goog-api-key` header
+directly rather than via a `DelegatingHandler`; `GoogleAIAgentFactory.Create` throws
+`InvalidOperationException` up front when `Agents.GoogleAI.ApiKey` is empty rather than silently
+sending an unauthenticated request.
+
+`Agents.GoogleAI.ThinkingEffort` (one of `Microsoft.Extensions.AI.ReasoningEffort`'s
+`None`/`Low`/`Medium`/`High`, matched case-insensitively; blank/unrecognized means "don't set it,
+let the model default apply") and `Agents.GoogleAI.IncludeThoughts` (default `true`) are mapped onto
+`ChatOptions.Reasoning` by `GoogleAIAgentFactory.CreateChatOptions`. Unlike every other GoogleAI
+tunable, these two **do** have CLI flags (`--thinking-effort`/`--include-thoughts` on `ChatSettings`,
+threaded through `ChatCommand` → `RedStarOptionsFactory.Build` → `RedStarOptions.ApplyOverrides` via a
+`GoogleAIOverrides` record — the same "extra per-agent overrides object" pattern as
+`ClaudeCodeOverrides`) since thinking mode is the one Gemini-specific knob users are expected to flip
+per-run rather than leave pinned in config; the inference-sampling knobs below stay config/env-only,
+same precedent as `UnslothAgentOptions.EnabledTools`. `IncludeThoughts` defaulting to `true` is
+deliberate: silently losing thinking-mode output is exactly the bug this SDK swap fixes, so the safe
+default surfaces it rather than dropping it.
+
+`GoogleAIAgentFactory.Create` also takes an optional `tools` parameter (`IEnumerable<AITool>`) — a
+pure injection point, not wired to any concrete tool today. When non-empty, `CreateChatOptions` sets
+`ChatOptions.Tools` and `Create` wraps the built `IChatClient` with `.AsBuilder().UseFunctionInvocation()
+.Build()` so the framework drives the multi-turn tool-calling loop (`FunctionCallContent`/
+`FunctionResultContent`) automatically instead of RedStar hand-rolling dispatch. Gemini requires a
+"thought signature" on any function-call part sent back to it, and — per the *Gemma-specific tricks*
+called out in the original Google.GenAI-adoption issue — that signature needs to survive across turns
+when a tool call is involved but shouldn't need manual stripping/preserving logic elsewhere: this is
+already handled entirely inside the `Google.GenAI` SDK's own message-to-request conversion (verified
+against its source), which looks for the `TextReasoningContent` immediately following a
+`FunctionCallContent` in history and reuses its `ProtectedData` as the signature, or substitutes its
+own "skip validation" placeholder when none is present (e.g. `IncludeThoughts = false`). RedStar's
+only obligation is to not break that: `ChatSession` already preserves every `AIContent` the model
+returns (including `TextReasoningContent`) verbatim in history (see its remarks), so no extra
+stripping/preserving code was needed in this codebase — a future tool just needs to be built as an
+`AIFunction` and passed through this `tools` parameter.
+
+`Agents.GoogleAI.HostedTools` (`Dictionary<string, bool>`, keyed by `GoogleAIHostedTools`'
+`GoogleSearch`/`CodeExecution`/`UrlContext` constants, every key pre-populated `false` via
+`GoogleAIHostedTools.Known`, **constructed with `StringComparer.OrdinalIgnoreCase`** so a config author
+writing the natural camelCase spelling still matches -- see the property's remarks for the bug this
+fixed) turns on Gemini's built-in, server-side tools -- unlike the `tools` injection point above, these
+execute entirely on Google's side and never round-trip a `FunctionCallContent`/`FunctionResultContent`
+back through RedStar, so they need no `UseFunctionInvocation()` wrapping. Which mechanism a given hosted
+tool uses is looked up from two tables on `GoogleAIHostedTools` rather than hardcoded per-tool branches
+in `CreateChatOptions`: `MappedTools` (`GoogleSearch`/`CodeExecution` today) holds a
+`Func<AITool>` per name, translated by the `Google.GenAI` SDK's `IChatClient` into Gemini's native
+`googleSearch`/`codeExecution` tool entries and merged into the same `ChatOptions.Tools` list as any
+client-injected `tools`; `NativeOnlyTools` (`UrlContext` today) holds a `Func<Google.GenAI.Types.Tool>`
+per name for tools with no `Microsoft.Extensions.AI`-modeled equivalent -- `CreateChatOptions` collects
+every enabled one into a single list and hands it to `ChatOptions.RawRepresentationFactory` as a
+`GenerateContentConfig`. The SDK's `CreateRequest` starts from whatever that factory returns and
+*appends* the `ChatOptions.Tools`-derived entries to its already-non-null `Tools` list, so the two
+mechanisms compose safely rather than one clobbering the other. **`CreateChatOptions` is the only place
+in the GoogleAI agent that sets `ChatOptions.RawRepresentationFactory`** -- any future raw-config need
+(e.g. safety settings) must extend the same accumulated `NativeOnlyTools` list rather than overwrite the
+factory outright, or it will silently drop whichever native-only hosted tools were also requested.
+Extending to a future Gemini-native tool is a one-line addition to whichever table fits, not a new
+branch: a newly-`Microsoft.Extensions.AI`-modeled one goes in `MappedTools`, everything else in
+`NativeOnlyTools`. The `Dictionary<string, bool>` shape (rather than `UnslothAgentOptions.EnabledTools`'s
+free-form empty list) is deliberate: the checked-in config template lists every known hosted tool with
+its own explicit switch, so enabling one never requires knowing its exact key name up front. (Gemini's
+own docs describe built-in tools and custom function declarations as combinable in recent model
+versions via "tool context circulation" -- `CreateChatOptions` does not block combining `HostedTools`
+with the `tools` injection point, which matches that.)
+
+`GoogleAIAgentOptions` also carries Gemini's inference-sampling knobs --
+`Temperature`/`TopP`/`TopK`/`MaxOutputTokens`/`FrequencyPenalty`/`PresencePenalty`/`Seed`/
+`StopSequences` -- which `CreateChatOptions` copies straight onto the matching `ChatOptions` property
+(`ChatOptions.Temperature`/`.TopP`/etc. are all natively modeled by `Microsoft.Extensions.AI`, so
+unlike Unsloth's `enable_tools` there's no `Patch`/`RawRepresentationFactory` step needed -- the
+`Google.GenAI` SDK's `IChatClient` maps them into Gemini's `GenerateContentConfig` itself). These
+default to Gemini's own documented values (`Temperature = 1.0`, `TopP = 0.95`, `TopK = 40`,
+`MaxOutputTokens = 8192`) rather than being left unset, so the checked-in config template shows real
+tunable starting points instead of blank knobs; `FrequencyPenalty`/`PresencePenalty` default to `0.0`
+(no penalty, since Gemini has no non-zero documented default) and `Seed` defaults to `null`
+(non-deterministic sampling, since there's no reasonable fixed seed to default to). All
+config/env-only, no CLI flags, same precedent as `ThinkingEffort` above.
+
+`GoogleAIModelsClient` is unaffected by this SDK swap — it already talks to Gemini's native
+`GET v1beta/models` REST endpoint by hand (never went through the OpenAI SDK), so it needs no change;
+see [Two HTTP paths, not one](#two-http-paths-not-one).
+
 ### Two HTTP paths, not one
 
 `ModelsClient` (Unsloth, `GET /v1/models`) and `LMStudioModelsClient` (LM Studio, `GET /api/v0/models`
 — see [LM Studio agent](#lm-studio-agent) for why a different endpoint) are both plain hand-rolled
-`HttpClient`/`System.Text.Json` clients — neither goes through the OpenAI SDK or `IChatClient`,
-because model listing isn't part of that abstraction. Chat completions go through
-`UnslothAgentFactory`/`LMStudioAgentFactory` → OpenAI SDK → `IChatClient` → `AIAgent`. Keep that split
-in mind when adding features: "does this belong on the models endpoint or the chat endpoint"
-determines which client it touches.
+`HttpClient`/`System.Text.Json` clients — neither goes through the OpenAI SDK, the `Google.GenAI` SDK,
+or `IChatClient`, because model listing isn't part of that abstraction (`GoogleAIModelsClient` follows
+the same pattern — see [Google AI agent](#google-ai-agent)). Chat completions go through
+`UnslothAgentFactory`/`LMStudioAgentFactory` → OpenAI SDK → `IChatClient` → `AIAgent`, or
+`GoogleAIAgentFactory` → `Google.GenAI` SDK → `IChatClient` → `AIAgent`. Keep that split in mind when
+adding features: "does this belong on the models endpoint or the chat endpoint" determines which
+client it touches.
 
 ### `ChatSession`
 

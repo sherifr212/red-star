@@ -11,7 +11,8 @@ namespace RedStar.Cli;
 internal static class RedStarOptionsFactory
 {
     public static RedStarOptions Build(
-        string? agent, string? endpoint, string? apiKey, string? defaultModel = null, ClaudeCodeOverrides? claudeCode = null)
+        string? agent, string? endpoint, string? apiKey, string? defaultModel = null,
+        ClaudeCodeOverrides? claudeCode = null, GoogleAIOverrides? googleAI = null)
     {
         var configuration = new ConfigurationBuilder()
             .SetBasePath(AppContext.BaseDirectory)
@@ -23,6 +24,8 @@ internal static class RedStarOptionsFactory
         var options = new RedStarOptions();
         configuration.GetSection(RedStarOptions.SectionName).Bind(options);
 
-        return options.ApplyOverrides(agent: agent, baseUrl: endpoint, apiKey: apiKey, defaultModel: defaultModel, claudeCode: claudeCode);
+        return options.ApplyOverrides(
+            agent: agent, baseUrl: endpoint, apiKey: apiKey, defaultModel: defaultModel,
+            claudeCode: claudeCode, googleAI: googleAI);
     }
 }

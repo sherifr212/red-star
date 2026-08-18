@@ -1,5 +1,6 @@
 using RedStar.Base;
 using RedStar.Base.Agents.ClaudeCode;
+using RedStar.Base.Agents.GoogleAI;
 
 namespace RedStar.UnitTest;
 
@@ -85,6 +86,97 @@ public class RedStarOptionsTests
             baseUrl: "http://override/v1", apiKey: "override-key", defaultModel: "override-model");
 
         Assert.Equal(["web_search", "python"], result.Agents.Unsloth.EnabledTools);
+    }
+
+    [Fact]
+    public void ApplyOverrides_PreservesGoogleAIThinkingConfig_WhichHasNoCliOverride()
+    {
+        var original = Original();
+        original.Agent = AgentNames.GoogleAI;
+        original.Agents.GoogleAI.ThinkingEffort = "Low";
+        original.Agents.GoogleAI.IncludeThoughts = false;
+        original.Agents.GoogleAI.Temperature = 0.2;
+        original.Agents.GoogleAI.TopP = 0.5;
+        original.Agents.GoogleAI.TopK = 10;
+        original.Agents.GoogleAI.MaxOutputTokens = 512;
+        original.Agents.GoogleAI.FrequencyPenalty = 0.3;
+        original.Agents.GoogleAI.PresencePenalty = 0.4;
+        original.Agents.GoogleAI.Seed = 42;
+        original.Agents.GoogleAI.StopSequences = ["STOP"];
+        original.Agents.GoogleAI.HostedTools[GoogleAIHostedTools.GoogleSearch] = true;
+
+        var result = original.ApplyOverrides(
+            baseUrl: "http://override/v1beta", apiKey: "override-key", defaultModel: "override-model");
+
+        Assert.True(result.Agents.GoogleAI.HostedTools[GoogleAIHostedTools.GoogleSearch]);
+        Assert.Equal("Low", result.Agents.GoogleAI.ThinkingEffort);
+        Assert.False(result.Agents.GoogleAI.IncludeThoughts);
+        Assert.Equal(0.2, result.Agents.GoogleAI.Temperature);
+        Assert.Equal(0.5, result.Agents.GoogleAI.TopP);
+        Assert.Equal(10, result.Agents.GoogleAI.TopK);
+        Assert.Equal(512, result.Agents.GoogleAI.MaxOutputTokens);
+        Assert.Equal(0.3, result.Agents.GoogleAI.FrequencyPenalty);
+        Assert.Equal(0.4, result.Agents.GoogleAI.PresencePenalty);
+        Assert.Equal(42, result.Agents.GoogleAI.Seed);
+        Assert.Equal(["STOP"], result.Agents.GoogleAI.StopSequences);
+        Assert.Equal("http://override/v1beta", result.Agents.GoogleAI.BaseUrl);
+        Assert.Equal("override-key", result.Agents.GoogleAI.ApiKey);
+        Assert.Equal("override-model", result.Agents.GoogleAI.DefaultModel);
+    }
+
+    [Fact]
+    public void ApplyOverrides_AppliesGoogleAIOverrides_ThinkingEffortAndIncludeThoughts()
+    {
+        var original = Original();
+        original.Agent = AgentNames.GoogleAI;
+        original.Agents.GoogleAI.ThinkingEffort = "Low";
+        original.Agents.GoogleAI.IncludeThoughts = true;
+
+        var result = original.ApplyOverrides(
+            googleAI: new GoogleAIOverrides(ThinkingEffort: "High", IncludeThoughts: false));
+
+        Assert.Equal("High", result.Agents.GoogleAI.ThinkingEffort);
+        Assert.False(result.Agents.GoogleAI.IncludeThoughts);
+    }
+
+    [Fact]
+    public void ApplyOverrides_GoogleAIOverridesAlone_TriggersOverride_EvenWithoutBaseUrlApiKeyOrDefaultModel()
+    {
+        var original = Original();
+        original.Agent = AgentNames.GoogleAI;
+        original.Agents.GoogleAI.BaseUrl = "http://original-google/v1beta";
+        original.Agents.GoogleAI.ThinkingEffort = "";
+
+        var result = original.ApplyOverrides(googleAI: new GoogleAIOverrides(ThinkingEffort: "Medium"));
+
+        Assert.Equal("Medium", result.Agents.GoogleAI.ThinkingEffort);
+        Assert.Equal("http://original-google/v1beta", result.Agents.GoogleAI.BaseUrl);
+    }
+
+    [Fact]
+    public void ApplyOverrides_LeavesGoogleAIOverrides_WhenTargetingADifferentAgent()
+    {
+        var original = Original();
+        original.Agent = AgentNames.Unsloth;
+        original.Agents.GoogleAI.ThinkingEffort = "Low";
+
+        var result = original.ApplyOverrides(
+            baseUrl: "http://override/v1", googleAI: new GoogleAIOverrides(ThinkingEffort: "High"));
+
+        Assert.Equal("Low", result.Agents.GoogleAI.ThinkingEffort);
+    }
+
+    [Fact]
+    public void GoogleAIOverrides_HasAny_IsFalse_WhenBothFieldsUnset()
+    {
+        Assert.False(new GoogleAIOverrides().HasAny);
+    }
+
+    [Fact]
+    public void GoogleAIOverrides_HasAny_IsTrue_WhenEitherFieldSet()
+    {
+        Assert.True(new GoogleAIOverrides(ThinkingEffort: "Low").HasAny);
+        Assert.True(new GoogleAIOverrides(IncludeThoughts: false).HasAny);
     }
 
     [Fact]

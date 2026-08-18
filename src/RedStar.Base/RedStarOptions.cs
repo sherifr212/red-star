@@ -1,4 +1,5 @@
 using RedStar.Base.Agents.ClaudeCode;
+using RedStar.Base.Agents.GoogleAI;
 
 namespace RedStar.Base;
 
@@ -38,7 +39,9 @@ public sealed class RedStarOptions
     /// <see cref="AgentsOptions.GoogleAI"/>, <see cref="AgentNames.ClaudeCode"/> routes to
     /// <see cref="AgentsOptions.ClaudeCode"/> (<paramref name="baseUrl"/> is meaningless there -- ClaudeCode is
     /// a subprocess agent, not an HTTP one -- and is silently ignored; <paramref name="claudeCode"/> carries
-    /// its own extra overrides instead), anything else (including no override, meaning whatever
+    /// its own extra overrides instead; <paramref name="googleAI"/> similarly carries
+    /// <see cref="GoogleAIAgentOptions.ThinkingEffort"/>/<see cref="GoogleAIAgentOptions.IncludeThoughts"/>
+    /// overrides for the GoogleAI branch), anything else (including no override, meaning whatever
     /// <see cref="Agent"/> already was) routes to <see cref="AgentsOptions.Unsloth"/>. Every other agent's
     /// section is left completely untouched. Clones via <see cref="MemberwiseClone"/> rather than a
     /// field-by-field object initializer so that properties with no CLI override (like <see cref="OtelOptions"/>
@@ -51,7 +54,7 @@ public sealed class RedStarOptions
     /// </summary>
     public RedStarOptions ApplyOverrides(
         string? agent = null, string? baseUrl = null, string? apiKey = null, string? defaultModel = null,
-        ClaudeCodeOverrides? claudeCode = null)
+        ClaudeCodeOverrides? claudeCode = null, GoogleAIOverrides? googleAI = null)
     {
         var clone = (RedStarOptions)MemberwiseClone();
 
@@ -63,20 +66,23 @@ public sealed class RedStarOptions
         var hasCommonOverride =
             !string.IsNullOrWhiteSpace(baseUrl) || !string.IsNullOrWhiteSpace(apiKey) || !string.IsNullOrWhiteSpace(defaultModel);
         var hasClaudeCodeOverride = claudeCode is not null && claudeCode.HasAny;
+        var hasGoogleAIOverride = googleAI is not null && googleAI.HasAny;
 
-        if (!hasCommonOverride && !hasClaudeCodeOverride)
+        if (!hasCommonOverride && !hasClaudeCodeOverride && !hasGoogleAIOverride)
         {
             return clone;
         }
 
         if (string.Equals(clone.Agent, AgentNames.GoogleAI, StringComparison.OrdinalIgnoreCase))
         {
-            var googleAI = clone.Agents.GoogleAI;
-            var overriddenGoogleAI = googleAI with
+            var googleAIOptions = clone.Agents.GoogleAI;
+            var overriddenGoogleAI = googleAIOptions with
             {
-                BaseUrl = string.IsNullOrWhiteSpace(baseUrl) ? googleAI.BaseUrl : baseUrl,
-                ApiKey = string.IsNullOrWhiteSpace(apiKey) ? googleAI.ApiKey : apiKey,
-                DefaultModel = string.IsNullOrWhiteSpace(defaultModel) ? googleAI.DefaultModel : defaultModel,
+                BaseUrl = string.IsNullOrWhiteSpace(baseUrl) ? googleAIOptions.BaseUrl : baseUrl,
+                ApiKey = string.IsNullOrWhiteSpace(apiKey) ? googleAIOptions.ApiKey : apiKey,
+                DefaultModel = string.IsNullOrWhiteSpace(defaultModel) ? googleAIOptions.DefaultModel : defaultModel,
+                ThinkingEffort = googleAI?.ThinkingEffort is { Length: > 0 } thinkingEffort ? thinkingEffort : googleAIOptions.ThinkingEffort,
+                IncludeThoughts = googleAI?.IncludeThoughts ?? googleAIOptions.IncludeThoughts,
             };
             clone.Agents = clone.Agents with { GoogleAI = overriddenGoogleAI };
             return clone;
@@ -305,17 +311,34 @@ public sealed record ClaudeCodeOverrides(
 }
 
 /// <summary>
-/// Google AI agent connection/behavior settings, nested at <c>RedStar:Agents:GoogleAI:*</c>.
-/// Google AI Studio provides an OpenAI-compatible API endpoint for chat completions and model listing.
-/// Default model is Gemma 4 31B which is available on Google AI Studio.
+/// The subset of <see cref="GoogleAIAgentOptions"/> that's settable via CLI flag, mirroring
+/// <see cref="ClaudeCodeOverrides"/>'s role for ClaudeCode -- kept as a separate parameter object
+/// rather than growing <see cref="RedStarOptions.ApplyOverrides"/>'s own parameter list further. Only
+/// covers <see cref="GoogleAIAgentOptions.ThinkingEffort"/>/<see cref="GoogleAIAgentOptions.IncludeThoughts"/>
+/// today -- the inference-sampling knobs (<c>Temperature</c>/<c>TopP</c>/etc.) stay config/env-only, no
+/// CLI flag, same as <see cref="UnslothAgentOptions.EnabledTools"/>. Every field null/empty means "no
+/// override" -- see <see cref="RedStarOptions.ApplyOverrides"/>.
+/// </summary>
+public sealed record GoogleAIOverrides(string? ThinkingEffort = null, bool? IncludeThoughts = null)
+{
+    /// <summary>Whether at least one field here actually carries an override -- used by
+    /// <see cref="RedStarOptions.ApplyOverrides"/> to decide whether the GoogleAI section needs
+    /// reassigning even when <c>baseUrl</c>/<c>apiKey</c>/<c>defaultModel</c> are all blank.</summary>
+    public bool HasAny => ThinkingEffort is { Length: > 0 } || IncludeThoughts is not null;
+}
+
+/// <summary>
+/// Google AI agent connection/behavior settings, nested at <c>RedStar:Agents:GoogleAI:*</c>. Backed by
+/// the native <c>Google.GenAI</c> SDK (<see cref="RedStar.Base.Agents.GoogleAI.GoogleAIAgentFactory"/>)
+/// talking to Gemini's own API, not an OpenAI-compatible shim -- see that factory's remarks for why.
 /// </summary>
 public sealed record GoogleAIAgentOptions
 {
     /// <summary>
-    /// Base URL for Google AI's OpenAI-compatible API endpoint. The default points to the official
-    /// Google AI Studio API. This can be customized if using a compatible endpoint.
+    /// Base URL for Gemini's native API. The default points to the official Google AI Studio
+    /// (Gemini Developer API) endpoint. This can be customized if using a compatible endpoint.
     /// </summary>
-    public string BaseUrl { get; set; } = "https://generativelanguage.googleapis.com/openai/";
+    public string BaseUrl { get; set; } = "https://generativelanguage.googleapis.com/";
 
     /// <summary>
     /// API key for Google AI Studio. Required to use the Google AI agent.
@@ -324,11 +347,117 @@ public sealed record GoogleAIAgentOptions
     public string ApiKey { get; set; } = "";
 
     /// <summary>
-    /// Model used when a command doesn't specify one explicitly. Defaults to "gemma-4-31b-001"
-    /// (Google's Gemma 4 31B model). Other available models can be listed with the `models` command
-    /// when GoogleAI agent is active.
+    /// Model used when a command doesn't specify one explicitly. Other available models can be
+    /// listed with the `models` command when the GoogleAI agent is active.
     /// </summary>
-    public string DefaultModel { get; set; } = "gemma-4-31b-001";
+    public string DefaultModel { get; set; } = "gemini-2.0-flash";
+
+    /// <summary>
+    /// One of <see cref="Microsoft.Extensions.AI.ReasoningEffort"/>'s well-known values
+    /// (<c>None</c>/<c>Low</c>/<c>Medium</c>/<c>High</c>), matched case-insensitively. Maps to
+    /// Gemini's "thinking mode" via <c>ChatOptions.Reasoning.Effort</c> -- see
+    /// <see cref="RedStar.Base.Agents.GoogleAI.GoogleAIAgentFactory.CreateChatOptions"/>. Empty (the
+    /// default) means don't set it at all, leaving the model's own default thinking budget in effect;
+    /// an unrecognized value is treated the same as empty, matching <see cref="RedStarOptions.Agent"/>'s
+    /// permissive-parsing precedent. Config/env-only, no CLI flag -- same rationale as
+    /// <see cref="UnslothAgentOptions.EnabledTools"/>.
+    /// </summary>
+    public string ThinkingEffort { get; set; } = "";
+
+    /// <summary>
+    /// Whether Gemini's thought/reasoning trace should be requested and surfaced as a distinct
+    /// <c>TextReasoningContent</c> block (rendered as its own "Reasoning" stage box by
+    /// <c>RedStar.Cli.ChatEngine</c>) rather than silently dropped. Defaults to <c>true</c> -- losing
+    /// thinking-mode output by default is the exact gap this agent's SDK swap closes (see
+    /// <see cref="RedStar.Base.Agents.GoogleAI.GoogleAIAgentFactory.CreateChatOptions"/>). Config/env-only,
+    /// no CLI flag.
+    /// </summary>
+    public bool IncludeThoughts { get; set; } = true;
+
+    /// <summary>
+    /// Sampling temperature, forwarded to <c>ChatOptions.Temperature</c>. Higher values (up to 2.0)
+    /// make output more random, lower values more deterministic. Defaults to Gemini's own documented
+    /// default for its 2.x model family (see https://ai.google.dev/gemini-api/docs/models) rather than
+    /// being left unset, so the config file shows a real starting point to tune instead of a blank
+    /// knob. Config/env-only, no CLI flag -- same rationale as <see cref="ThinkingEffort"/>.
+    /// </summary>
+    public double? Temperature { get; set; } = 1.0;
+
+    /// <summary>
+    /// Nucleus sampling threshold, forwarded to <c>ChatOptions.TopP</c>. Defaults to Gemini's own
+    /// documented default. Config/env-only, no CLI flag.
+    /// </summary>
+    public double? TopP { get; set; } = 0.95;
+
+    /// <summary>
+    /// Top-k sampling cutoff, forwarded to <c>ChatOptions.TopK</c>. Defaults to Gemini's own
+    /// documented default. Config/env-only, no CLI flag.
+    /// </summary>
+    public int? TopK { get; set; } = 40;
+
+    /// <summary>
+    /// Maximum tokens to generate per response, forwarded to <c>ChatOptions.MaxOutputTokens</c>.
+    /// Defaults to a value comfortably under every current Gemini 2.x model's output-token ceiling.
+    /// Config/env-only, no CLI flag.
+    /// </summary>
+    public int? MaxOutputTokens { get; set; } = 8192;
+
+    /// <summary>
+    /// Penalizes tokens proportional to how often they've already appeared, forwarded to
+    /// <c>ChatOptions.FrequencyPenalty</c>. Defaults to <c>0.0</c> (no penalty) -- unlike
+    /// <see cref="Temperature"/>/<see cref="TopP"/>/<see cref="TopK"/>, Gemini has no non-zero
+    /// documented default here, so "no penalty" is the reasonable starting value. Config/env-only,
+    /// no CLI flag.
+    /// </summary>
+    public double? FrequencyPenalty { get; set; } = 0.0;
+
+    /// <summary>
+    /// Penalizes tokens that have already appeared at all, forwarded to
+    /// <c>ChatOptions.PresencePenalty</c>. Defaults to <c>0.0</c> (no penalty), same rationale as
+    /// <see cref="FrequencyPenalty"/>. Config/env-only, no CLI flag.
+    /// </summary>
+    public double? PresencePenalty { get; set; } = 0.0;
+
+    /// <summary>
+    /// Fixed sampling seed, forwarded to <c>ChatOptions.Seed</c>. Left <c>null</c> by default --
+    /// unlike the sampling knobs above, there is no "reasonable" fixed seed to default to; null means
+    /// non-deterministic sampling, which is what most users want out of the box. Config/env-only, no
+    /// CLI flag.
+    /// </summary>
+    public long? Seed { get; set; }
+
+    /// <summary>
+    /// Strings that stop generation when produced, forwarded to <c>ChatOptions.StopSequences</c>.
+    /// Empty by default -- same "opt-in, not a blank knob that silently does nothing" precedent as
+    /// <see cref="UnslothAgentOptions.EnabledTools"/>. Config/env-only, no CLI flag.
+    /// </summary>
+    public List<string> StopSequences { get; set; } = [];
+
+    /// <summary>
+    /// Which of Gemini's built-in, server-side "hosted" tools (<see cref="GoogleAIHostedTools"/>) are
+    /// enabled, keyed by name and pre-populated with every known one (see
+    /// <see cref="GoogleAIHostedTools.Known"/>) set to <c>false</c> -- unlike
+    /// <see cref="UnslothAgentOptions.EnabledTools"/>'s free-form empty-by-default list, this dictionary
+    /// shape means the checked-in config template always shows every available hosted tool with its own
+    /// explicit on/off switch, so choosing one doesn't require knowing its exact name up front. An
+    /// unrecognized key is silently ignored by
+    /// <see cref="RedStar.Base.Agents.GoogleAI.GoogleAIAgentFactory.CreateChatOptions"/> rather than
+    /// erroring, matching this codebase's generally permissive config-parsing precedent. Config/env-only,
+    /// no CLI flag.
+    /// </summary>
+    /// <remarks>
+    /// Uses <see cref="StringComparer.OrdinalIgnoreCase"/> so a config author writing the natural camelCase
+    /// spelling (<c>"googleSearch"</c>, matching Gemini's own REST field naming) still matches the
+    /// PascalCase key this dictionary is pre-populated with (<c>"GoogleSearch"</c>), rather than silently
+    /// creating an unrelated second entry that <see cref="RedStar.Base.Agents.GoogleAI.GoogleAIAgentFactory.CreateChatOptions"/>
+    /// never looks up -- every other config value matched by name in this codebase
+    /// (<see cref="RedStarOptions.Agent"/>, <see cref="ThinkingEffort"/>, ClaudeCode's <c>AuthMode</c>/
+    /// <c>ProcessMode</c>) is already case-insensitive; this dictionary is not an exception to that.
+    /// <c>Microsoft.Extensions.Configuration</c>'s binder mutates this existing dictionary instance in place
+    /// (rather than constructing a fresh one), so the comparer set here is preserved through binding.
+    /// </remarks>
+    public Dictionary<string, bool> HostedTools { get; set; } =
+        GoogleAIHostedTools.Known.ToDictionary(name => name, _ => false, StringComparer.OrdinalIgnoreCase);
 }
 
 /// <summary>OpenTelemetry OTLP export settings. See <see cref="RedStarOptions.Otel"/>.</summary>

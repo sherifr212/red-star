@@ -62,6 +62,19 @@ internal static class ChatStartupConsole
             table.AddRow("[grey]Tools[/]", FormatToolsSummary(tools, active.KnownToolNames ?? []));
         }
 
+        var isGoogleAI = active.AgentName == AgentNames.GoogleAI;
+        var thinkingEffortLabel = string.Empty;
+        if (isGoogleAI)
+        {
+            var googleAI = options.Agents.GoogleAI;
+            thinkingEffortLabel = string.IsNullOrWhiteSpace(googleAI.ThinkingEffort)
+                ? "model default"
+                : googleAI.ThinkingEffort;
+            table.AddRow("[grey]Thinking effort[/]", Markup.Escape(thinkingEffortLabel));
+            table.AddRow(
+                "[grey]Include thoughts[/]", googleAI.IncludeThoughts ? "[green]enabled[/]" : "[grey]disabled[/]");
+        }
+
         var otel = options.Otel;
         table.AddRow(
             "[grey]Telemetry[/]",
@@ -94,6 +107,12 @@ internal static class ChatStartupConsole
         if (active.Tools is { } toolsForTag)
         {
             activity?.SetTag("redstar.config.enabled_tools", string.Join(",", toolsForTag));
+        }
+
+        if (isGoogleAI)
+        {
+            activity?.SetTag("redstar.config.google_ai.thinking_effort", thinkingEffortLabel);
+            activity?.SetTag("redstar.config.google_ai.include_thoughts", options.Agents.GoogleAI.IncludeThoughts);
         }
 
         activity?.SetTag("redstar.config.telemetry_enabled", otel.Enabled);
