@@ -1,4 +1,10 @@
-# Self-review: GoogleAI / Google.GenAI SDK work (PR #45)
+# Self-review round 1 (sequence 1 of 2): GoogleAI / Google.GenAI SDK work (PR #45)
+
+**This is review #1 in the sequence.** Every finding below was subsequently addressed (fixed, resolved
+by research, or deliberately left as-is with reasoning) in
+[`google-genai-sdk-self-review-02.md`](./google-genai-sdk-self-review-02.md) (review #2) -- see that
+document for current status; this one is kept as-is as the historical record of what the first pass
+found.
 
 Author's own review of everything landed on `feature/google-genai-sdk` so far: the SDK swap,
 inference-parameter config, CLI thinking-mode flags, the client-tool injection point, and the

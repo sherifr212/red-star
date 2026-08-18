@@ -419,22 +419,32 @@ stripping/preserving code was needed in this codebase — a future tool just nee
 
 `Agents.GoogleAI.HostedTools` (`Dictionary<string, bool>`, keyed by `GoogleAIHostedTools`'
 `GoogleSearch`/`CodeExecution`/`UrlContext` constants, every key pre-populated `false` via
-`GoogleAIHostedTools.Known`) turns on Gemini's built-in, server-side tools -- unlike the `tools`
-injection point above, these execute entirely on Google's side and never round-trip a
-`FunctionCallContent`/`FunctionResultContent` back through RedStar, so they need no
-`UseFunctionInvocation()` wrapping. `CreateChatOptions` maps `GoogleSearch`/`CodeExecution` onto
-`Microsoft.Extensions.AI`'s `HostedWebSearchTool`/`HostedCodeInterpreterTool` markers (which the SDK's
-`IChatClient` already knows how to translate into Gemini's native `googleSearch`/`codeExecution` tool
-entries), merged into the same `ChatOptions.Tools` list as any client-injected `tools`. `UrlContext` has
-no `Microsoft.Extensions.AI`-modeled equivalent, so it's added via `ChatOptions.RawRepresentationFactory`
-returning a `GenerateContentConfig` seeded with a `Tool { UrlContext = new() }` entry instead -- the
-SDK's `CreateRequest` starts from whatever that factory returns and *appends* the `ChatOptions.Tools`-
-derived entries to its already-non-null `Tools` list, so the two mechanisms compose safely rather than
-one clobbering the other; extending to a future Gemini-native tool with no `Microsoft.Extensions.AI`
-equivalent (e.g. Google Maps grounding) follows the same `RawRepresentationFactory` pattern. The
-`Dictionary<string, bool>` shape (rather than `UnslothAgentOptions.EnabledTools`'s free-form empty
-list) is deliberate: the checked-in config template lists every known hosted tool with its own
-explicit switch, so enabling one never requires knowing its exact key name up front.
+`GoogleAIHostedTools.Known`, **constructed with `StringComparer.OrdinalIgnoreCase`** so a config author
+writing the natural camelCase spelling still matches -- see the property's remarks for the bug this
+fixed) turns on Gemini's built-in, server-side tools -- unlike the `tools` injection point above, these
+execute entirely on Google's side and never round-trip a `FunctionCallContent`/`FunctionResultContent`
+back through RedStar, so they need no `UseFunctionInvocation()` wrapping. Which mechanism a given hosted
+tool uses is looked up from two tables on `GoogleAIHostedTools` rather than hardcoded per-tool branches
+in `CreateChatOptions`: `MappedTools` (`GoogleSearch`/`CodeExecution` today) holds a
+`Func<AITool>` per name, translated by the `Google.GenAI` SDK's `IChatClient` into Gemini's native
+`googleSearch`/`codeExecution` tool entries and merged into the same `ChatOptions.Tools` list as any
+client-injected `tools`; `NativeOnlyTools` (`UrlContext` today) holds a `Func<Google.GenAI.Types.Tool>`
+per name for tools with no `Microsoft.Extensions.AI`-modeled equivalent -- `CreateChatOptions` collects
+every enabled one into a single list and hands it to `ChatOptions.RawRepresentationFactory` as a
+`GenerateContentConfig`. The SDK's `CreateRequest` starts from whatever that factory returns and
+*appends* the `ChatOptions.Tools`-derived entries to its already-non-null `Tools` list, so the two
+mechanisms compose safely rather than one clobbering the other. **`CreateChatOptions` is the only place
+in the GoogleAI agent that sets `ChatOptions.RawRepresentationFactory`** -- any future raw-config need
+(e.g. safety settings) must extend the same accumulated `NativeOnlyTools` list rather than overwrite the
+factory outright, or it will silently drop whichever native-only hosted tools were also requested.
+Extending to a future Gemini-native tool is a one-line addition to whichever table fits, not a new
+branch: a newly-`Microsoft.Extensions.AI`-modeled one goes in `MappedTools`, everything else in
+`NativeOnlyTools`. The `Dictionary<string, bool>` shape (rather than `UnslothAgentOptions.EnabledTools`'s
+free-form empty list) is deliberate: the checked-in config template lists every known hosted tool with
+its own explicit switch, so enabling one never requires knowing its exact key name up front. (Gemini's
+own docs describe built-in tools and custom function declarations as combinable in recent model
+versions via "tool context circulation" -- `CreateChatOptions` does not block combining `HostedTools`
+with the `tools` injection point, which matches that.)
 
 `GoogleAIAgentOptions` also carries Gemini's inference-sampling knobs --
 `Temperature`/`TopP`/`TopK`/`MaxOutputTokens`/`FrequencyPenalty`/`PresencePenalty`/`Seed`/

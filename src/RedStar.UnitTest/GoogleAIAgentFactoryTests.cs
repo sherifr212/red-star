@@ -361,6 +361,40 @@ public class GoogleAIAgentFactoryTests
         }
     }
 
+    [Fact]
+    public void GoogleAIAgentOptions_HostedTools_DefaultLookupIsCaseInsensitive()
+    {
+        var hostedTools = new GoogleAIAgentOptions().HostedTools;
+
+        Assert.True(hostedTools.ContainsKey("googlesearch"));
+        Assert.True(hostedTools.ContainsKey("GOOGLESEARCH"));
+        Assert.False(hostedTools["gOoGlEsEaRcH"]);
+    }
+
+    [Fact]
+    public void CreateChatOptions_HostedToolLookup_IsCaseInsensitive_EvenWithCustomDictionary()
+    {
+        var options = new RedStarOptions
+        {
+            Agents = new AgentsOptions
+            {
+                GoogleAI = new GoogleAIAgentOptions
+                {
+                    ApiKey = "test-key",
+                    HostedTools = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["googlesearch"] = true,
+                    },
+                },
+            },
+        };
+
+        var chatOptions = GoogleAIAgentFactory.CreateChatOptions(options);
+
+        Assert.NotNull(chatOptions.Tools);
+        Assert.IsType<HostedWebSearchTool>(Assert.Single(chatOptions.Tools));
+    }
+
     private static RedStarOptions WithHostedTools(
         bool googleSearch = false, bool codeExecution = false, bool urlContext = false) =>
         new()
