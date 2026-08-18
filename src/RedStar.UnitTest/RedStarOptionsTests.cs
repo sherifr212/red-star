@@ -1,5 +1,6 @@
 using RedStar.Base;
 using RedStar.Base.Agents.ClaudeCode;
+using RedStar.Base.Agents.GoogleAI;
 
 namespace RedStar.UnitTest;
 
@@ -102,10 +103,12 @@ public class RedStarOptionsTests
         original.Agents.GoogleAI.PresencePenalty = 0.4;
         original.Agents.GoogleAI.Seed = 42;
         original.Agents.GoogleAI.StopSequences = ["STOP"];
+        original.Agents.GoogleAI.HostedTools[GoogleAIHostedTools.GoogleSearch] = true;
 
         var result = original.ApplyOverrides(
             baseUrl: "http://override/v1beta", apiKey: "override-key", defaultModel: "override-model");
 
+        Assert.True(result.Agents.GoogleAI.HostedTools[GoogleAIHostedTools.GoogleSearch]);
         Assert.Equal("Low", result.Agents.GoogleAI.ThinkingEffort);
         Assert.False(result.Agents.GoogleAI.IncludeThoughts);
         Assert.Equal(0.2, result.Agents.GoogleAI.Temperature);

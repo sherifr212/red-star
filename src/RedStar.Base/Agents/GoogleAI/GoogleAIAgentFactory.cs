@@ -101,8 +101,18 @@ public static class GoogleAIAgentFactory
     /// <c>Microsoft.Extensions.AI</c> and mapped into Gemini's <c>GenerateContentConfig</c> by the SDK's
     /// <c>IChatClient</c> itself, so unlike Unsloth's <c>enable_tools</c>/<c>enabled_tools</c> there's no
     /// provider-specific <c>Patch</c>/<c>RawRepresentationFactory</c> step needed here. <paramref name="tools"/>
-    /// (see <see cref="Create"/>'s remarks) is carried straight onto <see cref="ChatOptions.Tools"/> when
-    /// non-empty; left <c>null</c> otherwise so an empty tool list never gets sent as an empty array.
+    /// (see <see cref="Create"/>'s remarks) and every enabled entry of
+    /// <see cref="GoogleAIAgentOptions.HostedTools"/> are merged onto <see cref="ChatOptions.Tools"/>;
+    /// left <c>null</c> when neither contributes anything, so an empty tool list never gets sent as an
+    /// empty array. <see cref="GoogleAIHostedTools.GoogleSearch"/>/<see cref="GoogleAIHostedTools.CodeExecution"/>
+    /// map onto <c>Microsoft.Extensions.AI</c>'s <see cref="HostedWebSearchTool"/>/
+    /// <see cref="HostedCodeInterpreterTool"/> markers, which the <c>Google.GenAI</c> SDK's <c>IChatClient</c>
+    /// already knows how to translate into Gemini's native <c>googleSearch</c>/<c>codeExecution</c> tool
+    /// entries. <see cref="GoogleAIHostedTools.UrlContext"/> has no <c>Microsoft.Extensions.AI</c>-modeled
+    /// equivalent, so it's added via <see cref="ChatOptions.RawRepresentationFactory"/> instead -- the SDK
+    /// starts request construction from whatever <c>GenerateContentConfig</c> that factory returns and then
+    /// *appends* the <see cref="ChatOptions.Tools"/>-derived entries to its (already non-null) <c>Tools</c>
+    /// list, so the two mechanisms compose safely rather than one clobbering the other.
     /// </summary>
     public static ChatOptions CreateChatOptions(RedStarOptions options, IReadOnlyList<AITool>? tools = null)
     {
@@ -125,9 +135,34 @@ public static class GoogleAIAgentFactory
             chatOptions.StopSequences = googleAI.StopSequences;
         }
 
+        List<AITool>? allTools = null;
+
+        if (googleAI.HostedTools.GetValueOrDefault(GoogleAIHostedTools.GoogleSearch))
+        {
+            (allTools ??= []).Add(new HostedWebSearchTool());
+        }
+
+        if (googleAI.HostedTools.GetValueOrDefault(GoogleAIHostedTools.CodeExecution))
+        {
+            (allTools ??= []).Add(new HostedCodeInterpreterTool());
+        }
+
+        if (googleAI.HostedTools.GetValueOrDefault(GoogleAIHostedTools.UrlContext))
+        {
+            chatOptions.RawRepresentationFactory = _ => new GenerateContentConfig
+            {
+                Tools = [new Tool { UrlContext = new UrlContext() }],
+            };
+        }
+
         if (tools is { Count: > 0 })
         {
-            chatOptions.Tools = tools.ToList();
+            (allTools ??= []).AddRange(tools);
+        }
+
+        if (allTools is { Count: > 0 })
+        {
+            chatOptions.Tools = allTools;
         }
 
         ReasoningEffort? effort = null;

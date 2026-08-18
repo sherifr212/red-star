@@ -70,7 +70,12 @@ Configure how RedStar reaches your agents. The quickest way is to configure `app
         "FrequencyPenalty": 0.0,
         "PresencePenalty": 0.0,
         "Seed": null,
-        "StopSequences": []
+        "StopSequences": [],
+        "HostedTools": {
+          "GoogleSearch": false,
+          "CodeExecution": false,
+          "UrlContext": false
+        }
       },
       "ClaudeCode": {
         "AuthMode": "CliLogin",
@@ -86,6 +91,13 @@ are inference-sampling parameters forwarded straight through to Gemini per-reque
 above with Gemini's own documented defaults (`FrequencyPenalty`/`PresencePenalty`/`Seed` have no
 non-zero/non-null Gemini default, so `0.0`/`0.0`/`null` are the reasonable starting values there
 instead) so every field is a real, tunable value rather than a blank knob.
+
+`GoogleAI.HostedTools` lists Gemini's built-in, server-side tools — `GoogleSearch` (grounds answers in
+live web search results), `CodeExecution` (lets the model write and run Python, entirely in Google's
+own sandboxed environment, never on the machine running RedStar), and `UrlContext` (lets the model
+fetch and read the content of a URL) — every known one is listed with its own `true`/`false` switch,
+off by default; flip the ones you want on. These run entirely on Google's side (no RedStar-side tool
+execution or approval loop involved), unlike a future client-side `AIFunction` tool.
 
 Or override any of these per-invocation with CLI flags, or via `RedStar__*` environment variables.
 
