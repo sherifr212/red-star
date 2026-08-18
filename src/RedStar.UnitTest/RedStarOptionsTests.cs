@@ -94,12 +94,28 @@ public class RedStarOptionsTests
         original.Agent = AgentNames.GoogleAI;
         original.Agents.GoogleAI.ThinkingEffort = "Low";
         original.Agents.GoogleAI.IncludeThoughts = false;
+        original.Agents.GoogleAI.Temperature = 0.2;
+        original.Agents.GoogleAI.TopP = 0.5;
+        original.Agents.GoogleAI.TopK = 10;
+        original.Agents.GoogleAI.MaxOutputTokens = 512;
+        original.Agents.GoogleAI.FrequencyPenalty = 0.3;
+        original.Agents.GoogleAI.PresencePenalty = 0.4;
+        original.Agents.GoogleAI.Seed = 42;
+        original.Agents.GoogleAI.StopSequences = ["STOP"];
 
         var result = original.ApplyOverrides(
             baseUrl: "http://override/v1beta", apiKey: "override-key", defaultModel: "override-model");
 
         Assert.Equal("Low", result.Agents.GoogleAI.ThinkingEffort);
         Assert.False(result.Agents.GoogleAI.IncludeThoughts);
+        Assert.Equal(0.2, result.Agents.GoogleAI.Temperature);
+        Assert.Equal(0.5, result.Agents.GoogleAI.TopP);
+        Assert.Equal(10, result.Agents.GoogleAI.TopK);
+        Assert.Equal(512, result.Agents.GoogleAI.MaxOutputTokens);
+        Assert.Equal(0.3, result.Agents.GoogleAI.FrequencyPenalty);
+        Assert.Equal(0.4, result.Agents.GoogleAI.PresencePenalty);
+        Assert.Equal(42, result.Agents.GoogleAI.Seed);
+        Assert.Equal(["STOP"], result.Agents.GoogleAI.StopSequences);
         Assert.Equal("http://override/v1beta", result.Agents.GoogleAI.BaseUrl);
         Assert.Equal("override-key", result.Agents.GoogleAI.ApiKey);
         Assert.Equal("override-model", result.Agents.GoogleAI.DefaultModel);

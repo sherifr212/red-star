@@ -395,6 +395,19 @@ same precedent as `UnslothAgentOptions.EnabledTools`. `IncludeThoughts` defaulti
 deliberate: silently losing thinking-mode output is exactly the bug this SDK swap fixes, so the safe
 default surfaces it rather than dropping it.
 
+`GoogleAIAgentOptions` also carries Gemini's inference-sampling knobs --
+`Temperature`/`TopP`/`TopK`/`MaxOutputTokens`/`FrequencyPenalty`/`PresencePenalty`/`Seed`/
+`StopSequences` -- which `CreateChatOptions` copies straight onto the matching `ChatOptions` property
+(`ChatOptions.Temperature`/`.TopP`/etc. are all natively modeled by `Microsoft.Extensions.AI`, so
+unlike Unsloth's `enable_tools` there's no `Patch`/`RawRepresentationFactory` step needed -- the
+`Google.GenAI` SDK's `IChatClient` maps them into Gemini's `GenerateContentConfig` itself). These
+default to Gemini's own documented values (`Temperature = 1.0`, `TopP = 0.95`, `TopK = 40`,
+`MaxOutputTokens = 8192`) rather than being left unset, so the checked-in config template shows real
+tunable starting points instead of blank knobs; `FrequencyPenalty`/`PresencePenalty` default to `0.0`
+(no penalty, since Gemini has no non-zero documented default) and `Seed` defaults to `null`
+(non-deterministic sampling, since there's no reasonable fixed seed to default to). All
+config/env-only, no CLI flags, same precedent as `ThinkingEffort` above.
+
 `GoogleAIModelsClient` is unaffected by this SDK swap — it already talks to Gemini's native
 `GET v1beta/models` REST endpoint by hand (never went through the OpenAI SDK), so it needs no change;
 see [Two HTTP paths, not one](#two-http-paths-not-one).

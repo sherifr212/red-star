@@ -62,7 +62,15 @@ Configure how RedStar reaches your agents. The quickest way is to configure `app
         "ApiKey": "YOUR_GEMINI_API_KEY",
         "DefaultModel": "gemini-2.0-flash",
         "ThinkingEffort": "",
-        "IncludeThoughts": true
+        "IncludeThoughts": true,
+        "Temperature": 1.0,
+        "TopP": 0.95,
+        "TopK": 40,
+        "MaxOutputTokens": 8192,
+        "FrequencyPenalty": 0.0,
+        "PresencePenalty": 0.0,
+        "Seed": null,
+        "StopSequences": []
       },
       "ClaudeCode": {
         "AuthMode": "CliLogin",
@@ -72,6 +80,12 @@ Configure how RedStar reaches your agents. The quickest way is to configure `app
   }
 }
 ```
+
+`GoogleAI`'s `Temperature`/`TopP`/`TopK`/`MaxOutputTokens`/`FrequencyPenalty`/`PresencePenalty`/`Seed`/`StopSequences`
+are inference-sampling parameters forwarded straight through to Gemini per-request — pre-populated
+above with Gemini's own documented defaults (`FrequencyPenalty`/`PresencePenalty`/`Seed` have no
+non-zero/non-null Gemini default, so `0.0`/`0.0`/`null` are the reasonable starting values there
+instead) so every field is a real, tunable value rather than a blank knob.
 
 Or override any of these per-invocation with CLI flags, or via `RedStar__*` environment variables.
 
