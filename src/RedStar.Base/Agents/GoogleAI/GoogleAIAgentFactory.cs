@@ -111,7 +111,13 @@ public static class GoogleAIAgentFactory
     /// <see cref="ChatOptions.Tools"/>-derived entries to its (already non-null) <c>Tools</c> list, so the
     /// two mechanisms compose safely rather than one clobbering the other. An unrecognized
     /// <see cref="GoogleAIAgentOptions.HostedTools"/> key matches neither table and is silently ignored,
-    /// same precedent as elsewhere in this codebase. <b>This is the only place in the GoogleAI agent that
+    /// same precedent as elsewhere in this codebase. Enabled keys are also deduplicated case-insensitively
+    /// as the dictionary is walked, so a hand-built <see cref="GoogleAIAgentOptions.HostedTools"/> using an
+    /// ordinal comparer with both <c>"GoogleSearch"</c> and <c>"googlesearch"</c> set <c>true</c> still adds
+    /// the tool only once -- normal config binding can't produce this (it merges into one
+    /// case-insensitive key, see <see cref="GoogleAIAgentOptions.HostedTools"/>'s remarks), but a caller
+    /// bypassing that default shouldn't be able to double-add a hosted tool either. <b>This is the only
+    /// place in the GoogleAI agent that
     /// sets <see cref="ChatOptions.RawRepresentationFactory"/></b> -- any future raw-config need (e.g.
     /// safety settings) must extend the same accumulated list this method builds rather than overwrite the
     /// factory outright, or it will silently drop whichever native-only hosted tools were also requested.
@@ -139,10 +145,11 @@ public static class GoogleAIAgentFactory
 
         List<AITool>? allTools = null;
         List<Tool>? nativeOnlyTools = null;
+        var addedHostedTools = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var (name, enabled) in googleAI.HostedTools)
         {
-            if (!enabled)
+            if (!enabled || !addedHostedTools.Add(name))
             {
                 continue;
             }

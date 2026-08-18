@@ -395,6 +395,34 @@ public class GoogleAIAgentFactoryTests
         Assert.IsType<HostedWebSearchTool>(Assert.Single(chatOptions.Tools));
     }
 
+    [Fact]
+    public void CreateChatOptions_DeduplicatesHostedTool_WhenCallerDictionaryHasMismatchedCaseDuplicateKeys()
+    {
+        // A hand-built ordinal-comparer dictionary can hold "GoogleSearch" and "googlesearch" as two
+        // separate true entries -- something normal config binding (case-insensitive by construction,
+        // see the test above) can never produce. CreateChatOptions must still only add the tool once.
+        var options = new RedStarOptions
+        {
+            Agents = new AgentsOptions
+            {
+                GoogleAI = new GoogleAIAgentOptions
+                {
+                    ApiKey = "test-key",
+                    HostedTools = new Dictionary<string, bool>(StringComparer.Ordinal)
+                    {
+                        ["GoogleSearch"] = true,
+                        ["googlesearch"] = true,
+                    },
+                },
+            },
+        };
+
+        var chatOptions = GoogleAIAgentFactory.CreateChatOptions(options);
+
+        Assert.NotNull(chatOptions.Tools);
+        Assert.IsType<HostedWebSearchTool>(Assert.Single(chatOptions.Tools));
+    }
+
     private static RedStarOptions WithHostedTools(
         bool googleSearch = false, bool codeExecution = false, bool urlContext = false) =>
         new()
