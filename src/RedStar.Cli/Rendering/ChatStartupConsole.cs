@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging;
 using RedStar.Base;
-using RedStar.Base.Agents.ClaudeCode;
 using RedStar.Cli.Infrastructure;
 using Spectre.Console;
 using System.Diagnostics;
@@ -14,17 +13,20 @@ internal static class ChatStartupConsole
 {
     /// <summary>
     /// Prints a boxed summary of this run's effective configuration -- which agent, connection details
-    /// (endpoint+API key for Unsloth/LM Studio; CLI path/auth mode/process mode for ClaudeCode),
+    /// (endpoint+API key for Unsloth/LM Studio/GoogleAI; CLI path/auth mode/process mode for ClaudeCode),
     /// the resolved model plus how it was picked, every known tool's on/off state,
     /// and telemetry export -- once per run, before any chat request goes out.
     /// Mirrors the same fields onto <paramref name="activity"/>'s tags (<c>redstar.config.*</c>)
-    /// and one structured log line.
+    /// and one structured log line. Every agent-specific piece (connection rows/tags plus any extra
+    /// rows/tags/logging, e.g. GoogleAI's sampling config) is delegated to an
+    /// <see cref="IAgentStartupInfoRenderer"/> picked via <see cref="AgentStartupInfoRendererFactory"/>,
+    /// so a new agent's quirks don't grow another branch in this method.
     /// </summary>
     public static void PrintStartupInfoBox(
         RedStarOptions options, ActiveAgentSettings active, string runId, string modelId, string modelSourceLabel,
         Activity? activity, ILogger logger)
     {
-        var isClaudeCode = active.AgentName == AgentNames.ClaudeCode;
+        var renderer = AgentStartupInfoRendererFactory.Create(active.AgentName);
         var apiKeyConfigured = !string.IsNullOrEmpty(active.ApiKey);
 
         var table = new Table().Border(TableBorder.None).HideHeaders();
@@ -33,28 +35,7 @@ internal static class ChatStartupConsole
         table.AddRow("[grey]Agent[/]", Markup.Escape(active.AgentName));
         table.AddRow("[grey]Run ID[/]", Markup.Escape(runId));
 
-        if (isClaudeCode)
-        {
-            var claudeCode = options.Agents.ClaudeCode;
-            table.AddRow("[grey]CLI path[/]", Markup.Escape(claudeCode.CliPath));
-            table.AddRow("[grey]Auth mode[/]", Markup.Escape(claudeCode.AuthMode));
-            if (string.Equals(claudeCode.AuthMode, ClaudeCodeAuthModes.ApiKey, StringComparison.OrdinalIgnoreCase))
-            {
-                var claudeApiKeyConfigured = !string.IsNullOrEmpty(claudeCode.ApiKey);
-                table.AddRow("[grey]API key[/]", claudeApiKeyConfigured ? "[green]configured[/]" : "[yellow]not configured[/]");
-            }
-
-            table.AddRow("[grey]Process mode[/]", Markup.Escape(claudeCode.ProcessMode));
-            if (claudeCode.Bare)
-            {
-                table.AddRow("[grey]Bare[/]", "[green]enabled[/]");
-            }
-        }
-        else
-        {
-            table.AddRow("[grey]Endpoint[/]", Markup.Escape(active.BaseUrl));
-            table.AddRow("[grey]API key[/]", apiKeyConfigured ? "[green]configured[/]" : "[yellow]not configured[/]");
-        }
+        renderer.AddConnectionRows(table, options, active, apiKeyConfigured);
 
         table.AddRow("[grey]Model[/]", $"[green]{Markup.Escape(modelId)}[/] [grey]({modelSourceLabel})[/]");
         if (active.Tools is { } tools)
@@ -62,18 +43,7 @@ internal static class ChatStartupConsole
             table.AddRow("[grey]Tools[/]", FormatToolsSummary(tools, active.KnownToolNames ?? []));
         }
 
-        var isGoogleAI = active.AgentName == AgentNames.GoogleAI;
-        var thinkingEffortLabel = string.Empty;
-        if (isGoogleAI)
-        {
-            var googleAI = options.Agents.GoogleAI;
-            thinkingEffortLabel = string.IsNullOrWhiteSpace(googleAI.ThinkingEffort)
-                ? "model default"
-                : googleAI.ThinkingEffort;
-            table.AddRow("[grey]Thinking effort[/]", Markup.Escape(thinkingEffortLabel));
-            table.AddRow(
-                "[grey]Include thoughts[/]", googleAI.IncludeThoughts ? "[green]enabled[/]" : "[grey]disabled[/]");
-        }
+        renderer.AddExtraRows(table, options, active);
 
         var otel = options.Otel;
         table.AddRow(
@@ -88,19 +58,7 @@ internal static class ChatStartupConsole
         AnsiConsole.Write(panel);
 
         activity?.SetTag("redstar.config.agent", active.AgentName);
-        if (isClaudeCode)
-        {
-            var claudeCode = options.Agents.ClaudeCode;
-            activity?.SetTag("redstar.config.claude_code.cli_path", claudeCode.CliPath);
-            activity?.SetTag("redstar.config.claude_code.auth_mode", claudeCode.AuthMode);
-            activity?.SetTag("redstar.config.claude_code.process_mode", claudeCode.ProcessMode);
-            activity?.SetTag("redstar.config.claude_code.bare", claudeCode.Bare);
-        }
-        else
-        {
-            activity?.SetTag("redstar.config.endpoint", active.BaseUrl);
-            activity?.SetTag("redstar.config.api_key_configured", apiKeyConfigured);
-        }
+        renderer.AddConnectionTags(activity, options, active, apiKeyConfigured);
 
         activity?.SetTag("redstar.config.model", modelId);
         activity?.SetTag("redstar.config.model_source", modelSourceLabel);
@@ -109,11 +67,7 @@ internal static class ChatStartupConsole
             activity?.SetTag("redstar.config.enabled_tools", string.Join(",", toolsForTag));
         }
 
-        if (isGoogleAI)
-        {
-            activity?.SetTag("redstar.config.google_ai.thinking_effort", thinkingEffortLabel);
-            activity?.SetTag("redstar.config.google_ai.include_thoughts", options.Agents.GoogleAI.IncludeThoughts);
-        }
+        renderer.AddExtraTags(activity, options, active);
 
         activity?.SetTag("redstar.config.telemetry_enabled", otel.Enabled);
         activity?.SetTag("redstar.config.telemetry_endpoint", otel.Endpoint);
@@ -124,6 +78,8 @@ internal static class ChatStartupConsole
             "telemetryEnabled={TelemetryEnabled} telemetryEndpoint={TelemetryEndpoint}",
             runId, active.AgentName, active.BaseUrl, apiKeyConfigured, modelId, modelSourceLabel,
             active.Tools is null ? "n/a" : string.Join(",", active.Tools), otel.Enabled, otel.Endpoint);
+
+        renderer.LogExtra(logger, runId, options, active);
     }
 
     /// <summary>
