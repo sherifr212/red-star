@@ -350,6 +350,65 @@ public sealed record GoogleAIAgentOptions
     /// no CLI flag.
     /// </summary>
     public bool IncludeThoughts { get; set; } = true;
+
+    /// <summary>
+    /// Sampling temperature, forwarded to <c>ChatOptions.Temperature</c>. Higher values (up to 2.0)
+    /// make output more random, lower values more deterministic. Defaults to Gemini's own documented
+    /// default for its 2.x model family (see https://ai.google.dev/gemini-api/docs/models) rather than
+    /// being left unset, so the config file shows a real starting point to tune instead of a blank
+    /// knob. Config/env-only, no CLI flag -- same rationale as <see cref="ThinkingEffort"/>.
+    /// </summary>
+    public double? Temperature { get; set; } = 1.0;
+
+    /// <summary>
+    /// Nucleus sampling threshold, forwarded to <c>ChatOptions.TopP</c>. Defaults to Gemini's own
+    /// documented default. Config/env-only, no CLI flag.
+    /// </summary>
+    public double? TopP { get; set; } = 0.95;
+
+    /// <summary>
+    /// Top-k sampling cutoff, forwarded to <c>ChatOptions.TopK</c>. Defaults to Gemini's own
+    /// documented default. Config/env-only, no CLI flag.
+    /// </summary>
+    public int? TopK { get; set; } = 40;
+
+    /// <summary>
+    /// Maximum tokens to generate per response, forwarded to <c>ChatOptions.MaxOutputTokens</c>.
+    /// Defaults to a value comfortably under every current Gemini 2.x model's output-token ceiling.
+    /// Config/env-only, no CLI flag.
+    /// </summary>
+    public int? MaxOutputTokens { get; set; } = 8192;
+
+    /// <summary>
+    /// Penalizes tokens proportional to how often they've already appeared, forwarded to
+    /// <c>ChatOptions.FrequencyPenalty</c>. Defaults to <c>0.0</c> (no penalty) -- unlike
+    /// <see cref="Temperature"/>/<see cref="TopP"/>/<see cref="TopK"/>, Gemini has no non-zero
+    /// documented default here, so "no penalty" is the reasonable starting value. Config/env-only,
+    /// no CLI flag.
+    /// </summary>
+    public double? FrequencyPenalty { get; set; } = 0.0;
+
+    /// <summary>
+    /// Penalizes tokens that have already appeared at all, forwarded to
+    /// <c>ChatOptions.PresencePenalty</c>. Defaults to <c>0.0</c> (no penalty), same rationale as
+    /// <see cref="FrequencyPenalty"/>. Config/env-only, no CLI flag.
+    /// </summary>
+    public double? PresencePenalty { get; set; } = 0.0;
+
+    /// <summary>
+    /// Fixed sampling seed, forwarded to <c>ChatOptions.Seed</c>. Left <c>null</c> by default --
+    /// unlike the sampling knobs above, there is no "reasonable" fixed seed to default to; null means
+    /// non-deterministic sampling, which is what most users want out of the box. Config/env-only, no
+    /// CLI flag.
+    /// </summary>
+    public long? Seed { get; set; }
+
+    /// <summary>
+    /// Strings that stop generation when produced, forwarded to <c>ChatOptions.StopSequences</c>.
+    /// Empty by default -- same "opt-in, not a blank knob that silently does nothing" precedent as
+    /// <see cref="UnslothAgentOptions.EnabledTools"/>. Config/env-only, no CLI flag.
+    /// </summary>
+    public List<string> StopSequences { get; set; } = [];
 }
 
 /// <summary>OpenTelemetry OTLP export settings. See <see cref="RedStarOptions.Otel"/>.</summary>

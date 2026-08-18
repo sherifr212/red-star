@@ -123,6 +123,86 @@ public class GoogleAIAgentFactoryTests
         Assert.Null(chatOptions.Reasoning);
     }
 
+    [Fact]
+    public void CreateChatOptions_AppliesDefaultInferenceParameters_FromNewGoogleAIAgentOptions()
+    {
+        var options = new RedStarOptions { Agents = new AgentsOptions { GoogleAI = new GoogleAIAgentOptions { ApiKey = "test-key" } } };
+        var chatOptions = GoogleAIAgentFactory.CreateChatOptions(options);
+
+        Assert.Equal(1.0f, chatOptions.Temperature);
+        Assert.Equal(0.95f, chatOptions.TopP);
+        Assert.Equal(40, chatOptions.TopK);
+        Assert.Equal(8192, chatOptions.MaxOutputTokens);
+        Assert.Equal(0.0f, chatOptions.FrequencyPenalty);
+        Assert.Equal(0.0f, chatOptions.PresencePenalty);
+        Assert.Null(chatOptions.Seed);
+        Assert.Null(chatOptions.StopSequences);
+    }
+
+    [Fact]
+    public void CreateChatOptions_CarriesConfiguredInferenceParameters_OntoChatOptions()
+    {
+        var options = new RedStarOptions
+        {
+            Agents = new AgentsOptions
+            {
+                GoogleAI = new GoogleAIAgentOptions
+                {
+                    ApiKey = "test-key",
+                    Temperature = 0.2,
+                    TopP = 0.5,
+                    TopK = 10,
+                    MaxOutputTokens = 512,
+                    FrequencyPenalty = 0.3,
+                    PresencePenalty = 0.4,
+                    Seed = 42,
+                    StopSequences = ["STOP", "END"],
+                },
+            },
+        };
+
+        var chatOptions = GoogleAIAgentFactory.CreateChatOptions(options);
+
+        Assert.Equal(0.2f, chatOptions.Temperature);
+        Assert.Equal(0.5f, chatOptions.TopP);
+        Assert.Equal(10, chatOptions.TopK);
+        Assert.Equal(512, chatOptions.MaxOutputTokens);
+        Assert.Equal(0.3f, chatOptions.FrequencyPenalty);
+        Assert.Equal(0.4f, chatOptions.PresencePenalty);
+        Assert.Equal(42, chatOptions.Seed);
+        Assert.Equal(["STOP", "END"], chatOptions.StopSequences);
+    }
+
+    [Fact]
+    public void CreateChatOptions_LeavesInferenceParametersNull_WhenConfiguredAsNull()
+    {
+        var options = new RedStarOptions
+        {
+            Agents = new AgentsOptions
+            {
+                GoogleAI = new GoogleAIAgentOptions
+                {
+                    ApiKey = "test-key",
+                    Temperature = null,
+                    TopP = null,
+                    TopK = null,
+                    MaxOutputTokens = null,
+                    FrequencyPenalty = null,
+                    PresencePenalty = null,
+                },
+            },
+        };
+
+        var chatOptions = GoogleAIAgentFactory.CreateChatOptions(options);
+
+        Assert.Null(chatOptions.Temperature);
+        Assert.Null(chatOptions.TopP);
+        Assert.Null(chatOptions.TopK);
+        Assert.Null(chatOptions.MaxOutputTokens);
+        Assert.Null(chatOptions.FrequencyPenalty);
+        Assert.Null(chatOptions.PresencePenalty);
+    }
+
     private static RedStarOptions WithGoogleAI(string thinkingEffort = "", bool includeThoughts = true) =>
         new()
         {

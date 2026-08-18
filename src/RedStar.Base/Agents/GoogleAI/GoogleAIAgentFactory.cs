@@ -66,14 +66,35 @@ public static class GoogleAIAgentFactory
     /// <c>Effort</c>, <c>IncludeThoughts</c> from <c>Output</c>). Left as <c>null</c> only when
     /// <see cref="GoogleAIAgentOptions.ThinkingEffort"/> is blank/unrecognized and
     /// <see cref="GoogleAIAgentOptions.IncludeThoughts"/> is <c>false</c> -- i.e. only when there is
-    /// nothing to configure -- so the model's own default thinking behavior applies untouched.
+    /// nothing to configure -- so the model's own default thinking behavior applies untouched. Also
+    /// carries every inference-parameter field on <see cref="GoogleAIAgentOptions"/>
+    /// (<c>Temperature</c>/<c>TopP</c>/<c>TopK</c>/<c>MaxOutputTokens</c>/<c>FrequencyPenalty</c>/
+    /// <c>PresencePenalty</c>/<c>Seed</c>/<c>StopSequences</c>) straight onto the matching
+    /// <see cref="ChatOptions"/> property -- these are all natively modeled by
+    /// <c>Microsoft.Extensions.AI</c> and mapped into Gemini's <c>GenerateContentConfig</c> by the SDK's
+    /// <c>IChatClient</c> itself, so unlike Unsloth's <c>enable_tools</c>/<c>enabled_tools</c> there's no
+    /// provider-specific <c>Patch</c>/<c>RawRepresentationFactory</c> step needed here.
     /// </summary>
     public static ChatOptions CreateChatOptions(RedStarOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
 
         var googleAI = options.Agents.GoogleAI;
-        var chatOptions = new ChatOptions();
+        var chatOptions = new ChatOptions
+        {
+            Temperature = (float?)googleAI.Temperature,
+            TopP = (float?)googleAI.TopP,
+            TopK = googleAI.TopK,
+            MaxOutputTokens = googleAI.MaxOutputTokens,
+            FrequencyPenalty = (float?)googleAI.FrequencyPenalty,
+            PresencePenalty = (float?)googleAI.PresencePenalty,
+            Seed = googleAI.Seed,
+        };
+
+        if (googleAI.StopSequences.Count > 0)
+        {
+            chatOptions.StopSequences = googleAI.StopSequences;
+        }
 
         ReasoningEffort? effort = null;
         if (!string.IsNullOrWhiteSpace(googleAI.ThinkingEffort) &&
