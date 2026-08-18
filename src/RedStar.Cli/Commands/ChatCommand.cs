@@ -29,7 +29,12 @@ public sealed class ChatCommand : AsyncCommand<ChatSettings>
             PermissionMode: settings.ClaudePermissionMode,
             MaxBudgetUsd: settings.ClaudeMaxBudgetUsd);
 
-        var options = RedStarOptionsFactory.Build(settings.Agent, settings.Endpoint, settings.ApiKey, settings.Model, claudeCode);
+        var googleAI = new GoogleAIOverrides(
+            ThinkingEffort: settings.ThinkingEffort,
+            IncludeThoughts: settings.IncludeThoughts);
+
+        var options = RedStarOptionsFactory.Build(
+            settings.Agent, settings.Endpoint, settings.ApiKey, settings.Model, claudeCode, googleAI);
         return await ChatCommandHandler.RunAsync(
             options, settings.Prompt, settings.System, cancellationToken,
             httpClientFactory: _httpClientFactory,

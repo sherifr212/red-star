@@ -38,7 +38,9 @@ public sealed class RedStarOptions
     /// <see cref="AgentsOptions.GoogleAI"/>, <see cref="AgentNames.ClaudeCode"/> routes to
     /// <see cref="AgentsOptions.ClaudeCode"/> (<paramref name="baseUrl"/> is meaningless there -- ClaudeCode is
     /// a subprocess agent, not an HTTP one -- and is silently ignored; <paramref name="claudeCode"/> carries
-    /// its own extra overrides instead), anything else (including no override, meaning whatever
+    /// its own extra overrides instead; <paramref name="googleAI"/> similarly carries
+    /// <see cref="GoogleAIAgentOptions.ThinkingEffort"/>/<see cref="GoogleAIAgentOptions.IncludeThoughts"/>
+    /// overrides for the GoogleAI branch), anything else (including no override, meaning whatever
     /// <see cref="Agent"/> already was) routes to <see cref="AgentsOptions.Unsloth"/>. Every other agent's
     /// section is left completely untouched. Clones via <see cref="MemberwiseClone"/> rather than a
     /// field-by-field object initializer so that properties with no CLI override (like <see cref="OtelOptions"/>
@@ -51,7 +53,7 @@ public sealed class RedStarOptions
     /// </summary>
     public RedStarOptions ApplyOverrides(
         string? agent = null, string? baseUrl = null, string? apiKey = null, string? defaultModel = null,
-        ClaudeCodeOverrides? claudeCode = null)
+        ClaudeCodeOverrides? claudeCode = null, GoogleAIOverrides? googleAI = null)
     {
         var clone = (RedStarOptions)MemberwiseClone();
 
@@ -63,20 +65,23 @@ public sealed class RedStarOptions
         var hasCommonOverride =
             !string.IsNullOrWhiteSpace(baseUrl) || !string.IsNullOrWhiteSpace(apiKey) || !string.IsNullOrWhiteSpace(defaultModel);
         var hasClaudeCodeOverride = claudeCode is not null && claudeCode.HasAny;
+        var hasGoogleAIOverride = googleAI is not null && googleAI.HasAny;
 
-        if (!hasCommonOverride && !hasClaudeCodeOverride)
+        if (!hasCommonOverride && !hasClaudeCodeOverride && !hasGoogleAIOverride)
         {
             return clone;
         }
 
         if (string.Equals(clone.Agent, AgentNames.GoogleAI, StringComparison.OrdinalIgnoreCase))
         {
-            var googleAI = clone.Agents.GoogleAI;
-            var overriddenGoogleAI = googleAI with
+            var googleAIOptions = clone.Agents.GoogleAI;
+            var overriddenGoogleAI = googleAIOptions with
             {
-                BaseUrl = string.IsNullOrWhiteSpace(baseUrl) ? googleAI.BaseUrl : baseUrl,
-                ApiKey = string.IsNullOrWhiteSpace(apiKey) ? googleAI.ApiKey : apiKey,
-                DefaultModel = string.IsNullOrWhiteSpace(defaultModel) ? googleAI.DefaultModel : defaultModel,
+                BaseUrl = string.IsNullOrWhiteSpace(baseUrl) ? googleAIOptions.BaseUrl : baseUrl,
+                ApiKey = string.IsNullOrWhiteSpace(apiKey) ? googleAIOptions.ApiKey : apiKey,
+                DefaultModel = string.IsNullOrWhiteSpace(defaultModel) ? googleAIOptions.DefaultModel : defaultModel,
+                ThinkingEffort = googleAI?.ThinkingEffort is { Length: > 0 } thinkingEffort ? thinkingEffort : googleAIOptions.ThinkingEffort,
+                IncludeThoughts = googleAI?.IncludeThoughts ?? googleAIOptions.IncludeThoughts,
             };
             clone.Agents = clone.Agents with { GoogleAI = overriddenGoogleAI };
             return clone;
@@ -302,6 +307,23 @@ public sealed record ClaudeCodeOverrides(
         ProcessMode is { Length: > 0 } || WorkingDirectory is { Length: > 0 } ||
         AllowedTools is { Count: > 0 } || DisallowedTools is { Count: > 0 } ||
         PermissionMode is { Length: > 0 } || MaxBudgetUsd is not null;
+}
+
+/// <summary>
+/// The subset of <see cref="GoogleAIAgentOptions"/> that's settable via CLI flag, mirroring
+/// <see cref="ClaudeCodeOverrides"/>'s role for ClaudeCode -- kept as a separate parameter object
+/// rather than growing <see cref="RedStarOptions.ApplyOverrides"/>'s own parameter list further. Only
+/// covers <see cref="GoogleAIAgentOptions.ThinkingEffort"/>/<see cref="GoogleAIAgentOptions.IncludeThoughts"/>
+/// today -- the inference-sampling knobs (<c>Temperature</c>/<c>TopP</c>/etc.) stay config/env-only, no
+/// CLI flag, same as <see cref="UnslothAgentOptions.EnabledTools"/>. Every field null/empty means "no
+/// override" -- see <see cref="RedStarOptions.ApplyOverrides"/>.
+/// </summary>
+public sealed record GoogleAIOverrides(string? ThinkingEffort = null, bool? IncludeThoughts = null)
+{
+    /// <summary>Whether at least one field here actually carries an override -- used by
+    /// <see cref="RedStarOptions.ApplyOverrides"/> to decide whether the GoogleAI section needs
+    /// reassigning even when <c>baseUrl</c>/<c>apiKey</c>/<c>defaultModel</c> are all blank.</summary>
+    public bool HasAny => ThinkingEffort is { Length: > 0 } || IncludeThoughts is not null;
 }
 
 /// <summary>

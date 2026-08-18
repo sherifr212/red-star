@@ -390,10 +390,32 @@ sending an unauthenticated request.
 `Agents.GoogleAI.ThinkingEffort` (one of `Microsoft.Extensions.AI.ReasoningEffort`'s
 `None`/`Low`/`Medium`/`High`, matched case-insensitively; blank/unrecognized means "don't set it,
 let the model default apply") and `Agents.GoogleAI.IncludeThoughts` (default `true`) are mapped onto
-`ChatOptions.Reasoning` by `GoogleAIAgentFactory.CreateChatOptions` — config/env-only, no CLI flag,
+`ChatOptions.Reasoning` by `GoogleAIAgentFactory.CreateChatOptions`. Unlike every other GoogleAI
+tunable, these two **do** have CLI flags (`--thinking-effort`/`--include-thoughts` on `ChatSettings`,
+threaded through `ChatCommand` → `RedStarOptionsFactory.Build` → `RedStarOptions.ApplyOverrides` via a
+`GoogleAIOverrides` record — the same "extra per-agent overrides object" pattern as
+`ClaudeCodeOverrides`) since thinking mode is the one Gemini-specific knob users are expected to flip
+per-run rather than leave pinned in config; the inference-sampling knobs below stay config/env-only,
 same precedent as `UnslothAgentOptions.EnabledTools`. `IncludeThoughts` defaulting to `true` is
 deliberate: silently losing thinking-mode output is exactly the bug this SDK swap fixes, so the safe
 default surfaces it rather than dropping it.
+
+`GoogleAIAgentFactory.Create` also takes an optional `tools` parameter (`IEnumerable<AITool>`) — a
+pure injection point, not wired to any concrete tool today. When non-empty, `CreateChatOptions` sets
+`ChatOptions.Tools` and `Create` wraps the built `IChatClient` with `.AsBuilder().UseFunctionInvocation()
+.Build()` so the framework drives the multi-turn tool-calling loop (`FunctionCallContent`/
+`FunctionResultContent`) automatically instead of RedStar hand-rolling dispatch. Gemini requires a
+"thought signature" on any function-call part sent back to it, and — per the *Gemma-specific tricks*
+called out in the original Google.GenAI-adoption issue — that signature needs to survive across turns
+when a tool call is involved but shouldn't need manual stripping/preserving logic elsewhere: this is
+already handled entirely inside the `Google.GenAI` SDK's own message-to-request conversion (verified
+against its source), which looks for the `TextReasoningContent` immediately following a
+`FunctionCallContent` in history and reuses its `ProtectedData` as the signature, or substitutes its
+own "skip validation" placeholder when none is present (e.g. `IncludeThoughts = false`). RedStar's
+only obligation is to not break that: `ChatSession` already preserves every `AIContent` the model
+returns (including `TextReasoningContent`) verbatim in history (see its remarks), so no extra
+stripping/preserving code was needed in this codebase — a future tool just needs to be built as an
+`AIFunction` and passed through this `tools` parameter.
 
 `GoogleAIAgentOptions` also carries Gemini's inference-sampling knobs --
 `Temperature`/`TopP`/`TopK`/`MaxOutputTokens`/`FrequencyPenalty`/`PresencePenalty`/`Seed`/

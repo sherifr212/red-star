@@ -124,7 +124,7 @@ dotnet run --project RedStar.Cli -- chat --agent GoogleAI -p "hello"
 
 Settings like `--endpoint`, `--api-key`, and `--model` always apply to whichever agent `--agent` resolves to.
 
-See CLI-specific options (e.g. Claude Code tool constraints) by running `dotnet run --project RedStar.Cli -- chat --help`.
+See CLI-specific options (e.g. Claude Code tool constraints, or GoogleAI's `--thinking-effort`/`--include-thoughts`) by running `dotnet run --project RedStar.Cli -- chat --help`.
 
 ## Testing
 
