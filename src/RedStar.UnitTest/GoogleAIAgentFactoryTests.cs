@@ -203,6 +203,60 @@ public class GoogleAIAgentFactoryTests
         Assert.Null(chatOptions.PresencePenalty);
     }
 
+    [Fact]
+    public void CreateChatOptions_LeavesToolsNull_WhenNoToolsProvided()
+    {
+        var options = new RedStarOptions { Agents = new AgentsOptions { GoogleAI = new GoogleAIAgentOptions { ApiKey = "test-key" } } };
+        var chatOptions = GoogleAIAgentFactory.CreateChatOptions(options);
+
+        Assert.Null(chatOptions.Tools);
+    }
+
+    [Fact]
+    public void CreateChatOptions_LeavesToolsNull_WhenToolsListIsEmpty()
+    {
+        var options = new RedStarOptions { Agents = new AgentsOptions { GoogleAI = new GoogleAIAgentOptions { ApiKey = "test-key" } } };
+        var chatOptions = GoogleAIAgentFactory.CreateChatOptions(options, tools: []);
+
+        Assert.Null(chatOptions.Tools);
+    }
+
+    [Fact]
+    public void CreateChatOptions_CarriesTools_OntoChatOptionsTools_WhenProvided()
+    {
+        var options = new RedStarOptions { Agents = new AgentsOptions { GoogleAI = new GoogleAIAgentOptions { ApiKey = "test-key" } } };
+        var tool = AIFunctionFactory.Create(() => "ok", name: "test_tool");
+
+        var chatOptions = GoogleAIAgentFactory.CreateChatOptions(options, tools: [tool]);
+
+        Assert.NotNull(chatOptions.Tools);
+        Assert.Single(chatOptions.Tools);
+        Assert.Same(tool, chatOptions.Tools[0]);
+    }
+
+    [Fact]
+    public void Create_ReturnsAgent_WhenToolsProvided_WithoutThrowing()
+    {
+        var httpClient = new HttpClient();
+        var options = new RedStarOptions { Agents = new AgentsOptions { GoogleAI = new GoogleAIAgentOptions { ApiKey = "test-key" } } };
+        var tool = AIFunctionFactory.Create(() => "ok", name: "test_tool");
+
+        var agent = GoogleAIAgentFactory.Create(httpClient, options, "m", tools: [tool]);
+
+        Assert.IsType<ChatClientAgent>(agent);
+    }
+
+    [Fact]
+    public void Create_ReturnsAgent_WhenToolsIsEmpty()
+    {
+        var httpClient = new HttpClient();
+        var options = new RedStarOptions { Agents = new AgentsOptions { GoogleAI = new GoogleAIAgentOptions { ApiKey = "test-key" } } };
+
+        var agent = GoogleAIAgentFactory.Create(httpClient, options, "m", tools: []);
+
+        Assert.IsType<ChatClientAgent>(agent);
+    }
+
     private static RedStarOptions WithGoogleAI(string thinkingEffort = "", bool includeThoughts = true) =>
         new()
         {

@@ -29,7 +29,27 @@ public static class GoogleAIAgentFactory
     /// becomes the agent's system prompt (merged into <see cref="ChatOptions.Instructions"/> on every run
     /// by <see cref="ChatClientAgent"/>) rather than a message the caller has to manage.
     /// </summary>
-    public static AIAgent Create(HttpClient httpClient, RedStarOptions options, string modelId, string? instructions = null)
+    /// <param name="tools">
+    /// Client-side tools (typically <see cref="AIFunctionFactory"/>-created <see cref="AIFunction"/>s, or
+    /// any other <see cref="AITool"/>) to make available to the model, e.g. via
+    /// <see cref="Microsoft.Extensions.AI.ChatOptions.Tools"/>. This is purely an injection point -- no
+    /// concrete tool is passed by any caller today; a future tool registry plugs in here. When non-empty,
+    /// the underlying <c>IChatClient</c> is wrapped with <c>UseFunctionInvocation()</c> so
+    /// <see cref="FunctionCallContent"/>/<see cref="FunctionResultContent"/> round-trips (including
+    /// multi-turn tool-calling) are driven automatically by the framework rather than by hand-rolled
+    /// dispatch code here. Thought-signature handling across a tool-calling turn needs no special
+    /// handling in RedStar: the <c>Google.GenAI</c> SDK's own message-to-request conversion already looks
+    /// for the <see cref="TextReasoningContent"/> immediately preceding a <see cref="FunctionCallContent"/>
+    /// in history and reuses its signature verbatim, or substitutes its own "skip validation" placeholder
+    /// when none is present (e.g. because <see cref="GoogleAIAgentOptions.IncludeThoughts"/> is
+    /// <c>false</c>) -- so a thought trace is transparently kept when Gemini needs it to validate a
+    /// function call and never has to be stripped by hand for ordinary turns. This only works because
+    /// <c>RedStar.Base.ChatSession</c> preserves every <see cref="AIContent"/> the model returns
+    /// (including <see cref="TextReasoningContent"/>) verbatim in history -- see its remarks.
+    /// </param>
+    public static AIAgent Create(
+        HttpClient httpClient, RedStarOptions options, string modelId, string? instructions = null,
+        IEnumerable<AITool>? tools = null)
     {
         ArgumentNullException.ThrowIfNull(httpClient);
         ArgumentNullException.ThrowIfNull(options);
@@ -52,10 +72,17 @@ public static class GoogleAIAgentFactory
             httpOptions: new HttpOptions { BaseUrl = googleAI.BaseUrl },
             clientOptions: new ClientOptions { HttpClientFactory = () => httpClient });
 
-        var chatOptions = CreateChatOptions(options);
+        var toolList = tools as IReadOnlyList<AITool> ?? tools?.ToList();
+        var chatOptions = CreateChatOptions(options, toolList);
         chatOptions.Instructions = instructions;
 
-        return client.AsIChatClient(modelId).AsAIAgent(new ChatClientAgentOptions { ChatOptions = chatOptions });
+        IChatClient chatClient = client.AsIChatClient(modelId);
+        if (toolList is { Count: > 0 })
+        {
+            chatClient = chatClient.AsBuilder().UseFunctionInvocation().Build();
+        }
+
+        return chatClient.AsAIAgent(new ChatClientAgentOptions { ChatOptions = chatOptions });
     }
 
     /// <summary>
@@ -73,9 +100,11 @@ public static class GoogleAIAgentFactory
     /// <see cref="ChatOptions"/> property -- these are all natively modeled by
     /// <c>Microsoft.Extensions.AI</c> and mapped into Gemini's <c>GenerateContentConfig</c> by the SDK's
     /// <c>IChatClient</c> itself, so unlike Unsloth's <c>enable_tools</c>/<c>enabled_tools</c> there's no
-    /// provider-specific <c>Patch</c>/<c>RawRepresentationFactory</c> step needed here.
+    /// provider-specific <c>Patch</c>/<c>RawRepresentationFactory</c> step needed here. <paramref name="tools"/>
+    /// (see <see cref="Create"/>'s remarks) is carried straight onto <see cref="ChatOptions.Tools"/> when
+    /// non-empty; left <c>null</c> otherwise so an empty tool list never gets sent as an empty array.
     /// </summary>
-    public static ChatOptions CreateChatOptions(RedStarOptions options)
+    public static ChatOptions CreateChatOptions(RedStarOptions options, IReadOnlyList<AITool>? tools = null)
     {
         ArgumentNullException.ThrowIfNull(options);
 
@@ -94,6 +123,11 @@ public static class GoogleAIAgentFactory
         if (googleAI.StopSequences.Count > 0)
         {
             chatOptions.StopSequences = googleAI.StopSequences;
+        }
+
+        if (tools is { Count: > 0 })
+        {
+            chatOptions.Tools = tools.ToList();
         }
 
         ReasoningEffort? effort = null;

@@ -122,6 +122,61 @@ public class RedStarOptionsTests
     }
 
     [Fact]
+    public void ApplyOverrides_AppliesGoogleAIOverrides_ThinkingEffortAndIncludeThoughts()
+    {
+        var original = Original();
+        original.Agent = AgentNames.GoogleAI;
+        original.Agents.GoogleAI.ThinkingEffort = "Low";
+        original.Agents.GoogleAI.IncludeThoughts = true;
+
+        var result = original.ApplyOverrides(
+            googleAI: new GoogleAIOverrides(ThinkingEffort: "High", IncludeThoughts: false));
+
+        Assert.Equal("High", result.Agents.GoogleAI.ThinkingEffort);
+        Assert.False(result.Agents.GoogleAI.IncludeThoughts);
+    }
+
+    [Fact]
+    public void ApplyOverrides_GoogleAIOverridesAlone_TriggersOverride_EvenWithoutBaseUrlApiKeyOrDefaultModel()
+    {
+        var original = Original();
+        original.Agent = AgentNames.GoogleAI;
+        original.Agents.GoogleAI.BaseUrl = "http://original-google/v1beta";
+        original.Agents.GoogleAI.ThinkingEffort = "";
+
+        var result = original.ApplyOverrides(googleAI: new GoogleAIOverrides(ThinkingEffort: "Medium"));
+
+        Assert.Equal("Medium", result.Agents.GoogleAI.ThinkingEffort);
+        Assert.Equal("http://original-google/v1beta", result.Agents.GoogleAI.BaseUrl);
+    }
+
+    [Fact]
+    public void ApplyOverrides_LeavesGoogleAIOverrides_WhenTargetingADifferentAgent()
+    {
+        var original = Original();
+        original.Agent = AgentNames.Unsloth;
+        original.Agents.GoogleAI.ThinkingEffort = "Low";
+
+        var result = original.ApplyOverrides(
+            baseUrl: "http://override/v1", googleAI: new GoogleAIOverrides(ThinkingEffort: "High"));
+
+        Assert.Equal("Low", result.Agents.GoogleAI.ThinkingEffort);
+    }
+
+    [Fact]
+    public void GoogleAIOverrides_HasAny_IsFalse_WhenBothFieldsUnset()
+    {
+        Assert.False(new GoogleAIOverrides().HasAny);
+    }
+
+    [Fact]
+    public void GoogleAIOverrides_HasAny_IsTrue_WhenEitherFieldSet()
+    {
+        Assert.True(new GoogleAIOverrides(ThinkingEffort: "Low").HasAny);
+        Assert.True(new GoogleAIOverrides(IncludeThoughts: false).HasAny);
+    }
+
+    [Fact]
     public void Otel_DefaultsToEnabledWithLocalhostEndpoint()
     {
         var otel = new RedStarOptions().Otel;
