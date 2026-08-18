@@ -1,0 +1,21 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Format Codebase (Butler + dotnet format)",
+            "type": "shell",
+            "command": "./format-code.sh",
+            "windows": {
+                "command": ".\\format-code.ps1",
+                "options": {
+                    "cwd": "${workspaceFolder}\\src"
+                }
+            },
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        }
+    ]
+}
