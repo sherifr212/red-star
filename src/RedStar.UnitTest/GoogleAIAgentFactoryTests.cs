@@ -2,6 +2,8 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using RedStar.Base;
 using RedStar.Base.Agents.GoogleAI;
+using System.Net;
+using System.Net.Http.Headers;
 
 namespace RedStar.UnitTest;
 
@@ -60,6 +62,68 @@ public class GoogleAIAgentFactoryTests
     }
 
     [Fact]
+    public async Task Create_BuiltAgent_SendsRequestToConfiguredEndpointAndModel()
+    {
+        var handler = new CapturingHandler();
+        var options = new RedStarOptions
+        {
+            Agents = new AgentsOptions
+            {
+                GoogleAI = new GoogleAIAgentOptions
+                {
+                    BaseUrl = "https://generativelanguage.googleapis.com/",
+                    ApiKey = "test-key",
+                },
+            },
+        };
+
+        var httpClient = new HttpClient(handler);
+        var agent = GoogleAIAgentFactory.Create(httpClient, options, "my-model", "be terse");
+
+        await agent.RunAsync("hi");
+
+        Assert.NotNull(handler.CapturedRequestUri);
+        Assert.Contains("my-model", handler.CapturedRequestUri!.ToString());
+        Assert.Contains(":generateContent", handler.CapturedRequestUri!.ToString());
+        Assert.StartsWith("https://generativelanguage.googleapis.com/", handler.CapturedRequestUri!.ToString());
+        Assert.NotNull(handler.CapturedRequestBody);
+        Assert.Contains("\"hi\"", handler.CapturedRequestBody);
+    }
+
+    private sealed class CapturingHandler : HttpMessageHandler
+    {
+        public string? CapturedRequestBody { get; private set; }
+
+        public Uri? CapturedRequestUri { get; private set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            CapturedRequestUri = request.RequestUri;
+            if (request.Content is not null)
+            {
+                CapturedRequestBody = await request.Content.ReadAsStringAsync(cancellationToken);
+            }
+
+            var response = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""
+                {
+                  "candidates": [
+                    {
+                      "content": {"role": "model", "parts": [{"text": "hi there"}]},
+                      "finishReason": "STOP"
+                    }
+                  ]
+                }
+                """),
+            };
+            response.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+            return response;
+        }
+    }
+
+    [Fact]
     public void CreateChatOptions_Throws_WhenOptionsIsNull()
     {
         Assert.Throws<ArgumentNullException>(() => GoogleAIAgentFactory.CreateChatOptions(null!));
@@ -99,6 +163,18 @@ public class GoogleAIAgentFactoryTests
     public void CreateChatOptions_LeavesEffortNull_WhenThinkingEffortUnrecognized()
     {
         var options = WithGoogleAI(thinkingEffort: "bogus");
+        var chatOptions = GoogleAIAgentFactory.CreateChatOptions(options);
+
+        Assert.Null(chatOptions.Reasoning!.Effort);
+    }
+
+    [Fact]
+    public void CreateChatOptions_LeavesEffortNull_WhenThinkingEffortIsANumericString()
+    {
+        // Enum.TryParse<T> parses numeric strings regardless of whether they name a real member --
+        // "3"/"47" must be rejected the same as any other unrecognized value, not silently accepted
+        // as ReasoningEffort.High or an undefined enum value.
+        var options = WithGoogleAI(thinkingEffort: "3");
         var chatOptions = GoogleAIAgentFactory.CreateChatOptions(options);
 
         Assert.Null(chatOptions.Reasoning!.Effort);
@@ -309,6 +385,30 @@ public class GoogleAIAgentFactoryTests
         var chatOptions = GoogleAIAgentFactory.CreateChatOptions(options);
 
         Assert.Null(chatOptions.Tools);
+    }
+
+    [Fact]
+    public void CreateChatOptions_RawRepresentationFactory_ReturnsAFreshToolsListEachCall()
+    {
+        // ChatOptions (and its RawRepresentationFactory delegate) is built once per agent and reused
+        // for every turn of a session. The Google.GenAI SDK mutates the GenerateContentConfig.Tools
+        // list returned by this factory in place (appending ChatOptions.Tools-derived entries) --
+        // if the delegate closed over one shared list, that mutation from turn 1 would still be
+        // present (and re-mutated) on turn 2, growing the tool list without bound. Simulate the SDK's
+        // in-place mutation here and assert the next call starts from an unmutated list again.
+        var options = WithHostedTools(urlContext: true);
+        var chatOptions = GoogleAIAgentFactory.CreateChatOptions(options);
+
+        var firstCall = Assert.IsType<Google.GenAI.Types.GenerateContentConfig>(
+            chatOptions.RawRepresentationFactory!(null!));
+        firstCall.Tools!.Add(new Google.GenAI.Types.Tool());
+        Assert.Equal(2, firstCall.Tools!.Count);
+
+        var secondCall = Assert.IsType<Google.GenAI.Types.GenerateContentConfig>(
+            chatOptions.RawRepresentationFactory!(null!));
+
+        Assert.NotSame(firstCall.Tools, secondCall.Tools);
+        Assert.Single(secondCall.Tools!);
     }
 
     [Fact]

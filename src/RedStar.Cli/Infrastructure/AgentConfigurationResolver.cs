@@ -1,5 +1,6 @@
 using RedStar.Base;
 using RedStar.Base.Agents.ClaudeCode;
+using RedStar.Base.Agents.GoogleAI;
 using RedStar.Base.Agents.Unsloth;
 using System;
 using System.Collections.Generic;
@@ -27,7 +28,13 @@ internal static class AgentConfigurationResolver
 
         if (string.Equals(options.Agent, AgentNames.GoogleAI, StringComparison.OrdinalIgnoreCase))
         {
-            return new ActiveAgentSettings(AgentNames.GoogleAI, options.Agents.GoogleAI.BaseUrl, options.Agents.GoogleAI.ApiKey, null, null);
+            var enabledHostedTools = options.Agents.GoogleAI.HostedTools
+                .Where(kvp => kvp.Value)
+                .Select(kvp => kvp.Key)
+                .ToList();
+            return new ActiveAgentSettings(
+                AgentNames.GoogleAI, options.Agents.GoogleAI.BaseUrl, options.Agents.GoogleAI.ApiKey,
+                enabledHostedTools, GoogleAIHostedTools.Known);
         }
 
         if (string.Equals(options.Agent, AgentNames.ClaudeCode, StringComparison.OrdinalIgnoreCase))

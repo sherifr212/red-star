@@ -166,7 +166,7 @@ public static class GoogleAIAgentFactory
 
         if (nativeOnlyTools is { Count: > 0 })
         {
-            chatOptions.RawRepresentationFactory = _ => new GenerateContentConfig { Tools = nativeOnlyTools };
+            chatOptions.RawRepresentationFactory = _ => new GenerateContentConfig { Tools = new List<Tool>(nativeOnlyTools) };
         }
 
         if (tools is { Count: > 0 })
@@ -181,9 +181,10 @@ public static class GoogleAIAgentFactory
 
         ReasoningEffort? effort = null;
         if (!string.IsNullOrWhiteSpace(googleAI.ThinkingEffort) &&
-            Enum.TryParse<ReasoningEffort>(googleAI.ThinkingEffort, ignoreCase: true, out var parsedEffort))
+            Enum.GetNames<ReasoningEffort>().Any(
+                name => name.Equals(googleAI.ThinkingEffort, StringComparison.OrdinalIgnoreCase)))
         {
-            effort = parsedEffort;
+            effort = Enum.Parse<ReasoningEffort>(googleAI.ThinkingEffort, ignoreCase: true);
         }
 
         if (effort is not null || googleAI.IncludeThoughts)
