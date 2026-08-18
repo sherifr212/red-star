@@ -1,7 +1,8 @@
-# Self-review round 2 (sequence 2 of 2): GoogleAI / Google.GenAI SDK work (PR #45)
+# Self-review round 2 (sequence 2 of 3): GoogleAI / Google.GenAI SDK work (PR #45)
 
 **This is review #2 in the sequence, following on from
-[`google-genai-sdk-self-review.md`](./google-genai-sdk-self-review.md) (review #1).** Review #1 found 9
+[`google-genai-sdk-self-review.md`](./google-genai-sdk-self-review.md) (review #1), and followed by
+[`google-genai-sdk-self-review-03.md`](./google-genai-sdk-self-review-03.md) (review #3).** Review #1 found 9
 issues across the GoogleAI/`Google.GenAI` SDK work. This document tracks what happened to each one,
 plus a fresh look at the code that changed while fixing them. All 247 tests in the solution
 (`RedStar.UnitTest`: 214, `RedStar.UnitTest.Cli`: 16, `RedStar.UnitTest.Controller`: 17) pass, and
