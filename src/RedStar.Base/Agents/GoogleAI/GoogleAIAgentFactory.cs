@@ -122,6 +122,15 @@ public static class GoogleAIAgentFactory
     /// safety settings) must extend the same accumulated list this method builds rather than overwrite the
     /// factory outright, or it will silently drop whichever native-only hosted tools were also requested.
     /// </summary>
+    /// <summary>
+    /// Every <see cref="ReasoningEffort"/> member's name, used to validate
+    /// <see cref="GoogleAIAgentOptions.ThinkingEffort"/> by name rather than via <see cref="Enum.TryParse"/>
+    /// directly -- <c>TryParse</c> also accepts numeric strings (e.g. <c>"3"</c>) that don't name a real
+    /// member, which this method must reject the same as any other unrecognized value.
+    /// </summary>
+    private static readonly HashSet<string> KnownReasoningEffortNames =
+        new(Enum.GetNames<ReasoningEffort>(), StringComparer.OrdinalIgnoreCase);
+
     public static ChatOptions CreateChatOptions(RedStarOptions options, IReadOnlyList<AITool>? tools = null)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -180,11 +189,10 @@ public static class GoogleAIAgentFactory
         }
 
         ReasoningEffort? effort = null;
-        if (!string.IsNullOrWhiteSpace(googleAI.ThinkingEffort) &&
-            Enum.GetNames<ReasoningEffort>().Any(
-                name => name.Equals(googleAI.ThinkingEffort, StringComparison.OrdinalIgnoreCase)))
+        var trimmedThinkingEffort = googleAI.ThinkingEffort?.Trim();
+        if (!string.IsNullOrEmpty(trimmedThinkingEffort) && KnownReasoningEffortNames.Contains(trimmedThinkingEffort))
         {
-            effort = Enum.Parse<ReasoningEffort>(googleAI.ThinkingEffort, ignoreCase: true);
+            effort = Enum.Parse<ReasoningEffort>(trimmedThinkingEffort, ignoreCase: true);
         }
 
         if (effort is not null || googleAI.IncludeThoughts)

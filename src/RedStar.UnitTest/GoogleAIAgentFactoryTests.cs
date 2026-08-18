@@ -160,6 +160,17 @@ public class GoogleAIAgentFactoryTests
     }
 
     [Fact]
+    public void CreateChatOptions_MatchesThinkingEffort_WhenPaddedWithWhitespace()
+    {
+        // A copy-pasted/env-quoted value like " High " must still resolve by name -- rejecting
+        // numeric strings (see the test below) must not regress this.
+        var options = WithGoogleAI(thinkingEffort: "  High  ");
+        var chatOptions = GoogleAIAgentFactory.CreateChatOptions(options);
+
+        Assert.Equal(ReasoningEffort.High, chatOptions.Reasoning!.Effort);
+    }
+
+    [Fact]
     public void CreateChatOptions_LeavesEffortNull_WhenThinkingEffortUnrecognized()
     {
         var options = WithGoogleAI(thinkingEffort: "bogus");

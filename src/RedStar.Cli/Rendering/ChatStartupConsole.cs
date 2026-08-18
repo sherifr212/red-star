@@ -63,10 +63,11 @@ internal static class ChatStartupConsole
         }
 
         var isGoogleAI = active.AgentName == AgentNames.GoogleAI;
+        var thinkingEffortLabel = string.Empty;
         if (isGoogleAI)
         {
             var googleAI = options.Agents.GoogleAI;
-            var thinkingEffortLabel = string.IsNullOrWhiteSpace(googleAI.ThinkingEffort)
+            thinkingEffortLabel = string.IsNullOrWhiteSpace(googleAI.ThinkingEffort)
                 ? "model default"
                 : googleAI.ThinkingEffort;
             table.AddRow("[grey]Thinking effort[/]", Markup.Escape(thinkingEffortLabel));
@@ -110,9 +111,8 @@ internal static class ChatStartupConsole
 
         if (isGoogleAI)
         {
-            var googleAI = options.Agents.GoogleAI;
-            activity?.SetTag("redstar.config.google_ai.thinking_effort", googleAI.ThinkingEffort);
-            activity?.SetTag("redstar.config.google_ai.include_thoughts", googleAI.IncludeThoughts);
+            activity?.SetTag("redstar.config.google_ai.thinking_effort", thinkingEffortLabel);
+            activity?.SetTag("redstar.config.google_ai.include_thoughts", options.Agents.GoogleAI.IncludeThoughts);
         }
 
         activity?.SetTag("redstar.config.telemetry_enabled", otel.Enabled);
