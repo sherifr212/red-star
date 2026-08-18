@@ -257,6 +257,129 @@ public class GoogleAIAgentFactoryTests
         Assert.IsType<ChatClientAgent>(agent);
     }
 
+    [Fact]
+    public void CreateChatOptions_LeavesToolsAndRawRepresentationFactoryNull_WhenNoHostedToolsEnabled()
+    {
+        var options = WithHostedTools();
+        var chatOptions = GoogleAIAgentFactory.CreateChatOptions(options);
+
+        Assert.Null(chatOptions.Tools);
+        Assert.Null(chatOptions.RawRepresentationFactory);
+    }
+
+    [Fact]
+    public void CreateChatOptions_AddsHostedWebSearchTool_WhenGoogleSearchEnabled()
+    {
+        var options = WithHostedTools(googleSearch: true);
+        var chatOptions = GoogleAIAgentFactory.CreateChatOptions(options);
+
+        Assert.NotNull(chatOptions.Tools);
+        Assert.Single(chatOptions.Tools);
+        Assert.IsType<HostedWebSearchTool>(chatOptions.Tools[0]);
+    }
+
+    [Fact]
+    public void CreateChatOptions_AddsHostedCodeInterpreterTool_WhenCodeExecutionEnabled()
+    {
+        var options = WithHostedTools(codeExecution: true);
+        var chatOptions = GoogleAIAgentFactory.CreateChatOptions(options);
+
+        Assert.NotNull(chatOptions.Tools);
+        Assert.Single(chatOptions.Tools);
+        Assert.IsType<HostedCodeInterpreterTool>(chatOptions.Tools[0]);
+    }
+
+    [Fact]
+    public void CreateChatOptions_SetsRawRepresentationFactory_WhenUrlContextEnabled()
+    {
+        var options = WithHostedTools(urlContext: true);
+        var chatOptions = GoogleAIAgentFactory.CreateChatOptions(options);
+
+        Assert.NotNull(chatOptions.RawRepresentationFactory);
+        var raw = Assert.IsType<Google.GenAI.Types.GenerateContentConfig>(chatOptions.RawRepresentationFactory!(null!));
+        Assert.NotNull(raw.Tools);
+        var tool = Assert.Single(raw.Tools);
+        Assert.NotNull(tool.UrlContext);
+    }
+
+    [Fact]
+    public void CreateChatOptions_UrlContextEnabled_LeavesChatOptionsToolsNull_WhenNoOtherToolsPresent()
+    {
+        var options = WithHostedTools(urlContext: true);
+        var chatOptions = GoogleAIAgentFactory.CreateChatOptions(options);
+
+        Assert.Null(chatOptions.Tools);
+    }
+
+    [Fact]
+    public void CreateChatOptions_CombinesAllHostedTools_WithClientInjectedTools()
+    {
+        var options = WithHostedTools(googleSearch: true, codeExecution: true, urlContext: true);
+        var clientTool = AIFunctionFactory.Create(() => "ok", name: "test_tool");
+
+        var chatOptions = GoogleAIAgentFactory.CreateChatOptions(options, tools: [clientTool]);
+
+        Assert.NotNull(chatOptions.Tools);
+        Assert.Equal(3, chatOptions.Tools.Count);
+        Assert.Contains(chatOptions.Tools, t => t is HostedWebSearchTool);
+        Assert.Contains(chatOptions.Tools, t => t is HostedCodeInterpreterTool);
+        Assert.Contains(chatOptions.Tools, t => ReferenceEquals(t, clientTool));
+        Assert.NotNull(chatOptions.RawRepresentationFactory);
+    }
+
+    [Fact]
+    public void CreateChatOptions_IgnoresUnrecognizedHostedToolKey()
+    {
+        var options = WithHostedTools();
+        options.Agents.GoogleAI.HostedTools["SomeFutureTool"] = true;
+
+        var chatOptions = GoogleAIAgentFactory.CreateChatOptions(options);
+
+        Assert.Null(chatOptions.Tools);
+    }
+
+    [Fact]
+    public void Create_ReturnsAgent_WhenHostedToolsEnabled_WithoutThrowing()
+    {
+        var httpClient = new HttpClient();
+        var options = WithHostedTools(googleSearch: true, codeExecution: true, urlContext: true);
+
+        var agent = GoogleAIAgentFactory.Create(httpClient, options, "m");
+
+        Assert.IsType<ChatClientAgent>(agent);
+    }
+
+    [Fact]
+    public void GoogleAIAgentOptions_HostedTools_DefaultsToEveryKnownToolDisabled()
+    {
+        var hostedTools = new GoogleAIAgentOptions().HostedTools;
+
+        Assert.Equal(GoogleAIHostedTools.Known.Count, hostedTools.Count);
+        foreach (var name in GoogleAIHostedTools.Known)
+        {
+            Assert.False(hostedTools[name]);
+        }
+    }
+
+    private static RedStarOptions WithHostedTools(
+        bool googleSearch = false, bool codeExecution = false, bool urlContext = false) =>
+        new()
+        {
+            Agents = new AgentsOptions
+            {
+                GoogleAI = new GoogleAIAgentOptions
+                {
+                    ApiKey = "test-key",
+                    HostedTools = new Dictionary<string, bool>
+                    {
+                        [GoogleAIHostedTools.GoogleSearch] = googleSearch,
+                        [GoogleAIHostedTools.CodeExecution] = codeExecution,
+                        [GoogleAIHostedTools.UrlContext] = urlContext,
+                    },
+                },
+            },
+        };
+
     private static RedStarOptions WithGoogleAI(string thinkingEffort = "", bool includeThoughts = true) =>
         new()
         {

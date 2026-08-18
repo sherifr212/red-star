@@ -1,4 +1,5 @@
 using RedStar.Base.Agents.ClaudeCode;
+using RedStar.Base.Agents.GoogleAI;
 
 namespace RedStar.Base;
 
@@ -431,6 +432,21 @@ public sealed record GoogleAIAgentOptions
     /// <see cref="UnslothAgentOptions.EnabledTools"/>. Config/env-only, no CLI flag.
     /// </summary>
     public List<string> StopSequences { get; set; } = [];
+
+    /// <summary>
+    /// Which of Gemini's built-in, server-side "hosted" tools (<see cref="GoogleAIHostedTools"/>) are
+    /// enabled, keyed by name and pre-populated with every known one (see
+    /// <see cref="GoogleAIHostedTools.Known"/>) set to <c>false</c> -- unlike
+    /// <see cref="UnslothAgentOptions.EnabledTools"/>'s free-form empty-by-default list, this dictionary
+    /// shape means the checked-in config template always shows every available hosted tool with its own
+    /// explicit on/off switch, so choosing one doesn't require knowing its exact name up front. An
+    /// unrecognized key is silently ignored by
+    /// <see cref="RedStar.Base.Agents.GoogleAI.GoogleAIAgentFactory.CreateChatOptions"/> rather than
+    /// erroring, matching this codebase's generally permissive config-parsing precedent. Config/env-only,
+    /// no CLI flag.
+    /// </summary>
+    public Dictionary<string, bool> HostedTools { get; set; } =
+        GoogleAIHostedTools.Known.ToDictionary(name => name, _ => false);
 }
 
 /// <summary>OpenTelemetry OTLP export settings. See <see cref="RedStarOptions.Otel"/>.</summary>

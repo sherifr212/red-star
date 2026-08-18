@@ -417,6 +417,25 @@ returns (including `TextReasoningContent`) verbatim in history (see its remarks)
 stripping/preserving code was needed in this codebase — a future tool just needs to be built as an
 `AIFunction` and passed through this `tools` parameter.
 
+`Agents.GoogleAI.HostedTools` (`Dictionary<string, bool>`, keyed by `GoogleAIHostedTools`'
+`GoogleSearch`/`CodeExecution`/`UrlContext` constants, every key pre-populated `false` via
+`GoogleAIHostedTools.Known`) turns on Gemini's built-in, server-side tools -- unlike the `tools`
+injection point above, these execute entirely on Google's side and never round-trip a
+`FunctionCallContent`/`FunctionResultContent` back through RedStar, so they need no
+`UseFunctionInvocation()` wrapping. `CreateChatOptions` maps `GoogleSearch`/`CodeExecution` onto
+`Microsoft.Extensions.AI`'s `HostedWebSearchTool`/`HostedCodeInterpreterTool` markers (which the SDK's
+`IChatClient` already knows how to translate into Gemini's native `googleSearch`/`codeExecution` tool
+entries), merged into the same `ChatOptions.Tools` list as any client-injected `tools`. `UrlContext` has
+no `Microsoft.Extensions.AI`-modeled equivalent, so it's added via `ChatOptions.RawRepresentationFactory`
+returning a `GenerateContentConfig` seeded with a `Tool { UrlContext = new() }` entry instead -- the
+SDK's `CreateRequest` starts from whatever that factory returns and *appends* the `ChatOptions.Tools`-
+derived entries to its already-non-null `Tools` list, so the two mechanisms compose safely rather than
+one clobbering the other; extending to a future Gemini-native tool with no `Microsoft.Extensions.AI`
+equivalent (e.g. Google Maps grounding) follows the same `RawRepresentationFactory` pattern. The
+`Dictionary<string, bool>` shape (rather than `UnslothAgentOptions.EnabledTools`'s free-form empty
+list) is deliberate: the checked-in config template lists every known hosted tool with its own
+explicit switch, so enabling one never requires knowing its exact key name up front.
+
 `GoogleAIAgentOptions` also carries Gemini's inference-sampling knobs --
 `Temperature`/`TopP`/`TopK`/`MaxOutputTokens`/`FrequencyPenalty`/`PresencePenalty`/`Seed`/
 `StopSequences` -- which `CreateChatOptions` copies straight onto the matching `ChatOptions` property
