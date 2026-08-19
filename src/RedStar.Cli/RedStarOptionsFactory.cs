@@ -13,7 +13,7 @@ internal static class RedStarOptionsFactory
 {
     public static RedStarOptions Build(
         string? agent, string? endpoint, string? apiKey, string? defaultModel = null,
-        ClaudeCodeOverrides? claudeCode = null, GoogleAIOverrides? googleAI = null)
+        ClaudeCodeOverrides? claudeCode = null, GoogleAIOverrides? googleAI = null, string? dbConnectionString = null)
     {
         var configuration = new ConfigurationBuilder()
             .SetBasePath(AppContext.BaseDirectory)
