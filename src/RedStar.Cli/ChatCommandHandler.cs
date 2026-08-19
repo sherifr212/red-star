@@ -174,12 +174,23 @@ internal static class ChatCommandHandler
         var modelLabel = modelId.Length == 0 ? "(CLI default)" : modelId;
         AnsiConsole.MarkupLine(
             $"[bold]RedStar chat[/] - model '[green]{Markup.Escape(modelLabel)}[/]'. Type 'exit' or press Ctrl+C to quit.");
+        var lastPromptShownAt = Stopwatch.StartNew();
         while (!cancellationToken.IsCancellationRequested)
         {
             AnsiConsole.WriteLine();
+            lastPromptShownAt.Restart();
             var line = ChatEngineConsoleHelper.ReadUserMessageBoxed();
+            var idle = lastPromptShownAt.Elapsed;
             if (line is null)
             {
+                // Console.ReadLine returns null on stdin EOF, which we treat the same as a typed "exit" --
+                // but unlike a typed exit, EOF is never something the user chose, so it's worth a distinct
+                // log line: this is the only place that records how long the prompt sat idle beforehand,
+                // which is the evidence needed to correlate a silent session drop against something external
+                // (terminal/session closing stdin, machine sleep, etc.) after the fact.
+                logger.LogWarning(
+                    "Run {RunId} ending: stdin hit EOF (not a typed exit) after {IdleSeconds:F0}s idle at the prompt",
+                    runId, idle.TotalSeconds);
                 break;
             }
 
@@ -187,6 +198,7 @@ internal static class ChatCommandHandler
             if (trimmed.Equals("exit", StringComparison.OrdinalIgnoreCase) ||
                 trimmed.Equals("quit", StringComparison.OrdinalIgnoreCase))
             {
+                logger.LogInformation("Run {RunId} ending: user typed '{Command}' after {IdleSeconds:F0}s idle", runId, trimmed, idle.TotalSeconds);
                 break;
             }
 
