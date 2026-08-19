@@ -391,13 +391,13 @@ internal static class ChatEngine
         {
             return await reader.ReadAsync(cancellationToken);
         }
-        catch (ChannelClosedException ex) when (ex.InnerException is not null)
+        catch (ChannelClosedException ex)
         {
-            ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
-            throw; // unreachable -- Throw() always throws.
-        }
-        catch (ChannelClosedException)
-        {
+            if (ex.InnerException is not null)
+            {
+                ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+            }
+
             return null;
         }
     }
