@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -372,16 +373,31 @@ internal static class ChatEngine
         }
     }
 
-    /// <summary>Reads one event, or null once the channel is drained with no error. A producer exception
-    /// propagates as-is (not wrapped) so the caller's try/catch reports the real failure.</summary>
+    /// <summary>Reads one event, or null once the channel is drained with no error. <see cref="Channel{T}"/>
+    /// surfaces a faulted <see cref="ChannelWriter{T}.Complete(Exception)"/> the same way it surfaces a
+    /// normal, error-free completion once nothing is left to read: both throw <see cref="ChannelClosedException"/>
+    /// out of <see cref="ChannelReader{T}.ReadAsync"/>, with the producer's real exception only reachable via
+    /// <see cref="Exception.InnerException"/> in the faulted case (<c>null</c> in the normal case). Swallowing
+    /// every <see cref="ChannelClosedException"/> unconditionally -- as this used to do -- silently discarded
+    /// <see cref="ProduceStageEventsAsync"/>'s real exception (e.g. an HTTP failure from the underlying
+    /// <c>IChatClient</c>) and made every producer failure look identical to an ordinary empty response, so
+    /// the caller reported "the model returned no response" instead of the actual error. Only the true
+    /// no-error case (<see cref="ChannelClosedException.InnerException"/> is <c>null</c>) is swallowed here;
+    /// a faulted completion rethrows its inner exception, preserving its original type/stack via
+    /// <see cref="ExceptionDispatchInfo"/>, so <see cref="SendAndPrintAsync"/>'s try/catch reports it.</summary>
     private static async ValueTask<StageEvent?> ReadNextAsync(ChannelReader<StageEvent> reader, CancellationToken cancellationToken)
     {
         try
         {
             return await reader.ReadAsync(cancellationToken);
         }
-        catch (ChannelClosedException)
+        catch (ChannelClosedException ex)
         {
+            if (ex.InnerException is not null)
+            {
+                ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+            }
+
             return null;
         }
     }
