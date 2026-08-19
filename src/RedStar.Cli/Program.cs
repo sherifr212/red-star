@@ -1,5 +1,7 @@
 using System.Text;
 
+using Marten;
+
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http;
 
@@ -37,13 +39,15 @@ Console.CancelKeyPress += (_, e) =>
 };
 
 var services = new ServiceCollection();
+
 services.AddHttpClient<UnslothHttpClient>().AddHttpMessageHandler(() => new ConditionalAuthHandler());
 services.AddHttpClient<LMStudioHttpClient>().AddHttpMessageHandler(() => new ConditionalAuthHandler());
 services.AddHttpClient<GoogleAIHttpClient>();
+
 services.AddTransient<ChatCommand>();
 services.AddTransient<ModelsCommand>();
-var registrar = new TypeRegistrar(services);
 
+var registrar = new TypeRegistrar(services);
 var app = new CommandApp<ChatCommand>(registrar);
 app.Configure(config =>
 {
@@ -57,5 +61,15 @@ app.Configure(config =>
 
 var startupOptions = RedStarOptionsFactory.Build(agent: null, endpoint: null, apiKey: null);
 using var telemetry = TelemetryBootstrapper.Configure(startupOptions);
+
+services.AddMarten(op =>
+{
+    op.Connection(startupOptions.DbConnectionString);
+    op.AutoCreateSchemaObjects = JasperFx.AutoCreate.CreateOrUpdate;
+    
+    op.OpenTelemetry.TrackEventCounters();
+    op.OpenTelemetry.TrackFetchForWritingMetrics();
+    op.OpenTelemetry.TrackConnections = JasperFx.OpenTelemetry.TrackLevel.Verbose;
+});
 
 return await app.RunAsync(args, cts.Token);

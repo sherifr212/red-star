@@ -10,11 +10,13 @@
 
   <ItemGroup>
     <PackageReference Include="Google.GenAI" Version="1.18.0" />
+    <PackageReference Include="Marten" Version="9.28.0" />
     <PackageReference Include="Microsoft.Agents.AI" Version="1.16.0" />
     <PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="1.16.0" />
     <PackageReference Include="Microsoft.Extensions.AI" Version="10.8.3" />
     <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.8.3" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.17.0" />
   </ItemGroup>
 
 </Project>
