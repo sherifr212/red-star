@@ -17,16 +17,16 @@ internal static class ChatStartupConsole
     /// the resolved model plus how it was picked, every known tool's on/off state,
     /// and telemetry export -- once per run, before any chat request goes out.
     /// Mirrors the same fields onto <paramref name="activity"/>'s tags (<c>redstar.config.*</c>)
-    /// and one structured log line. Every agent-specific piece (connection rows/tags plus any extra
-    /// rows/tags/logging, e.g. GoogleAI's sampling config) is delegated to an
-    /// <see cref="IAgentStartupInfoRenderer"/> picked via <see cref="AgentStartupInfoRendererFactory"/>,
-    /// so a new agent's quirks don't grow another branch in this method.
+    /// and one structured log line. Every agent-specific row/tag/log line (e.g. GoogleAI's sampling
+    /// config) is delegated to <see cref="AgentStartupInfoRenderer.Render"/>, which picks the
+    /// <see cref="IAgentStartupInfoRenderer"/> matching <paramref name="active"/> and hands it the whole
+    /// table/activity/logger, so a new agent's quirks -- including its own OTel shape -- don't grow
+    /// another branch in this method.
     /// </summary>
     public static void PrintStartupInfoBox(
         RedStarOptions options, ActiveAgentSettings active, string runId, string modelId, string modelSourceLabel,
         Activity? activity, ILogger logger)
     {
-        var renderer = AgentStartupInfoRendererFactory.Create(active.AgentName);
         var apiKeyConfigured = !string.IsNullOrEmpty(active.ApiKey);
 
         var table = new Table().Border(TableBorder.None).HideHeaders();
@@ -35,15 +35,13 @@ internal static class ChatStartupConsole
         table.AddRow("[grey]Agent[/]", Markup.Escape(active.AgentName));
         table.AddRow("[grey]Run ID[/]", Markup.Escape(runId));
 
-        renderer.AddConnectionRows(table, options, active, apiKeyConfigured);
+        AgentStartupInfoRenderer.Render(table, activity, logger, runId, options, active, apiKeyConfigured);
 
         table.AddRow("[grey]Model[/]", $"[green]{Markup.Escape(modelId)}[/] [grey]({modelSourceLabel})[/]");
         if (active.Tools is { } tools)
         {
             table.AddRow("[grey]Tools[/]", FormatToolsSummary(tools, active.KnownToolNames ?? []));
         }
-
-        renderer.AddExtraRows(table, options, active);
 
         var otel = options.Otel;
         table.AddRow(
@@ -58,16 +56,12 @@ internal static class ChatStartupConsole
         AnsiConsole.Write(panel);
 
         activity?.SetTag("redstar.config.agent", active.AgentName);
-        renderer.AddConnectionTags(activity, options, active, apiKeyConfigured);
-
         activity?.SetTag("redstar.config.model", modelId);
         activity?.SetTag("redstar.config.model_source", modelSourceLabel);
         if (active.Tools is { } toolsForTag)
         {
             activity?.SetTag("redstar.config.enabled_tools", string.Join(",", toolsForTag));
         }
-
-        renderer.AddExtraTags(activity, options, active);
 
         activity?.SetTag("redstar.config.telemetry_enabled", otel.Enabled);
         activity?.SetTag("redstar.config.telemetry_endpoint", otel.Endpoint);
@@ -78,8 +72,6 @@ internal static class ChatStartupConsole
             "telemetryEnabled={TelemetryEnabled} telemetryEndpoint={TelemetryEndpoint}",
             runId, active.AgentName, active.BaseUrl, apiKeyConfigured, modelId, modelSourceLabel,
             active.Tools is null ? "n/a" : string.Join(",", active.Tools), otel.Enabled, otel.Endpoint);
-
-        renderer.LogExtra(logger, runId, options, active);
     }
 
     /// <summary>

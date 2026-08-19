@@ -21,13 +21,17 @@ namespace RedStar.Base.Agents.GoogleAI;
 public static class GoogleAIAgentFactory
 {
     /// <summary>
-    /// Builds an <see cref="AIAgent"/> backed by Gemini. <paramref name="httpClient"/> is the transport
-    /// used for every request -- callers own its construction/lifetime (typically a named
+    /// Builds an <see cref="AIAgent"/> backed by Gemini. <paramref name="httpClientFactory"/> is plugged
+    /// directly into <see cref="ClientOptions.HttpClientFactory"/> (typically wrapping a named
     /// <see cref="IHttpClientFactory"/> client, same pipeline as the other HTTP-based agents; unlike
     /// Unsloth/LMStudio, no <see cref="ConditionalAuthHandler"/> is needed since Gemini always requires a
-    /// real API key and the SDK sets its own <c>x-goog-api-key</c> header). <paramref name="instructions"/>
-    /// becomes the agent's system prompt (merged into <see cref="ChatOptions.Instructions"/> on every run
-    /// by <see cref="ChatClientAgent"/>) rather than a message the caller has to manage.
+    /// real API key and the SDK sets its own <c>x-goog-api-key</c> header) -- it must stay a factory rather
+    /// than an already-built <see cref="HttpClient"/> so the <c>Google.GenAI</c> SDK's <c>ApiClient</c>
+    /// controls when the client actually gets constructed (lazily, on first use, then cached), instead of
+    /// this method forcing eager construction on every call regardless of whether the SDK ever needs it.
+    /// <paramref name="instructions"/> becomes the agent's system prompt (merged into
+    /// <see cref="ChatOptions.Instructions"/> on every run by <see cref="ChatClientAgent"/>) rather than a
+    /// message the caller has to manage.
     /// </summary>
     /// <param name="tools">
     /// Client-side tools (typically <see cref="AIFunctionFactory"/>-created <see cref="AIFunction"/>s, or
@@ -48,10 +52,10 @@ public static class GoogleAIAgentFactory
     /// (including <see cref="TextReasoningContent"/>) verbatim in history -- see its remarks.
     /// </param>
     public static AIAgent Create(
-        HttpClient httpClient, RedStarOptions options, string modelId, string? instructions = null,
+        Func<HttpClient> httpClientFactory, RedStarOptions options, string modelId, string? instructions = null,
         IEnumerable<AITool>? tools = null)
     {
-        ArgumentNullException.ThrowIfNull(httpClient);
+        ArgumentNullException.ThrowIfNull(httpClientFactory);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentException.ThrowIfNullOrEmpty(modelId);
 
@@ -70,7 +74,7 @@ public static class GoogleAIAgentFactory
         var client = new Client(
             apiKey: googleAI.ApiKey,
             httpOptions: new HttpOptions { BaseUrl = googleAI.BaseUrl },
-            clientOptions: new ClientOptions { HttpClientFactory = () => httpClient });
+            clientOptions: new ClientOptions { HttpClientFactory = httpClientFactory });
 
         var toolList = tools as IReadOnlyList<AITool> ?? tools?.ToList();
         var chatOptions = CreateChatOptions(options, toolList);

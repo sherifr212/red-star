@@ -80,7 +80,7 @@ internal static class ChatCommandHandler
             ? static (opts, modelId, instructions) => ClaudeCodeAgentFactory.Create(opts, modelId, instructions)
             : isGoogleAI
                 ? (opts, modelId, instructions) => GoogleAIAgentFactory.Create(
-                    httpClientFactory!.CreateClient(AgentNames.GoogleAI), opts, modelId, instructions)
+                    () => httpClientFactory!.CreateClient(AgentNames.GoogleAI), opts, modelId, instructions)
                 : isLMStudio
                     ? (opts, modelId, instructions) => LMStudioAgentFactory.Create(
                         httpClientFactory!.CreateClient(AgentNames.LMStudio), opts, modelId, instructions)

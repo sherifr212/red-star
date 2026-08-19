@@ -64,4 +64,7 @@ public static partial class RedStarTelemetry
 
     [LoggerMessage(EventId = 7, Level = LogLevel.Error, Message = "Chat turn failed after {ElapsedMs}ms")]
     public static partial void LogChatTurnFailed(this ILogger logger, Exception ex, double elapsedMs);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Information, Message = "GoogleAI configuration for run {RunId}: {GoogleAiConfigJson}")]
+    public static partial void LogGoogleAiConfig(this ILogger logger, string runId, string googleAiConfigJson);
 }
