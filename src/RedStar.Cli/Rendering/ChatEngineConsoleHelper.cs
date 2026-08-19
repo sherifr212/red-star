@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 using Spectre.Console;
 
@@ -40,12 +41,43 @@ internal static class ChatEngineConsoleHelper
     public static void PrintBoxBottomBorder(int width, Color color) =>
         AnsiConsole.MarkupLine($"[{color.ToMarkup()}]╰{new string('─', width - 2)}╯[/]");
 
+    /// <summary>Reads the user's next message, transparently joining a multiline clipboard paste into one
+    /// message instead of feeding each pasted line back through the REPL as a separate prompt. A terminal
+    /// paste writes every pasted character -- newlines included -- into the console input buffer in one
+    /// burst, so once <see cref="Console.ReadLine"/> returns the first line, the remaining pasted lines are
+    /// already sitting in the buffer and <see cref="Console.KeyAvailable"/> is true immediately, with no
+    /// human typing speed in between. A person who just typed a line and hit Enter hasn't pressed the next
+    /// key yet, so <see cref="Console.KeyAvailable"/> reads false right after their Enter -- that's what
+    /// distinguishes "more of a paste is still buffered" from "the user is about to type another line".
+    /// <see cref="Console.KeyAvailable"/> throws when stdin is redirected (piped/test input), so that path
+    /// is skipped entirely and falls back to plain single-line <see cref="Console.ReadLine"/> behavior.</summary>
     public static string? ReadUserMessageBoxed()
     {
         var width = GetBoxWidth();
         PrintBoxTopBorder(width, "You", Color.Cyan1);
         AnsiConsole.Markup($"[{Color.Cyan1.ToMarkup()}]│[/] > ");
         var line = Console.ReadLine();
+        if (line is not null && !Console.IsInputRedirected)
+        {
+            List<string>? pastedLines = null;
+            while (Console.KeyAvailable)
+            {
+                var next = Console.ReadLine();
+                if (next is null)
+                {
+                    break;
+                }
+
+                pastedLines ??= [line];
+                pastedLines.Add(next);
+            }
+
+            if (pastedLines is not null)
+            {
+                line = string.Join(Environment.NewLine, pastedLines);
+            }
+        }
+
         PrintBoxBottomBorder(width, Color.Cyan1);
         return line;
     }

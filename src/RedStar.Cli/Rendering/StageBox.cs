@@ -20,11 +20,23 @@ namespace RedStar.Cli.Rendering;
 /// remarks on RenderStageBoxesAsync for why. <see cref="TurnStage.Searching"/> status
 /// labels (e.g. "Searching: current year", then later "Reading: some-site.com") are kept as separate
 /// lines rather than concatenated, since each is a standalone label, not a token-by-token delta like
-/// reasoning/answer text is.
+/// reasoning/answer text is. A turn's tool calls can chain several searches back to back (a follow-up
+/// query after the first one's results came back) -- <see cref="_searchEntries"/> keeps each status
+/// label and its own result list as one ordered sequence of entries, rendered in the order they
+/// actually happened, rather than bucketing every status line into one block and every site hit from
+/// every call into a second block at the bottom (which used to visually merge unrelated searches'
+/// results together under whichever query happened to print last).
 /// </summary>
 internal sealed class StageBox
 {
     private static readonly Spinner Spinner = Spinner.Known.Dots;
+
+    /// <summary>One line of a <see cref="TurnStage.Searching"/> box, in the order it happened: either a
+    /// status label (<paramref name="Status"/> set) or one tool call's completed hit list
+    /// (<paramref name="Sites"/> set) -- never both, since <see cref="Apply"/> pushes them as separate
+    /// entries even when a status label and its hits arrive on the same <see cref="StageEvent"/>.
+    /// </summary>
+    private readonly record struct SearchEntry(string? Status, IReadOnlyList<WebSearchResult>? Sites);
 
     /// <summary>
     /// Only the <see cref="TurnStage.Generating"/> (final-answer) box renders through this for now --
@@ -44,13 +56,16 @@ internal sealed class StageBox
     private readonly bool _isContinuation;
     private readonly string _priorChainText;
     /// <summary>
-    /// Accumulates hits across every <see cref="StageEvent"/> with a non-empty <see cref="StageEvent.Sites"/>
-    /// applied to this box, rather than being replaced by the latest one -- a single "Searching" box can
-    /// span multiple <c>web_search</c> tool calls in one turn (e.g. a follow-up query), and each call's
-    /// <c>tool_end</c> event only carries that call's own hits, so
-    /// overwriting here would silently drop every earlier search's results from the box.
+    /// Ordered <see cref="TurnStage.Searching"/> entries -- see the type-level remarks and
+    /// <see cref="SearchEntry"/>. Only populated (and only read) when <see cref="Stage"/> is
+    /// <see cref="TurnStage.Searching"/>; every other stage still accumulates into <see cref="_text"/> as
+    /// before.
     /// </summary>
-    private readonly List<WebSearchResult> _sites = [];
+    private readonly List<SearchEntry> _searchEntries = [];
+    /// <summary>Every site seen so far across <see cref="_searchEntries"/>, so a duplicate hit returned by
+    /// a later tool call doesn't print twice -- mirrors the old flat <c>_sites</c> accumulator's dedup,
+    /// just checked against the whole turn instead of a single list.</summary>
+    private readonly HashSet<WebSearchResult> _seenSites = [];
     private int _frame;
     private string? _copyFilePath;
     private int? _outputTokenCount;
@@ -77,12 +92,14 @@ internal sealed class StageBox
 
     public string Stage { get; }
 
-    public bool HasText => _text.Length > 0;
+    public bool HasText => Stage == TurnStage.Searching ? _searchEntries.Exists(e => e.Status is not null) : _text.Length > 0;
 
     /// <summary>This box's own accumulated text (not including any earlier continuation box's text in
     /// the same chain) -- read by the caller once this box seals, to build the next continuation box's
-    /// <c>priorChainText</c>.</summary>
-    public string Text => _text.ToString();
+    /// <c>priorChainText</c>. For <see cref="TurnStage.Searching"/> this renders <see cref="_searchEntries"/>
+    /// in order (status labels and site lists interleaved as they happened) rather than the plain
+    /// <see cref="_text"/> accumulator, which only ever holds status labels.</summary>
+    public string Text => Stage == TurnStage.Searching ? string.Join("\n\n", NonGeneratingBlocks()) : _text.ToString();
 
     /// <summary>Set once <see cref="EnsureCopyFileUri"/> has run (i.e. once this box has rendered a
     /// final frame with text); otherwise null. Read by the caller once this box seals, to hand to the
@@ -90,11 +107,8 @@ internal sealed class StageBox
     public string? CopyFilePath => _copyFilePath;
 
     /// <summary>The whole turn's output-token count once a <c>UsageContent</c> update has landed on this
-    /// box, else null. Read by the caller
-    /// once this box seals, to log it regardless of
-    /// whether this box itself is the one that renders it in its footer -- see
-    /// <see cref="TokensAndSpeedLabel"/>'s "(cont'd)" exclusion, which only governs the footer, not
-    /// telemetry.</summary>
+    /// box, else null. Read by the caller once this box seals, to log it via telemetry independently of
+    /// whatever <see cref="TokensAndSpeedLabel"/> renders in the footer.</summary>
     public int? OutputTokenCount => _outputTokenCount;
 
     public void Tick() => _frame++;
@@ -103,22 +117,22 @@ internal sealed class StageBox
     {
         if (!string.IsNullOrEmpty(evt.TextDelta))
         {
-            if (Stage == TurnStage.Searching && _text.Length > 0)
+            if (Stage == TurnStage.Searching)
             {
-                _text.Append('\n');
+                _searchEntries.Add(new SearchEntry(evt.TextDelta, null));
             }
-
-            _text.Append(evt.TextDelta);
+            else
+            {
+                _text.Append(evt.TextDelta);
+            }
         }
 
         if (evt.Sites is { Count: > 0 })
         {
-            foreach (var site in evt.Sites)
+            var newSites = evt.Sites.Where(_seenSites.Add).ToList();
+            if (newSites.Count > 0)
             {
-                if (!_sites.Contains(site))
-                {
-                    _sites.Add(site);
-                }
+                _searchEntries.Add(new SearchEntry(null, newSites));
             }
         }
 
@@ -194,7 +208,7 @@ internal sealed class StageBox
     private string EnsureCopyFileUri()
     {
         _copyFilePath ??= Path.Combine(Path.GetTempPath(), $"redstar-{Guid.NewGuid():N}.txt");
-        File.WriteAllText(_copyFilePath, _priorChainText + _text);
+        File.WriteAllText(_copyFilePath, _priorChainText + Text);
         return new Uri(_copyFilePath).AbsoluteUri;
     }
 
@@ -220,19 +234,26 @@ internal sealed class StageBox
         {
             blocks.Add($"{Spinner.Frames[_frame % Spinner.Frames.Count]} Waiting for the model...");
         }
-        else
+        else if (Stage == TurnStage.Searching)
         {
-            if (_text.Length > 0)
+            var siteIndex = 0;
+            foreach (var entry in _searchEntries)
             {
-                blocks.Add(Markup.Escape(_text.ToString()));
+                if (entry.Status is { } status)
+                {
+                    blocks.Add(Markup.Escape(status));
+                }
+                else if (entry.Sites is { } sites)
+                {
+                    var lines = sites.Select(
+                        site => $"  [cyan]{++siteIndex}.[/] {Markup.Escape(site.Title)} [grey]-- {Markup.Escape(site.Url)}[/]");
+                    blocks.Add(string.Join("\n", lines));
+                }
             }
-
-            if (_sites is { Count: > 0 })
-            {
-                var lines = _sites.Select(
-                    (site, index) => $"  [cyan]{index + 1}.[/] {Markup.Escape(site.Title)} [grey]-- {Markup.Escape(site.Url)}[/]");
-                blocks.Add(string.Join("\n", lines));
-            }
+        }
+        else if (_text.Length > 0)
+        {
+            blocks.Add(Markup.Escape(_text.ToString()));
         }
 
         if (blocks.Count == 0)
@@ -250,18 +271,23 @@ internal sealed class StageBox
     }
 
     /// <summary>
-    /// The whole turn's output-token count and average tokens/second, or null when neither applies.
-    /// Null for a same-stage "(cont'd)" continuation box (<see cref="_isContinuation"/>) even once the
-    /// chain's later box carries the count -- the count/speed describes the entire turn, not this one
-    /// fragment's share of it, so it's only ever shown on a box that was never split for height. Null
-    /// also whenever no <c>UsageContent</c> update ever arrived,
-    /// which happens when the server doesn't report usage. Speed divides by <see cref="_stopwatch"/>'s
-    /// elapsed time (shared across the whole turn, not just this box) since the token count itself is a
-    /// whole-turn total, not this box's own.
+    /// The whole turn's output-token count and average tokens/second, or null when no <c>UsageContent</c>
+    /// update ever arrived on this box, which happens when the server doesn't report usage. The trailing
+    /// <c>UsageContent</c> update is the last event of the whole turn, so it lands on whichever box
+    /// happens to still be open at that point -- for any response long enough to trip a height-based
+    /// split (see <see cref="RenderStageBoxesAsync"/>'s <c>splitForHeight</c>), that's a same-stage
+    /// "(cont'd)" continuation box, not the turn's first box for that stage. This intentionally does
+    /// *not* exclude continuation boxes: since the whole turn only ever emits one <c>UsageContent</c>
+    /// update, at most one box's <see cref="_outputTokenCount"/> is ever non-null, so showing it here
+    /// whenever present can't duplicate the label across boxes -- excluding continuations would instead
+    /// mean no box shows it at all for a turn that got split, which used to be the case here and left
+    /// the footer silently missing for exactly the responses long enough to need it most. Speed divides
+    /// by <see cref="_stopwatch"/>'s elapsed time (shared across the whole turn, not just this box) since
+    /// the token count itself is a whole-turn total, not this box's own.
     /// </summary>
     private string? TokensAndSpeedLabel()
     {
-        if (_isContinuation || _outputTokenCount is not { } tokens)
+        if (_outputTokenCount is not { } tokens)
         {
             return null;
         }

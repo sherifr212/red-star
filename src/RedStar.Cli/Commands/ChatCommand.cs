@@ -1,4 +1,7 @@
 using RedStar.Base;
+using RedStar.Base.Agents.GoogleAI;
+using RedStar.Base.Agents.LMStudio;
+using RedStar.Base.Agents.Unsloth;
 
 using Spectre.Console.Cli;
 
@@ -10,11 +13,15 @@ namespace RedStar.Cli.Commands;
 /// </summary>
 public sealed class ChatCommand : AsyncCommand<ChatSettings>
 {
-    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly UnslothHttpClient _unslothHttpClient;
+    private readonly LMStudioHttpClient _lmStudioHttpClient;
+    private readonly GoogleAIHttpClient _googleAIHttpClient;
 
-    public ChatCommand(IHttpClientFactory httpClientFactory)
+    public ChatCommand(UnslothHttpClient unslothHttpClient, LMStudioHttpClient lmStudioHttpClient, GoogleAIHttpClient googleAIHttpClient)
     {
-        _httpClientFactory = httpClientFactory;
+        _unslothHttpClient = unslothHttpClient;
+        _lmStudioHttpClient = lmStudioHttpClient;
+        _googleAIHttpClient = googleAIHttpClient;
     }
 
     protected override async Task<int> ExecuteAsync(CommandContext context, ChatSettings settings, CancellationToken cancellationToken)
@@ -38,7 +45,9 @@ public sealed class ChatCommand : AsyncCommand<ChatSettings>
             settings.Agent, settings.Endpoint, settings.ApiKey, settings.Model, claudeCode, googleAI);
         return await ChatCommandHandler.RunAsync(
             options, settings.Prompt, settings.System, cancellationToken,
-            httpClientFactory: _httpClientFactory,
+            unslothHttpClient: _unslothHttpClient,
+            lmStudioHttpClient: _lmStudioHttpClient,
+            googleAIHttpClient: _googleAIHttpClient,
             runId: settings.RunId);
     }
 }
