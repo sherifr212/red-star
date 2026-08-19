@@ -12,7 +12,7 @@ public class ChatSessionTests
     public async Task SendAsync_AccumulatesStreamedChunks_IntoFullResponseText()
     {
         var agent = new ChatClientAgent(new FakeChatClient("Hel", "lo, ", "world!"));
-        var session = new ChatSession(agent);
+        var session = new RedStarChatSession(agent);
 
         var result = await session.SendAsync("hi");
 
@@ -23,7 +23,7 @@ public class ChatSessionTests
     public async Task SendAsync_InvokesOnTextChunk_ForEachStreamedPiece()
     {
         var agent = new ChatClientAgent(new FakeChatClient("a", "b", "c"));
-        var session = new ChatSession(agent);
+        var session = new RedStarChatSession(agent);
         var received = new List<string>();
 
         await session.SendAsync("hi", onTextChunk: received.Add);
@@ -35,7 +35,7 @@ public class ChatSessionTests
     public async Task SendAsync_AppendsBothTurns_ToHistory_OnSuccess()
     {
         var agent = new ChatClientAgent(new FakeChatClient("hello there"));
-        var session = new ChatSession(agent);
+        var session = new RedStarChatSession(agent);
 
         await session.SendAsync("hi");
 
@@ -51,7 +51,7 @@ public class ChatSessionTests
     {
         var client = new FakeChatClient("ok");
         var agent = new ChatClientAgent(client, instructions: "be terse");
-        var session = new ChatSession(agent);
+        var session = new RedStarChatSession(agent);
 
         await session.SendAsync("hi");
 
@@ -63,7 +63,7 @@ public class ChatSessionTests
     {
         var client = new FakeChatClient("ok");
         var agent = new ChatClientAgent(client);
-        var session = new ChatSession(agent);
+        var session = new RedStarChatSession(agent);
 
         await session.SendAsync("hi");
 
@@ -75,7 +75,7 @@ public class ChatSessionTests
     public async Task SendAsync_PropagatesTheClientsException_AndDoesNotGrowHistory()
     {
         var agent = new ChatClientAgent(FakeChatClient.Throwing(new InvalidOperationException("boom")));
-        var session = new ChatSession(agent);
+        var session = new RedStarChatSession(agent);
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => session.SendAsync("hi"));
 
@@ -86,14 +86,14 @@ public class ChatSessionTests
     [Fact]
     public void Constructor_Throws_WhenAgentIsNull()
     {
-        Assert.Throws<ArgumentNullException>(() => new ChatSession(null!));
+        Assert.Throws<ArgumentNullException>(() => new RedStarChatSession(null!));
     }
 
     [Fact]
     public void Messages_IsEmpty_BeforeFirstSend()
     {
         var agent = new ChatClientAgent(new FakeChatClient("ok"));
-        var session = new ChatSession(agent);
+        var session = new RedStarChatSession(agent);
 
         Assert.Empty(session.Messages);
     }

@@ -24,7 +24,7 @@ public static class ClaudeCodeAuthModes
 
 /// <summary>
 /// Well-known values for <see cref="ClaudeCodeAgentOptions.ProcessMode"/> -- how the <c>claude</c> CLI
-/// subprocess is invoked across a <see cref="ChatSession"/>'s turns. A plain string, same rationale as
+/// subprocess is invoked across a <see cref="RedStarChatSession"/>'s turns. A plain string, same rationale as
 /// <see cref="ClaudeCodeAuthModes"/>.
 /// </summary>
 public static class ClaudeCodeProcessModes
@@ -39,7 +39,7 @@ public static class ClaudeCodeProcessModes
 
     /// <summary>
     /// One <c>claude -p --input-format stream-json</c> process is spawned lazily on the first turn and kept
-    /// alive for the rest of the <see cref="ChatSession"/>, fed one JSON line per turn over its open stdin
+    /// alive for the rest of the <see cref="RedStarChatSession"/>, fed one JSON line per turn over its open stdin
     /// pipe instead of being re-spawned. Avoids repeated process-startup latency, at the cost of a
     /// longer-lived subprocess that must be explicitly killed on cancellation/exit -- see
     /// <c>LongLivedClaudeCodeProcessRunner</c>.

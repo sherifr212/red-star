@@ -21,7 +21,7 @@ namespace RedStar.Cli;
 internal static class ChatEngine
 {
     public static async Task<int> SendAndPrintAsync(
-        ChatSession session, string userText, IAgentResponseExtractor responseExtractor, ILogger logger,
+        RedStarChatSession session, string userText, IAgentResponseExtractor responseExtractor, ILogger logger,
         CancellationToken cancellationToken)
     {
         var channel = Channel.CreateUnbounded<StageEvent>(new UnboundedChannelOptions
@@ -70,11 +70,11 @@ internal static class ChatEngine
     /// <see cref="StageBox"/> ends up with the total tokens/speed and every earlier box in the turn does not.
     /// Runs concurrently with <see cref="RenderStageBoxesAsync"/> so the UI can start drawing a stage's box
     /// as soon as that stage's first event lands, rather than after the whole turn completes. Completes the
-    /// channel (successfully or with the caught exception) when <see cref="ChatSession.SendAsync"/> returns
+    /// channel (successfully or with the caught exception) when <see cref="RedStarChatSession.SendAsync"/> returns
     /// or throws, which is how the reader side learns the turn is over.
     /// </summary>
     private static async Task ProduceStageEventsAsync(
-        ChatSession session, string userText, IAgentResponseExtractor responseExtractor,
+        RedStarChatSession session, string userText, IAgentResponseExtractor responseExtractor,
         ChannelWriter<StageEvent> writer, CancellationToken cancellationToken)
     {
         var lastStage = TurnStage.Other;

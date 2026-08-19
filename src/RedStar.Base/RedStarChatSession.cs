@@ -15,12 +15,12 @@ namespace RedStar.Base;
 /// <see cref="AgentSession"/> on first send and streams each turn through it, letting the
 /// agent's chat history provider own message history instead of tracking it locally.
 /// </summary>
-public sealed class ChatSession
+public sealed class RedStarChatSession
 {
     private readonly AIAgent _agent;
     private AgentSession? _session;
 
-    public ChatSession(AIAgent agent)
+    public RedStarChatSession(AIAgent agent)
     {
         ArgumentNullException.ThrowIfNull(agent);
         _agent = agent;
