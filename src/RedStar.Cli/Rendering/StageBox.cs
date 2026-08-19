@@ -90,11 +90,8 @@ internal sealed class StageBox
     public string? CopyFilePath => _copyFilePath;
 
     /// <summary>The whole turn's output-token count once a <c>UsageContent</c> update has landed on this
-    /// box, else null. Read by the caller
-    /// once this box seals, to log it regardless of
-    /// whether this box itself is the one that renders it in its footer -- see
-    /// <see cref="TokensAndSpeedLabel"/>'s "(cont'd)" exclusion, which only governs the footer, not
-    /// telemetry.</summary>
+    /// box, else null. Read by the caller once this box seals, to log it via telemetry independently of
+    /// whatever <see cref="TokensAndSpeedLabel"/> renders in the footer.</summary>
     public int? OutputTokenCount => _outputTokenCount;
 
     public void Tick() => _frame++;
@@ -250,18 +247,23 @@ internal sealed class StageBox
     }
 
     /// <summary>
-    /// The whole turn's output-token count and average tokens/second, or null when neither applies.
-    /// Null for a same-stage "(cont'd)" continuation box (<see cref="_isContinuation"/>) even once the
-    /// chain's later box carries the count -- the count/speed describes the entire turn, not this one
-    /// fragment's share of it, so it's only ever shown on a box that was never split for height. Null
-    /// also whenever no <c>UsageContent</c> update ever arrived,
-    /// which happens when the server doesn't report usage. Speed divides by <see cref="_stopwatch"/>'s
-    /// elapsed time (shared across the whole turn, not just this box) since the token count itself is a
-    /// whole-turn total, not this box's own.
+    /// The whole turn's output-token count and average tokens/second, or null when no <c>UsageContent</c>
+    /// update ever arrived on this box, which happens when the server doesn't report usage. The trailing
+    /// <c>UsageContent</c> update is the last event of the whole turn, so it lands on whichever box
+    /// happens to still be open at that point -- for any response long enough to trip a height-based
+    /// split (see <see cref="RenderStageBoxesAsync"/>'s <c>splitForHeight</c>), that's a same-stage
+    /// "(cont'd)" continuation box, not the turn's first box for that stage. This intentionally does
+    /// *not* exclude continuation boxes: since the whole turn only ever emits one <c>UsageContent</c>
+    /// update, at most one box's <see cref="_outputTokenCount"/> is ever non-null, so showing it here
+    /// whenever present can't duplicate the label across boxes -- excluding continuations would instead
+    /// mean no box shows it at all for a turn that got split, which used to be the case here and left
+    /// the footer silently missing for exactly the responses long enough to need it most. Speed divides
+    /// by <see cref="_stopwatch"/>'s elapsed time (shared across the whole turn, not just this box) since
+    /// the token count itself is a whole-turn total, not this box's own.
     /// </summary>
     private string? TokensAndSpeedLabel()
     {
-        if (_isContinuation || _outputTokenCount is not { } tokens)
+        if (_outputTokenCount is not { } tokens)
         {
             return null;
         }
