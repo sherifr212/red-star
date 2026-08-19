@@ -18,7 +18,7 @@ namespace RedStar.Base;
 public sealed class RedStarChatSession
 {
     private readonly AIAgent _agent;
-    private AgentSession? _session;
+    private AgentSession? _agentSession;
 
     public RedStarChatSession(AIAgent agent)
     {
@@ -30,7 +30,7 @@ public sealed class RedStarChatSession
     /// The conversation history recorded so far, or empty before the first <see cref="SendAsync"/> call.
     /// </summary>
     public IReadOnlyList<ChatMessage> Messages =>
-        _session is not null && AgentSessionExtensions.TryGetInMemoryChatHistory(_session, out var messages)
+        _agentSession is not null && AgentSessionExtensions.TryGetInMemoryChatHistory(_agentSession, out var messages)
             ? messages
             : [];
 
@@ -56,10 +56,10 @@ public sealed class RedStarChatSession
 
         try
         {
-            _session ??= await _agent.CreateSessionAsync(cancellationToken);
+            _agentSession ??= await _agent.CreateSessionAsync(cancellationToken);
 
             var responseText = new StringBuilder();
-            await foreach (var update in _agent.RunStreamingAsync(userText, _session, options: null, cancellationToken))
+            await foreach (var update in _agent.RunStreamingAsync(userText, _agentSession, options: null, cancellationToken))
             {
                 onUpdate?.Invoke(update);
 
