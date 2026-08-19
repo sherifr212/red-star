@@ -4,6 +4,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http;
 
 using RedStar.Base;
+using RedStar.Base.Agents.GoogleAI;
+using RedStar.Base.Agents.LMStudio;
+using RedStar.Base.Agents.Unsloth;
 using RedStar.Cli;
 using RedStar.Cli.Commands;
 using RedStar.Cli.Infrastructure;
@@ -34,9 +37,9 @@ Console.CancelKeyPress += (_, e) =>
 };
 
 var services = new ServiceCollection();
-services.AddHttpClient(AgentNames.Unsloth).AddHttpMessageHandler(() => new ConditionalAuthHandler());
-services.AddHttpClient(AgentNames.LMStudio).AddHttpMessageHandler(() => new ConditionalAuthHandler());
-services.AddHttpClient(AgentNames.GoogleAI);
+services.AddHttpClient<UnslothHttpClient>().AddHttpMessageHandler(() => new ConditionalAuthHandler());
+services.AddHttpClient<LMStudioHttpClient>().AddHttpMessageHandler(() => new ConditionalAuthHandler());
+services.AddHttpClient<GoogleAIHttpClient>();
 services.AddTransient<ChatCommand>();
 services.AddTransient<ModelsCommand>();
 var registrar = new TypeRegistrar(services);

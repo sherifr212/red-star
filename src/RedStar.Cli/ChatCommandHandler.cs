@@ -41,12 +41,13 @@ internal static class ChatCommandHandler
     /// <c>LMStudioAgentResponseExtractor</c>, same per-agent switch as <paramref name="agentFactory"/>;
     /// tests can substitute a fake here without depending on real Unsloth SSE JSON shapes.
     /// </param>
-    /// <param name="httpClientFactory">
-    /// Factory for creating pre-configured HttpClient instances per agent (Unsloth/LMStudio's named clients
-    /// carry a <see cref="ConditionalAuthHandler"/> in their pipeline, registered in Program.cs -- see its
-    /// remarks for why the handler itself needs no per-call configuration). Only null in tests, which always
-    /// supply agentFactory/modelsClientFactory directly.
+    /// <param name="unslothHttpClient">
+    /// Typed HttpClient for the Unsloth agent (carries a <see cref="ConditionalAuthHandler"/> in its
+    /// pipeline, registered in Program.cs -- see its remarks for why the handler itself needs no per-call
+    /// configuration). Only null in tests, which always supply agentFactory/modelsClientFactory directly.
     /// </param>
+    /// <param name="lmStudioHttpClient">Typed HttpClient for the LM Studio agent. Same nullability contract as <paramref name="unslothHttpClient"/>.</param>
+    /// <param name="googleAIHttpClient">Typed HttpClient for the GoogleAI agent. Same nullability contract as <paramref name="unslothHttpClient"/>.</param>
     /// <param name="runId">
     /// Correlation ID tagged onto this run's root OTel span (<c>run.correlation.id</c>). Falls back to the
     /// <c>REDSTAR_RUN_ID</c> environment variable, then a generated GUID -- every child span created for the
@@ -58,7 +59,9 @@ internal static class ChatCommandHandler
         string? oneShotPrompt,
         string? systemPrompt,
         CancellationToken cancellationToken,
-        IHttpClientFactory? httpClientFactory = null,
+        UnslothHttpClient? unslothHttpClient = null,
+        LMStudioHttpClient? lmStudioHttpClient = null,
+        GoogleAIHttpClient? googleAIHttpClient = null,
         Func<RedStarOptions, string, string?, AIAgent>? agentFactory = null,
         Func<RedStarOptions, IModelsClient>? modelsClientFactory = null,
         IAgentResponseExtractor? responseExtractor = null,
@@ -76,20 +79,21 @@ internal static class ChatCommandHandler
         var isClaudeCode = active.AgentName == AgentNames.ClaudeCode;
         var isGoogleAI = active.AgentName == AgentNames.GoogleAI;
 
-        // httpClientFactory is only null in tests, which always supply agentFactory/modelsClientFactory
-        // directly and so never evaluate these lambdas; production always resolves ChatCommand through DI
-        // (see Program.cs), so it's non-null whenever these bodies actually run. ClaudeCode is a subprocess
-        // agent, not an HTTP one (see ActiveAgentSettings' remarks), so it never touches httpClientFactory.
+        // unslothHttpClient/lmStudioHttpClient/googleAIHttpClient are only null in tests, which always
+        // supply agentFactory/modelsClientFactory directly and so never evaluate these lambdas; production
+        // always resolves ChatCommand through DI (see Program.cs), so the relevant one is non-null whenever
+        // these bodies actually run. ClaudeCode is a subprocess agent, not an HTTP one (see
+        // ActiveAgentSettings' remarks), so it never touches any of them.
         agentFactory ??= isClaudeCode
             ? static (opts, modelId, instructions) => ClaudeCodeAgentFactory.Create(opts, modelId, instructions)
             : isGoogleAI
                 ? (opts, modelId, instructions) => GoogleAIAgentFactory.Create(
-                    () => httpClientFactory!.CreateClient(AgentNames.GoogleAI), opts, modelId, instructions)
+                    () => googleAIHttpClient!.HttpClient, opts, modelId, instructions)
                 : isLMStudio
                     ? (opts, modelId, instructions) => LMStudioAgentFactory.Create(
-                        httpClientFactory!.CreateClient(AgentNames.LMStudio), opts, modelId, instructions)
+                        lmStudioHttpClient!.HttpClient, opts, modelId, instructions)
                     : (opts, modelId, instructions) => UnslothAgentFactory.Create(
-                        httpClientFactory!.CreateClient(AgentNames.Unsloth), opts, modelId, instructions);
+                        unslothHttpClient!.HttpClient, opts, modelId, instructions);
         responseExtractor ??= isClaudeCode
             ? new ClaudeCodeAgentResponseExtractor()
             : isGoogleAI
@@ -98,10 +102,10 @@ internal static class ChatCommandHandler
         modelsClientFactory ??= isClaudeCode
             ? static opts => new ClaudeCodeModelsClient()
             : isGoogleAI
-                ? opts => new GoogleAIModelsClient(httpClientFactory!.CreateClient(AgentNames.GoogleAI), opts)
+                ? opts => new GoogleAIModelsClient(googleAIHttpClient!.HttpClient, opts)
                 : isLMStudio
-                    ? opts => new LMStudioModelsClient(httpClientFactory!.CreateClient(AgentNames.LMStudio), opts)
-                    : opts => new ModelsClient(httpClientFactory!.CreateClient(AgentNames.Unsloth), opts);
+                    ? opts => new LMStudioModelsClient(lmStudioHttpClient!.HttpClient, opts)
+                    : opts => new ModelsClient(unslothHttpClient!.HttpClient, opts);
 
         if (string.IsNullOrEmpty(active.ApiKey) && !isLMStudio && !isClaudeCode && !isGoogleAI)
         {

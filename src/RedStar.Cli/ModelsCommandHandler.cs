@@ -4,6 +4,7 @@ using RedStar.Base;
 using RedStar.Base.Agents.ClaudeCode;
 using RedStar.Base.Agents.GoogleAI;
 using RedStar.Base.Agents.LMStudio;
+using RedStar.Base.Agents.Unsloth;
 using RedStar.Base.Telemetry;
 using RedStar.Cli.Rendering;
 
@@ -13,10 +14,9 @@ namespace RedStar.Cli;
 
 internal static class ModelsCommandHandler
 {
-    /// <param name="httpClientFactory">
-    /// Factory for creating pre-configured HttpClient instances per agent. Only null in tests, which always
-    /// supply modelsClientFactory directly.
-    /// </param>
+    /// <param name="unslothHttpClient">Typed HttpClient for the Unsloth agent. Only null in tests, which always supply modelsClientFactory directly.</param>
+    /// <param name="lmStudioHttpClient">Typed HttpClient for the LM Studio agent. Same nullability contract as <paramref name="unslothHttpClient"/>.</param>
+    /// <param name="googleAIHttpClient">Typed HttpClient for the GoogleAI agent. Same nullability contract as <paramref name="unslothHttpClient"/>.</param>
     /// <param name="modelsClientFactory">
     /// Builds the <see cref="IModelsClient"/> to query. Defaults to a real <see cref="ModelsClient"/> or
     /// <c>LMStudioModelsClient</c> depending on <see cref="RedStarOptions.Agent"/> (same per-agent switch
@@ -31,7 +31,9 @@ internal static class ModelsCommandHandler
     public static async Task<int> RunAsync(
         RedStarOptions options,
         CancellationToken cancellationToken,
-        IHttpClientFactory? httpClientFactory = null,
+        UnslothHttpClient? unslothHttpClient = null,
+        LMStudioHttpClient? lmStudioHttpClient = null,
+        GoogleAIHttpClient? googleAIHttpClient = null,
         Func<RedStarOptions, IModelsClient>? modelsClientFactory = null,
         string? runId = null)
     {
@@ -46,17 +48,18 @@ internal static class ModelsCommandHandler
         var isClaudeCode = string.Equals(options.Agent, AgentNames.ClaudeCode, StringComparison.OrdinalIgnoreCase);
         var isGoogleAI = string.Equals(options.Agent, AgentNames.GoogleAI, StringComparison.OrdinalIgnoreCase);
 
-        // httpClientFactory is only null in tests, which always supply modelsClientFactory directly and so
-        // never evaluate these lambdas; production always resolves ModelsCommand through DI (see Program.cs),
-        // so httpClientFactory is non-null whenever these bodies actually run. ClaudeCode is a subprocess
-        // agent, not an HTTP one, so it never touches httpClientFactory.
+        // unslothHttpClient/lmStudioHttpClient/googleAIHttpClient are only null in tests, which always
+        // supply modelsClientFactory directly and so never evaluate these lambdas; production always
+        // resolves ModelsCommand through DI (see Program.cs), so the relevant one is non-null whenever
+        // these bodies actually run. ClaudeCode is a subprocess agent, not an HTTP one, so it never touches
+        // any of them.
         modelsClientFactory ??= isClaudeCode
             ? static opts => new ClaudeCodeModelsClient()
             : isGoogleAI
-                ? opts => new GoogleAIModelsClient(httpClientFactory!.CreateClient(AgentNames.GoogleAI), opts)
+                ? opts => new GoogleAIModelsClient(googleAIHttpClient!.HttpClient, opts)
                 : isLMStudio
-                    ? opts => new LMStudioModelsClient(httpClientFactory!.CreateClient(AgentNames.LMStudio), opts)
-                    : opts => new ModelsClient(httpClientFactory!.CreateClient(AgentNames.Unsloth), opts);
+                    ? opts => new LMStudioModelsClient(lmStudioHttpClient!.HttpClient, opts)
+                    : opts => new ModelsClient(unslothHttpClient!.HttpClient, opts);
 
         var modelsClient = modelsClientFactory(options);
         try
