@@ -1,3 +1,4 @@
+using System;
 using System.Diagnostics;
 using System.IO;
 
@@ -57,5 +58,33 @@ public class StageBoxTests
         box.Apply(new StageEvent(TurnStage.Generating, "hi", null));
 
         Assert.DoesNotContain("tok,", RenderToPlainText(box));
+    }
+
+    /// <summary>
+    /// Regression test: a turn with two back-to-back searches used to bucket every status label into one
+    /// block and every hit from both calls into a single trailing block, which visually merged the second
+    /// query's results under the first query's label (or vice versa). Each search's status and its own
+    /// hits must render in the order they actually happened.
+    /// </summary>
+    [Fact]
+    public void Render_InterleavesSequentialSearches_InOrder()
+    {
+        var box = new StageBox(TurnStage.Searching, Stopwatch.StartNew());
+        box.Apply(new StageEvent(TurnStage.Searching, "Searching: current year", null));
+        box.Apply(new StageEvent(
+            TurnStage.Searching, null, [new RedStar.Base.WebSearchResult("Year Site", "https://year.example")]));
+        box.Apply(new StageEvent(TurnStage.Searching, "Searching: weather forecast", null));
+        box.Apply(new StageEvent(
+            TurnStage.Searching, null, [new RedStar.Base.WebSearchResult("Weather Site", "https://weather.example")]));
+
+        var text = RenderToPlainText(box);
+        var yearLabelIndex = text.IndexOf("Searching: current year", StringComparison.Ordinal);
+        var yearSiteIndex = text.IndexOf("Year Site", StringComparison.Ordinal);
+        var weatherLabelIndex = text.IndexOf("Searching: weather forecast", StringComparison.Ordinal);
+        var weatherSiteIndex = text.IndexOf("Weather Site", StringComparison.Ordinal);
+
+        Assert.True(yearLabelIndex < yearSiteIndex);
+        Assert.True(yearSiteIndex < weatherLabelIndex);
+        Assert.True(weatherLabelIndex < weatherSiteIndex);
     }
 }
