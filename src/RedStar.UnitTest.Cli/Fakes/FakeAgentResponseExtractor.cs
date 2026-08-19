@@ -1,4 +1,5 @@
 using Microsoft.Agents.AI;
+
 using RedStar.Base;
 
 namespace RedStar.UnitTest.Cli.Fakes;

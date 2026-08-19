@@ -1,4 +1,5 @@
 using RedStar.Base;
+
 using Spectre.Console.Cli;
 
 namespace RedStar.Cli.Commands;

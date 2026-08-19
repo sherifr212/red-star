@@ -1,5 +1,6 @@
-using Spectre.Console;
 using System;
+
+using Spectre.Console;
 
 namespace RedStar.Cli.Rendering;
 

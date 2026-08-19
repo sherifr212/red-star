@@ -1,11 +1,14 @@
 using System.Text;
+
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http;
+
 using RedStar.Base;
 using RedStar.Cli;
 using RedStar.Cli.Commands;
 using RedStar.Cli.Infrastructure;
 using RedStar.Cli.Telemetry;
+
 using Spectre.Console.Cli;
 
 // Windows consoles default to the system codepage (rarely UTF-8), so the box-drawing characters used

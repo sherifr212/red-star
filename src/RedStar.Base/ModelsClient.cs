@@ -2,7 +2,9 @@ using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+
 using Microsoft.Extensions.Logging;
+
 using RedStar.Base.Telemetry;
 
 namespace RedStar.Base;

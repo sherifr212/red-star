@@ -1,9 +1,11 @@
-using Microsoft.Agents.AI;
-using Microsoft.Extensions.AI;
-using RedStar.Base;
-using RedStar.Base.Agents.GoogleAI;
 using System.Net;
 using System.Net.Http.Headers;
+
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
+
+using RedStar.Base;
+using RedStar.Base.Agents.GoogleAI;
 
 namespace RedStar.UnitTest;
 

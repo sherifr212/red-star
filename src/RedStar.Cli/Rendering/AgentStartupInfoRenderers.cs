@@ -1,12 +1,15 @@
+using System;
+using System.Diagnostics;
+using System.Text.Json;
+
 using Microsoft.Extensions.Logging;
+
 using RedStar.Base;
 using RedStar.Base.Agents.ClaudeCode;
 using RedStar.Base.Telemetry;
 using RedStar.Cli.Infrastructure;
+
 using Spectre.Console;
-using System;
-using System.Diagnostics;
-using System.Text.Json;
 
 namespace RedStar.Cli.Rendering;
 

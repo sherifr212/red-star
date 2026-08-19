@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net;
+
 using RedStar.Base;
 using RedStar.Base.Telemetry;
 using RedStar.UnitTest.Fakes;

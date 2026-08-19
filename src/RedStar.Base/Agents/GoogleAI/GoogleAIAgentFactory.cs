@@ -1,8 +1,10 @@
 using Google.GenAI;
 using Google.GenAI.Types;
+
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
+
 using RedStar.Base.Telemetry;
 
 namespace RedStar.Base.Agents.GoogleAI;

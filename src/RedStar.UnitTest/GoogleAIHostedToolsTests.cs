@@ -1,4 +1,5 @@
 using Microsoft.Extensions.AI;
+
 using RedStar.Base.Agents.GoogleAI;
 
 namespace RedStar.UnitTest;

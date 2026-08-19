@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+
 using RedStar.Base;
 using RedStar.Base.Agents.GoogleAI;
 

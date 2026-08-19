@@ -1,13 +1,16 @@
-using BoxOfYellow.ConsoleMarkdownRenderer.Spectre;
-using RedStar.Base;
-using Spectre.Console;
-using Spectre.Console.Rendering;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
+
+using BoxOfYellow.ConsoleMarkdownRenderer.Spectre;
+
+using RedStar.Base;
+
+using Spectre.Console;
+using Spectre.Console.Rendering;
 
 namespace RedStar.Cli.Rendering;
 

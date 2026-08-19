@@ -1,8 +1,10 @@
-using Spectre.Console;
+using System.Collections.Generic;
+
+using RedStar.Base;
 using RedStar.Base.Agents.LMStudio;
 using RedStar.Base.Agents.Unsloth;
-using RedStar.Base;
-using System.Collections.Generic;
+
+using Spectre.Console;
 
 namespace RedStar.Cli.Rendering;
 

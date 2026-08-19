@@ -1,16 +1,19 @@
-using Microsoft.Extensions.Logging;
-using RedStar.Base;
-using RedStar.Base.Telemetry;
-using Spectre.Console;
 using System;
-using System.Diagnostics;
-using System.Threading.Channels;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Threading;
+using System.Threading.Channels;
+using System.Threading.Tasks;
+
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
+
+using RedStar.Base;
+using RedStar.Base.Telemetry;
 using RedStar.Cli.Rendering;
+
+using Spectre.Console;
 
 namespace RedStar.Cli;
 

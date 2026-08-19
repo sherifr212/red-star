@@ -1,10 +1,13 @@
 using System.ClientModel;
 using System.ClientModel.Primitives;
+
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
+
 using OpenAI;
 using OpenAI.Chat;
+
 using RedStar.Base.Telemetry;
 
 namespace RedStar.Base.Agents.LMStudio;

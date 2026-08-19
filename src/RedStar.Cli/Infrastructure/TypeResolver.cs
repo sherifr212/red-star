@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+
 using Spectre.Console.Cli;
 
 namespace RedStar.Cli.Infrastructure;

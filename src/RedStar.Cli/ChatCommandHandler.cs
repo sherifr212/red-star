@@ -1,19 +1,23 @@
 using System.Diagnostics;
 using System.Text;
 using System.Threading.Channels;
+
 using BoxOfYellow.ConsoleMarkdownRenderer.Spectre;
+
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
+
 using RedStar.Base;
 using RedStar.Base.Agents.ClaudeCode;
 using RedStar.Base.Agents.GoogleAI;
 using RedStar.Base.Agents.LMStudio;
 using RedStar.Base.Agents.Unsloth;
 using RedStar.Base.Telemetry;
-using Spectre.Console;
 using RedStar.Cli.Infrastructure;
 using RedStar.Cli.Rendering;
+
+using Spectre.Console;
 using Spectre.Console.Rendering;
 
 namespace RedStar.Cli;

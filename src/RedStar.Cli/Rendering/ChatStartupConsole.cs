@@ -1,11 +1,14 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+
 using Microsoft.Extensions.Logging;
+
 using RedStar.Base;
 using RedStar.Cli.Infrastructure;
+
 using Spectre.Console;
-using System.Diagnostics;
-using System.Collections.Generic;
-using System;
-using System.Linq;
 
 namespace RedStar.Cli.Rendering;
 

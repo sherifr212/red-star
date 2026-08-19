@@ -1,4 +1,5 @@
 using Microsoft.Extensions.AI;
+
 using GenAITool = Google.GenAI.Types.Tool;
 using GenAIUrlContext = Google.GenAI.Types.UrlContext;
 

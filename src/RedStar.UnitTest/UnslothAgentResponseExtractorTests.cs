@@ -1,7 +1,10 @@
 using System.ClientModel.Primitives;
+
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+
 using OpenAI.Chat;
+
 using RedStar.Base;
 using RedStar.Base.Agents.Unsloth;
 

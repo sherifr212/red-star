@@ -1,4 +1,5 @@
 using Microsoft.Agents.AI;
+
 using RedStar.Base.Agents.LMStudio;
 
 namespace RedStar.UnitTest;

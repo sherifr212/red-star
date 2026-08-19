@@ -1,10 +1,11 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
 using RedStar.Base;
 using RedStar.Base.Agents.ClaudeCode;
 using RedStar.Base.Agents.GoogleAI;
 using RedStar.Base.Agents.Unsloth;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace RedStar.Cli.Infrastructure;
 

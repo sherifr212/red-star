@@ -1,5 +1,7 @@
 using System.Net;
+
 using Microsoft.Extensions.Options;
+
 using RedStar.Controller;
 using RedStar.UnitTest.Controller.Fakes;
 

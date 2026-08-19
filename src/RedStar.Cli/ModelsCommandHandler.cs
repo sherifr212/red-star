@@ -1,10 +1,12 @@
 using Microsoft.Extensions.Logging;
+
 using RedStar.Base;
 using RedStar.Base.Agents.ClaudeCode;
 using RedStar.Base.Agents.GoogleAI;
 using RedStar.Base.Agents.LMStudio;
 using RedStar.Base.Telemetry;
 using RedStar.Cli.Rendering;
+
 using Spectre.Console;
 
 namespace RedStar.Cli;

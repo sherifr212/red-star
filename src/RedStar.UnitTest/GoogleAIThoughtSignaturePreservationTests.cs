@@ -1,7 +1,10 @@
 using System.Net;
+
 using Google.GenAI;
 using Google.GenAI.Types;
+
 using Microsoft.Extensions.AI;
+
 using RedStar.UnitTest.Fakes;
 
 namespace RedStar.UnitTest;

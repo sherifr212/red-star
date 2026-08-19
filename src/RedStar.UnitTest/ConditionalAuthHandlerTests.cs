@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+
 using RedStar.Base;
 using RedStar.UnitTest.Fakes;
 

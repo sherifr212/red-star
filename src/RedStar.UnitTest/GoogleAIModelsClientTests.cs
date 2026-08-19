@@ -1,4 +1,5 @@
 using System.Net;
+
 using RedStar.Base;
 using RedStar.Base.Agents.GoogleAI;
 using RedStar.UnitTest.Fakes;
