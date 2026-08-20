@@ -1,3 +1,5 @@
+using Marten;
+
 using RedStar.Base;
 using RedStar.Base.Agents.GoogleAI;
 using RedStar.Base.Agents.LMStudio;
@@ -16,12 +18,15 @@ public sealed class ChatCommand : AsyncCommand<ChatSettings>
     private readonly UnslothHttpClient _unslothHttpClient;
     private readonly LMStudioHttpClient _lmStudioHttpClient;
     private readonly GoogleAIHttpClient _googleAIHttpClient;
+    private readonly IDocumentStore _documentStore;
 
-    public ChatCommand(UnslothHttpClient unslothHttpClient, LMStudioHttpClient lmStudioHttpClient, GoogleAIHttpClient googleAIHttpClient)
+    public ChatCommand(UnslothHttpClient unslothHttpClient, LMStudioHttpClient lmStudioHttpClient,
+                       GoogleAIHttpClient googleAIHttpClient, IDocumentStore documentStore)
     {
         _unslothHttpClient = unslothHttpClient;
         _lmStudioHttpClient = lmStudioHttpClient;
         _googleAIHttpClient = googleAIHttpClient;
+        _documentStore = documentStore;
     }
 
     protected override async Task<int> ExecuteAsync(CommandContext context, ChatSettings settings, CancellationToken cancellationToken)
@@ -48,6 +53,7 @@ public sealed class ChatCommand : AsyncCommand<ChatSettings>
             unslothHttpClient: _unslothHttpClient,
             lmStudioHttpClient: _lmStudioHttpClient,
             googleAIHttpClient: _googleAIHttpClient,
+            documentStore: _documentStore,
             runId: settings.RunId);
     }
 }

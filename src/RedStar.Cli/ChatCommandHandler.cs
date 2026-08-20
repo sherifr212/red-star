@@ -4,6 +4,8 @@ using System.Threading.Channels;
 
 using BoxOfYellow.ConsoleMarkdownRenderer.Spectre;
 
+using Marten;
+
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -65,6 +67,7 @@ internal static class ChatCommandHandler
         Func<RedStarOptions, string, string?, AIAgent>? agentFactory = null,
         Func<RedStarOptions, IModelsClient>? modelsClientFactory = null,
         IAgentResponseExtractor? responseExtractor = null,
+        IDocumentStore? documentStore = null,
         string? runId = null)
     {
         using var activity = RedStarTelemetry.ActivitySource.StartActivity("redstar.chat");
@@ -88,7 +91,7 @@ internal static class ChatCommandHandler
             ? static (opts, modelId, instructions) => ClaudeCodeAgentFactory.Create(opts, modelId, instructions)
             : isGoogleAI
                 ? (opts, modelId, instructions) => GoogleAIAgentFactory.Create(
-                    () => googleAIHttpClient!.HttpClient, opts, modelId, instructions)
+                    () => googleAIHttpClient!.HttpClient, opts, modelId, instructions, null, documentStore)
                 : isLMStudio
                     ? (opts, modelId, instructions) => LMStudioAgentFactory.Create(
                         lmStudioHttpClient!.HttpClient, opts, modelId, instructions)

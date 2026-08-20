@@ -1,6 +1,8 @@
 using Google.GenAI;
 using Google.GenAI.Types;
 
+using Marten;
+
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -55,11 +57,12 @@ public static class GoogleAIAgentFactory
     /// </param>
     public static AIAgent Create(
         Func<HttpClient> httpClientFactory, RedStarOptions options, string modelId, string? instructions = null,
-        IEnumerable<AITool>? tools = null)
+        IEnumerable<AITool>? tools = null, IDocumentStore? documentStore = null)
     {
         ArgumentNullException.ThrowIfNull(httpClientFactory);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentException.ThrowIfNullOrEmpty(modelId);
+        ArgumentNullException.ThrowIfNull(documentStore);
 
         RedStarTelemetry.CreateLogger("RedStar.Base.Agents.GoogleAI.GoogleAIAgentFactory")
             .LogBuildingAgent(modelId);
@@ -88,7 +91,11 @@ public static class GoogleAIAgentFactory
             chatClient = chatClient.AsBuilder().UseFunctionInvocation().Build();
         }
 
-        return chatClient.AsAIAgent(new ChatClientAgentOptions { ChatOptions = chatOptions });
+        return chatClient.AsAIAgent(new ChatClientAgentOptions 
+        { 
+            ChatOptions = chatOptions,
+            AIContextProviders = [new DbGoogleAIContextProvider(documentStore)] 
+        });
     }
 
     /// <summary>
