@@ -60,3 +60,4 @@ nunit-*.xml
 appsettings.Production.json
 build
 node_modules
+*.lscache
