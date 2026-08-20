@@ -1,6 +1,7 @@
 using System.Text;
 
 using Marten;
+using Marten.Schema.Identity;
 
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http;
@@ -70,6 +71,14 @@ services.AddMarten(op =>
     op.OpenTelemetry.TrackEventCounters();
     op.OpenTelemetry.TrackFetchForWritingMetrics();
     op.OpenTelemetry.TrackConnections = JasperFx.OpenTelemetry.TrackLevel.Verbose;
+    
+    op.Policies.ForAllDocuments(m =>
+    {
+        if (m.IdType == typeof(Guid))
+        {
+            m.IdStrategy = new SequentialGuidIdGeneration();
+        }
+    });
 });
 
 return await app.RunAsync(args, cts.Token);
