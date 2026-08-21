@@ -61,7 +61,10 @@ public sealed class DbGoogleAIContextProvider : AIContextProvider
 
                 RequestMessages = context.RequestMessages,
                 ResponseMessages = context.ResponseMessages,
-                InvokeException = context.InvokeException
+                
+                InvokeExceptionType = context.InvokeException?.GetType().ToString(),
+                InvokeExceptionMessage = context.InvokeException?.Message,
+                InvokeExceptionStackTrace = context.InvokeException?.ToString()
             };
 
             dbSession.Insert(part);
@@ -107,5 +110,7 @@ public record InferenceResponsePart
 
     public IEnumerable<ChatMessage>? RequestMessages { get; init; }
     public IEnumerable<ChatMessage>? ResponseMessages { get; init; }
-    public Exception? InvokeException { get; init; }
+    public string? InvokeExceptionType { get; init; }
+    public string? InvokeExceptionMessage { get; init; }
+    public string? InvokeExceptionStackTrace { get; init; }
 }
