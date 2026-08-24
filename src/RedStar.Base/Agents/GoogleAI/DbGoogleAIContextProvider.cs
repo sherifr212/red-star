@@ -4,16 +4,20 @@ using Marten;
 
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
-using Microsoft.Extensions.Logging;
 
 namespace RedStar.Base.Agents.GoogleAI;
 
 public sealed class DbGoogleAIContextProvider : AIContextProvider
 {
+    // private readonly string _runId;
     private readonly IDocumentStore _documentStore;
 
     public DbGoogleAIContextProvider(IDocumentStore documentStore)
     {
+        // ArgumentException.ThrowIfNullOrWhiteSpace(runId);
+        ArgumentNullException.ThrowIfNull(documentStore);
+
+        // _runId = runId;
         _documentStore = documentStore;
     }
 
@@ -57,12 +61,12 @@ public sealed class DbGoogleAIContextProvider : AIContextProvider
                 AgentIdName = context.Agent.Name,
                 AgentType = context.Agent.GetType().ToString(), // Might be costly!
 
-                RequestMessages = context.RequestMessages,
                 ResponseMessages = context.ResponseMessages,
                 
+                InvokeExceptionString = context.InvokeException?.ToString(),
                 InvokeExceptionType = context.InvokeException?.GetType().ToString(),
                 InvokeExceptionMessage = context.InvokeException?.Message,
-                InvokeExceptionStackTrace = context.InvokeException?.ToString()
+                InvokeExceptionStackTrace = context.InvokeException?.StackTrace,
             };
 
             dbSession.Insert(part);
@@ -70,6 +74,32 @@ public sealed class DbGoogleAIContextProvider : AIContextProvider
         }
 
         await base.InvokedCoreAsync(context, cancellationToken);
+    }
+
+    protected async override ValueTask StoreAIContextAsync(InvokedContext context, CancellationToken cancellationToken = default)
+    {
+        await using (var dbSession = _documentStore.LightweightSession(System.Data.IsolationLevel.ReadCommitted)) // Since we are on Postgresql.
+
+        {
+            dbSession.Insert(new InferenceCompletionPart
+            {
+                AgentDescription = context.Agent.Description,
+                AgentId = context.Agent.Id,
+                AgentIdName = context.Agent.Name,
+                AgentType = context.Agent.GetType().ToString(), // Might be costly!
+
+                RequestMessages = context.RequestMessages,
+                ResponseMessages = context.ResponseMessages,
+                                
+                InvokeExceptionString = context.InvokeException?.ToString(),
+                InvokeExceptionType = context.InvokeException?.GetType().ToString(),
+                InvokeExceptionMessage = context.InvokeException?.Message,
+                InvokeExceptionStackTrace = context.InvokeException?.StackTrace,
+            });
+            await dbSession.SaveChangesAsync(cancellationToken);
+        }
+
+        await base.StoreAIContextAsync(context, cancellationToken);
     }
 }
 
@@ -104,8 +134,29 @@ public record InferenceResponsePart
     public string? AgentIdName { get; init; }
     public required string AgentType { get; init; }
 
-    public IEnumerable<ChatMessage>? RequestMessages { get; init; }
     public IEnumerable<ChatMessage>? ResponseMessages { get; init; }
+
+    public string? InvokeExceptionType { get; init; }
+    public string? InvokeExceptionMessage { get; init; }
+    public string? InvokeExceptionStackTrace { get; init; }
+    public string? InvokeExceptionString { get; init; }
+}
+
+public record InferenceCompletionPart
+{
+    [Identity]
+    public Guid Id { get; init; }
+    public DateTimeOffset AtUtc { get; } = DateTimeOffset.UtcNow;
+    
+    public string? AgentDescription { get; init; }
+    public required string AgentId { get; init; }
+    public string? AgentIdName { get; init; }
+    public required string AgentType { get; init; }
+    
+    public required IEnumerable<ChatMessage> RequestMessages { get; init; }
+    public IEnumerable<ChatMessage>? ResponseMessages { get; init; }
+
+    public string? InvokeExceptionString { get; init; }
     public string? InvokeExceptionType { get; init; }
     public string? InvokeExceptionMessage { get; init; }
     public string? InvokeExceptionStackTrace { get; init; }
