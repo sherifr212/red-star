@@ -24,7 +24,6 @@ public sealed class DbGoogleAIContextProvider : AIContextProvider
         {
             var part = new InferenceRequestPart
             {
-                SessionStateBag = context.Session?.StateBag,
                 SessionType = context.Session?.GetType().ToString(),
 
                 AgentDescription = context.Agent.Description,
@@ -51,7 +50,6 @@ public sealed class DbGoogleAIContextProvider : AIContextProvider
         {
             var part = new InferenceResponsePart
             {
-                SessionStateBag = context.Session?.StateBag,
                 SessionType = context.Session?.GetType().ToString(),
 
                 AgentDescription = context.Agent.Description,
@@ -82,7 +80,6 @@ public record InferenceRequestPart
     public DateTimeOffset UtcAt { get; } = DateTimeOffset.UtcNow;
 
     public string? SessionType { get; init; }
-    public AgentSessionStateBag? SessionStateBag { get; init; }
 
     public string? AgentDescription { get; init; }
     public required string AgentId { get; init; }
@@ -101,7 +98,6 @@ public record InferenceResponsePart
     public DateTimeOffset AtUtc { get; } = DateTimeOffset.UtcNow;
 
     public string? SessionType { get; init; }
-    public AgentSessionStateBag? SessionStateBag { get; init; }
 
     public string? AgentDescription { get; init; }
     public required string AgentId { get; init; }
