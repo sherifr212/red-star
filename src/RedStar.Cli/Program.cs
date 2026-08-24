@@ -67,11 +67,11 @@ services.AddMarten(op =>
 {
     op.Connection(startupOptions.DbConnectionString);
     op.AutoCreateSchemaObjects = JasperFx.AutoCreate.CreateOrUpdate;
-    
+
     op.OpenTelemetry.TrackEventCounters();
     op.OpenTelemetry.TrackFetchForWritingMetrics();
     op.OpenTelemetry.TrackConnections = JasperFx.OpenTelemetry.TrackLevel.Verbose;
-    
+
     op.Policies.ForAllDocuments(m =>
     {
         if (m.IdType == typeof(Guid))

@@ -24,7 +24,7 @@ public sealed class DbGoogleAIContextProvider : AIContextProvider
     protected override async ValueTask<AIContext> InvokingCoreAsync(InvokingContext context, CancellationToken cancellationToken = default)
     {
         await using (var dbSession = _documentStore.LightweightSession(System.Data.IsolationLevel.ReadCommitted)) // Since we are on Postgresql.
-        
+
         {
             var part = new InferenceRequestPart
             {
@@ -34,7 +34,7 @@ public sealed class DbGoogleAIContextProvider : AIContextProvider
                 AgentId = context.Agent.Id,
                 AgentIdName = context.Agent.Name,
                 AgentType = context.Agent.GetType().ToString(), // Might be costly!
-                
+
                 ContextInstructions = context.AIContext.Instructions,
                 ContextMessages = context.AIContext.Messages,
                 ContextTools = context.AIContext.Tools
@@ -62,7 +62,7 @@ public sealed class DbGoogleAIContextProvider : AIContextProvider
                 AgentType = context.Agent.GetType().ToString(), // Might be costly!
 
                 ResponseMessages = context.ResponseMessages,
-                
+
                 InvokeExceptionString = context.InvokeException?.ToString(),
                 InvokeExceptionType = context.InvokeException?.GetType().ToString(),
                 InvokeExceptionMessage = context.InvokeException?.Message,
@@ -90,7 +90,7 @@ public sealed class DbGoogleAIContextProvider : AIContextProvider
 
                 RequestMessages = context.RequestMessages,
                 ResponseMessages = context.ResponseMessages,
-                                
+
                 InvokeExceptionString = context.InvokeException?.ToString(),
                 InvokeExceptionType = context.InvokeException?.GetType().ToString(),
                 InvokeExceptionMessage = context.InvokeException?.Message,
@@ -147,12 +147,12 @@ public record InferenceCompletionPart
     [Identity]
     public Guid Id { get; init; }
     public DateTimeOffset AtUtc { get; } = DateTimeOffset.UtcNow;
-    
+
     public string? AgentDescription { get; init; }
     public required string AgentId { get; init; }
     public string? AgentIdName { get; init; }
     public required string AgentType { get; init; }
-    
+
     public required IEnumerable<ChatMessage> RequestMessages { get; init; }
     public IEnumerable<ChatMessage>? ResponseMessages { get; init; }
 
