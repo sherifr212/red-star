@@ -12,7 +12,7 @@ namespace RedStar.Base.Agents.ClaudeCode;
 /// <see cref="ChatResponseUpdate"/>s (see <see cref="ClaudeCodeStreamJsonParser"/>).
 ///
 /// Only the newest user message is ever actually sent to the subprocess -- <see cref="IChatClient"/>'s
-/// contract hands every call the full conversation history (RedStar's <see cref="ChatSession"/>/
+/// contract hands every call the full conversation history (RedStar's <see cref="RedStarChatSession"/>/
 /// <c>InMemoryChatHistoryProvider</c> owns it, same as for Unsloth/LM Studio), but ClaudeCode's own
 /// session (established via <c>--session-id</c>/<c>--resume</c>, or simply by staying the same live process
 /// in <see cref="ClaudeCodeProcessModes.LongLived"/>) already carries prior turns -- re-sending the whole
@@ -73,7 +73,7 @@ public sealed class ClaudeCodeChatClient(IClaudeCodeProcessRunner runner) : ICha
     }
 
     /// <summary>Aggregates <see cref="GetStreamingResponseAsync"/> into one response. RedStar always calls
-    /// the streaming path (<see cref="ChatSession.SendAsync"/> -&gt; <c>AIAgent.RunStreamingAsync</c>), so this
+    /// the streaming path (<see cref="RedStarChatSession.SendAsync"/> -&gt; <c>AIAgent.RunStreamingAsync</c>), so this
     /// exists only to fulfill <see cref="IChatClient"/>'s contract, not because anything here exercises it.</summary>
     public async Task<ChatResponse> GetResponseAsync(
         IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)

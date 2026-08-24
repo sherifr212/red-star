@@ -4,7 +4,7 @@ namespace RedStar.Base;
 
 /// <summary>
 /// Extracts provider-specific side-channel data (tool-activity labels, search results, ...) from a
-/// streamed <see cref="AgentResponseUpdate"/>. Kept agent-agnostic like <see cref="ChatSession"/> and
+/// streamed <see cref="AgentResponseUpdate"/>. Kept agent-agnostic like <see cref="RedStarChatSession"/> and
 /// <see cref="RedStarOptions"/> -- callers such as <c>ChatCommandHandler</c> depend on this interface
 /// rather than on a concrete agent's factory, so a future second agent under
 /// <c>RedStar.Base/Agents/&lt;AgentName&gt;</c> can plug in its own implementation without CLI-side

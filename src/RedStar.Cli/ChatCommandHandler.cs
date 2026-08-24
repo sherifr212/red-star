@@ -166,7 +166,7 @@ internal static class ChatCommandHandler
         ChatStartupConsole.PrintStartupInfoBox(options, active, runId, modelId, modelSourceLabel, activity, logger);
 
         AIAgent agent = agentFactory(options, modelId, systemPrompt);
-        var session = new ChatSession(agent);
+        var session = new RedStarChatSession(agent);
 
         if (!string.IsNullOrWhiteSpace(oneShotPrompt))
         {

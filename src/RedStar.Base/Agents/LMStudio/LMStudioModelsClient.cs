@@ -20,8 +20,16 @@ namespace RedStar.Base.Agents.LMStudio;
 public sealed class LMStudioModelsClient : IModelsClient
 {
     private readonly HttpClient _httpClient;
+    private readonly Uri _modelsUri;
+    private readonly string? _apiKey;
 
-    /// <param name="httpClient">Transport to use. Caller owns its construction/lifetime.</param>
+    /// <param name="httpClient">
+    /// Transport to use. Caller owns its construction/lifetime -- this constructor deliberately never
+    /// touches <see cref="HttpClient.BaseAddress"/>/<see cref="HttpClient.DefaultRequestHeaders"/> (see
+    /// <c>ModelsClient</c>'s constructor remarks for why: callers may hand in a typed client's shared
+    /// instance that's also reused as the chat agent's transport). Every field this client needs is
+    /// instead applied per-request, in <see cref="ListAsync"/>.
+    /// </param>
     public LMStudioModelsClient(HttpClient httpClient, RedStarOptions options)
     {
         ArgumentNullException.ThrowIfNull(httpClient);
@@ -29,11 +37,8 @@ public sealed class LMStudioModelsClient : IModelsClient
 
         var lmStudio = options.Agents.LMStudio;
         _httpClient = httpClient;
-        _httpClient.BaseAddress = new Uri(EnsureTrailingSlash(ServerRoot(lmStudio.BaseUrl)));
-        if (!string.IsNullOrEmpty(lmStudio.ApiKey))
-        {
-            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", lmStudio.ApiKey);
-        }
+        _modelsUri = new Uri(new Uri(EnsureTrailingSlash(ServerRoot(lmStudio.BaseUrl))), "api/v1/models");
+        _apiKey = string.IsNullOrEmpty(lmStudio.ApiKey) ? null : lmStudio.ApiKey;
     }
 
     public async Task<IReadOnlyList<ModelInfo>> ListAsync(CancellationToken cancellationToken = default)
@@ -45,7 +50,13 @@ public sealed class LMStudioModelsClient : IModelsClient
 
         try
         {
-            using var response = await _httpClient.GetAsync("api/v1/models", cancellationToken);
+            using var request = new HttpRequestMessage(HttpMethod.Get, _modelsUri);
+            if (_apiKey is not null)
+            {
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
+            }
+
+            using var response = await _httpClient.SendAsync(request, cancellationToken);
             response.EnsureSuccessStatusCode();
 
             var rawJson = await response.Content.ReadAsStringAsync(cancellationToken);

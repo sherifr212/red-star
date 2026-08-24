@@ -12,8 +12,17 @@ namespace RedStar.Base;
 public sealed class ModelsClient : IModelsClient
 {
     private readonly HttpClient _httpClient;
+    private readonly Uri _modelsUri;
+    private readonly string? _apiKey;
 
-    /// <param name="httpClient">Transport to use. Caller owns its construction/lifetime.</param>
+    /// <param name="httpClient">
+    /// Transport to use. Caller owns its construction/lifetime -- this constructor deliberately never
+    /// touches <see cref="HttpClient.BaseAddress"/>/<see cref="HttpClient.DefaultRequestHeaders"/>, since
+    /// callers (see <c>UnslothHttpClient</c>'s remarks) may hand in a typed client's shared instance that's
+    /// also reused elsewhere (e.g. as the chat agent's transport); mutating shared client-wide state here
+    /// would leak this client's configuration into unrelated requests sent later through the same instance.
+    /// Every field this client needs is instead applied per-request, in <see cref="ListAsync"/>.
+    /// </param>
     public ModelsClient(HttpClient httpClient, RedStarOptions options)
     {
         ArgumentNullException.ThrowIfNull(httpClient);
@@ -21,11 +30,8 @@ public sealed class ModelsClient : IModelsClient
 
         var unsloth = options.Agents.Unsloth;
         _httpClient = httpClient;
-        _httpClient.BaseAddress = new Uri(EnsureTrailingSlash(unsloth.BaseUrl));
-        if (!string.IsNullOrEmpty(unsloth.ApiKey))
-        {
-            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", unsloth.ApiKey);
-        }
+        _modelsUri = new Uri(new Uri(EnsureTrailingSlash(unsloth.BaseUrl)), "models");
+        _apiKey = string.IsNullOrEmpty(unsloth.ApiKey) ? null : unsloth.ApiKey;
     }
 
     public async Task<IReadOnlyList<ModelInfo>> ListAsync(CancellationToken cancellationToken = default)
@@ -37,7 +43,13 @@ public sealed class ModelsClient : IModelsClient
 
         try
         {
-            using var response = await _httpClient.GetAsync("models", cancellationToken);
+            using var request = new HttpRequestMessage(HttpMethod.Get, _modelsUri);
+            if (_apiKey is not null)
+            {
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
+            }
+
+            using var response = await _httpClient.SendAsync(request, cancellationToken);
             response.EnsureSuccessStatusCode();
 
             var payload = await response.Content.ReadFromJsonAsync<ModelListResponse>(cancellationToken: cancellationToken);

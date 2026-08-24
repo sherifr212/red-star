@@ -1,7 +1,7 @@
 namespace RedStar.Base.Agents.ClaudeCode;
 
 /// <summary>
-/// Drives the <c>claude</c> CLI subprocess for one <see cref="ChatSession"/>'s worth of turns. Session
+/// Drives the <c>claude</c> CLI subprocess for one <see cref="RedStarChatSession"/>'s worth of turns. Session
 /// continuity and process lifecycle are entirely internal to the implementation -- see
 /// <see cref="PerTurnClaudeCodeProcessRunner"/> (spawns fresh every turn, the
 /// <see cref="ClaudeCodeAgentOptions.ProcessMode"/> default) and <see cref="LongLivedClaudeCodeProcessRunner"/>

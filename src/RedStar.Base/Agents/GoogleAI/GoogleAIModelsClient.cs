@@ -12,7 +12,18 @@ namespace RedStar.Base.Agents.GoogleAI;
 public sealed class GoogleAIModelsClient : IModelsClient, IDisposable
 {
     private readonly HttpClient _httpClient;
+    private readonly Uri _modelsUri;
+    private readonly string _apiKey;
 
+    /// <param name="httpClient">
+    /// Transport to use. Caller owns its construction/lifetime -- this constructor deliberately never
+    /// touches <see cref="HttpClient.BaseAddress"/>/<see cref="HttpClient.DefaultRequestHeaders"/> (see
+    /// <c>ModelsClient</c>'s constructor remarks for the general rationale). This matters especially here:
+    /// <c>GoogleAIHttpClient</c>'s shared instance is also handed to <c>GoogleAIAgentFactory.Create</c>,
+    /// whose <c>Google.GenAI</c> SDK sets its own <c>x-goog-api-key</c> header on every request it sends --
+    /// adding a second, client-wide default of the same header here would duplicate it on those requests
+    /// too. Every field this client needs is instead applied per-request, in <see cref="ListAsync"/>.
+    /// </param>
     public GoogleAIModelsClient(HttpClient httpClient, RedStarOptions options)
     {
         ArgumentNullException.ThrowIfNull(httpClient);
@@ -40,8 +51,8 @@ public sealed class GoogleAIModelsClient : IModelsClient, IDisposable
         baseUrl += "v1beta/";
 
         _httpClient = httpClient;
-        _httpClient.BaseAddress = new Uri(baseUrl);
-        _httpClient.DefaultRequestHeaders.Add("x-goog-api-key", googleAI.ApiKey);
+        _modelsUri = new Uri(new Uri(baseUrl), "models");
+        _apiKey = googleAI.ApiKey;
     }
 
     public async Task<IReadOnlyList<ModelInfo>> ListAsync(CancellationToken cancellationToken = default)
@@ -53,7 +64,13 @@ public sealed class GoogleAIModelsClient : IModelsClient, IDisposable
 
         try
         {
-            var response = await _httpClient.GetFromJsonAsync<GoogleModelsResponse>("models", cancellationToken);
+            using var request = new HttpRequestMessage(HttpMethod.Get, _modelsUri);
+            request.Headers.Add("x-goog-api-key", _apiKey);
+
+            using var httpResponse = await _httpClient.SendAsync(request, cancellationToken);
+            httpResponse.EnsureSuccessStatusCode();
+
+            var response = await httpResponse.Content.ReadFromJsonAsync<GoogleModelsResponse>(cancellationToken: cancellationToken);
             var models = response?.Models ?? [];
 
             var modelIds = string.Join(", ", models.Select(m => m.Name));

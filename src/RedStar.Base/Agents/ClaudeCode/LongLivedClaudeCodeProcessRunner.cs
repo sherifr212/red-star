@@ -8,7 +8,7 @@ namespace RedStar.Base.Agents.ClaudeCode;
 /// <summary>
 /// <see cref="ClaudeCodeAgentOptions.ProcessMode"/> == <see cref="ClaudeCodeProcessModes.LongLived"/>: one
 /// <c>claude -p --input-format stream-json</c> process is spawned lazily on the first turn and kept alive for
-/// the rest of the <see cref="ChatSession"/>, fed one JSON input line per turn over its still-open stdin pipe
+/// the rest of the <see cref="RedStarChatSession"/>, fed one JSON input line per turn over its still-open stdin pipe
 /// instead of being re-spawned. Needs no <c>--session-id</c>/<c>--resume</c> at all -- verified against the
 /// real CLI (v2.1.224): piping two queued <c>{"type":"user",...}</c> lines into one
 /// <c>--input-format stream-json</c> invocation produced two full turns (two <c>result</c> lines) with
