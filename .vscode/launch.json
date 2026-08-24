@@ -1,0 +1,48 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "RedStar CLI (chat, interactive)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build: RedStar.Cli",
+            "program": "${workspaceFolder}\\build\\RedStar.Cli.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}\\build",
+            "console": "integratedTerminal",
+            "stopAtEntry": false
+        },
+        {
+            "name": "RedStar CLI (custom args)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build: RedStar.Cli",
+            "program": "${workspaceFolder}\\build\\RedStar.Cli.dll",
+            "args": "${input:redstarCliArgs}",
+            "cwd": "${workspaceFolder}\\build",
+            "console": "integratedTerminal",
+            "stopAtEntry": false
+        },
+        {
+            "name": "RedStar CLI (models)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build: RedStar.Cli",
+            "program": "${workspaceFolder}\\build\\RedStar.Cli.dll",
+            "args": [
+                "models"
+            ],
+            "cwd": "${workspaceFolder}\\build",
+            "console": "integratedTerminal",
+            "stopAtEntry": false
+        }
+    ],
+    "inputs": [
+        {
+            "id": "redstarCliArgs",
+            "type": "promptString",
+            "description": "Command-line arguments for RedStar.Cli (e.g. -p \"hello\" or chat --agent LMStudio)",
+            "default": "-p \"hello\""
+        }
+    ]
+}
