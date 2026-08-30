@@ -91,11 +91,13 @@ public static class GoogleAIAgentFactory
             chatClient = chatClient.AsBuilder().UseFunctionInvocation().Build();
         }
 
-        return chatClient.AsAIAgent(new ChatClientAgentOptions
+        var agent = chatClient.AsAIAgent(new ChatClientAgentOptions
         {
             ChatOptions = chatOptions,
-            AIContextProviders = [new DbGoogleAIContextProvider(documentStore)]
+            AIContextProviders = [new DbAIContextProvider(documentStore)],
         });
+
+        return agent;
     }
 
     /// <summary>
