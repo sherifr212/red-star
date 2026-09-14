@@ -51,8 +51,10 @@ through the config layering described in [Config resolution](#config-resolution)
 
 Tests are split across two xUnit projects by what they exercise, not just by source location:
 `RedStar.UnitTest` references only `RedStar.Base` and covers everything agent-agnostic (`ChatSession`,
-`RedStarOptions`, `ModelSelector`, `ModelsClient`, `ConditionalAuthHandler`, the Unsloth agent
-factory/extractor). `RedStar.UnitTest.Cli` references both `RedStar.Base` and `RedStar.Cli` and covers
+`RedStarOptions`, and — under the `RedStar.Base.ModelListing` namespace (see
+[Model resolution](#model-resolution)) — `ModelSelector`, `ModelsClient`, `ConditionalAuthHandler`, plus
+the Unsloth agent factory/extractor). `RedStar.UnitTest.Cli` references both `RedStar.Base` and
+`RedStar.Cli` and covers
 `ChatCommandHandler`'s one-shot path and model-resolution branching. Keep new tests in whichever
 project matches what they construct — a test that never touches `RedStar.Cli` types belongs in
 `RedStar.UnitTest`, not the other way around, so `RedStar.UnitTest` doesn't regain a `RedStar.Cli`
@@ -237,11 +239,25 @@ server with no auth" — the default and expected state for LM Studio, which has
 out of the box; Unsloth requires a bearer token, so this is the exceptional case there. Either way, the
 OpenAI SDK requires a non-empty credential object, so `UnslothAgentFactory.Create`/
 `LMStudioAgentFactory.Create` always pass a placeholder credential and rely on `ConditionalAuthHandler`
-(a `DelegatingHandler`, top-level `RedStar.Base` namespace — agent-agnostic, shared by both factories)
+(a `DelegatingHandler`, `RedStar.Base.ModelListing` namespace — shared by both factories, plus attached
+to the same named `HttpClient` in `Program.cs` that backs each agent's models client)
 to strip the `Authorization` header from outgoing requests when no real key is configured. Don't try to
 "fix" this by passing a null/empty credential to the SDK — it throws.
 
 ### Model resolution
+
+`IModelsClient`/`ModelInfo`/`ModelSelector`/`ModelSelectionResult`/`ModelsClient` (Unsloth's
+`IModelsClient` implementation) all live under `RedStar.Base.ModelListing` — pulled out of
+`RedStar.Base`'s top-level namespace since model listing/selection is a distinct concern from the
+agent-agnostic core (`ChatSession`/`RedStarOptions`). `ConditionalAuthHandler` lives there too (see
+[No-auth mode](#no-auth-mode)) even though its own consumers (`Program.cs`'s DI registration,
+`UnslothAgentFactory`/`LMStudioAgentFactory`'s placeholder credential) aren't exclusively
+model-listing code — it was grouped with the models clients rather than left at `RedStar.Base`'s top
+level or split per-agent, since it's shared infrastructure with no agent-specific logic of its own.
+Each other agent's `IModelsClient` implementation (`LMStudioModelsClient`, `GoogleAIModelsClient`,
+`ClaudeCodeModelsClient`) stays under its own `RedStar.Base.Agents.<AgentName>` namespace (see
+[Project layout](#project-layout)) rather than moving into `ModelListing` too — only the
+agent-agnostic pieces (the interface/records/selector) and Unsloth's own client live there.
 
 `ChatCommandHandler.ResolveModelAsync` always lists models (via whichever `IModelsClient` the active
 agent defaults to — see [Two HTTP paths, not one](#two-http-paths-not-one)) before building the chat

@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using OpenAI;
 using OpenAI.Chat;
 
+using RedStar.Base.ModelListing;
 using RedStar.Base.Telemetry;
 
 namespace RedStar.Base.Agents.LMStudio;

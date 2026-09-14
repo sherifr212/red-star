@@ -1,3 +1,5 @@
+using RedStar.Base.ModelListing;
+
 namespace RedStar.Base.Agents.ClaudeCode;
 
 /// <summary>

@@ -5,6 +5,7 @@ using Microsoft.Extensions.AI;
 
 using RedStar.Base;
 using RedStar.Base.Agents.Unsloth;
+using RedStar.Base.ModelListing;
 using RedStar.Base.Telemetry;
 using RedStar.Cli;
 using RedStar.UnitTest.Cli.Fakes;

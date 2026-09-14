@@ -1,4 +1,4 @@
-namespace RedStar.Base;
+namespace RedStar.Base.ModelListing;
 
 public interface IModelsClient
 {

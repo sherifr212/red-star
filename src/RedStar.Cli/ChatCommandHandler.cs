@@ -15,6 +15,7 @@ using RedStar.Base.Agents.ClaudeCode;
 using RedStar.Base.Agents.GoogleAI;
 using RedStar.Base.Agents.LMStudio;
 using RedStar.Base.Agents.Unsloth;
+using RedStar.Base.ModelListing;
 using RedStar.Base.Telemetry;
 using RedStar.Cli.Infrastructure;
 using RedStar.Cli.Rendering;

@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 
-using RedStar.Base;
+using RedStar.Base.ModelListing;
 using RedStar.UnitTest.Fakes;
 
 namespace RedStar.UnitTest;

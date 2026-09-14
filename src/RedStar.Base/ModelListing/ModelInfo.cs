@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace RedStar.Base;
+namespace RedStar.Base.ModelListing;
 
 /// <summary>
 /// One model the server knows about. <paramref name="Type"/>/<paramref name="MaxContextLength"/>/

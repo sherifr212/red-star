@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 
 using Microsoft.Extensions.Logging;
 
+using RedStar.Base.ModelListing;
 using RedStar.Base.Telemetry;
 
 namespace RedStar.Base.Agents.GoogleAI;

@@ -1,4 +1,4 @@
-using RedStar.Base;
+using RedStar.Base.ModelListing;
 
 namespace RedStar.UnitTest.Cli.Fakes;
 

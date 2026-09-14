@@ -1,4 +1,4 @@
-namespace RedStar.Base;
+namespace RedStar.Base.ModelListing;
 
 /// <summary>
 /// Picks which model a startup should use. Every outcome requires at least one model to be

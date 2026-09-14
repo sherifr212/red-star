@@ -1,4 +1,4 @@
-namespace RedStar.Base;
+namespace RedStar.Base.ModelListing;
 
 /// <summary>
 /// Strips the Authorization header from outgoing requests when no real API key is configured,

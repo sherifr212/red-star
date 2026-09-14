@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 
 using RedStar.Base.Telemetry;
 
-namespace RedStar.Base;
+namespace RedStar.Base.ModelListing;
 
 public sealed class ModelsClient : IModelsClient
 {
@@ -42,6 +42,7 @@ public sealed class ModelsClient : IModelsClient
 
             var payload = await response.Content.ReadFromJsonAsync<ModelListResponse>(cancellationToken: cancellationToken);
             var models = payload?.Data ?? [];
+            
             var modelIds = string.Join(", ", models.Select(m => m.Id));
             var loadedModelIds = string.Join(", ", models.Where(m => m.Loaded).Select(m => m.Id));
 

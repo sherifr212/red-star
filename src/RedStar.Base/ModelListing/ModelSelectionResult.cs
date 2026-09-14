@@ -1,4 +1,4 @@
-namespace RedStar.Base;
+namespace RedStar.Base.ModelListing;
 
 /// <summary>How a <see cref="ModelSelectionResult"/>'s model was picked.</summary>
 public enum ModelSelectionSource

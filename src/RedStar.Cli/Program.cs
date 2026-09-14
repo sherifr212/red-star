@@ -10,6 +10,7 @@ using RedStar.Base;
 using RedStar.Base.Agents.GoogleAI;
 using RedStar.Base.Agents.LMStudio;
 using RedStar.Base.Agents.Unsloth;
+using RedStar.Base.ModelListing;
 using RedStar.Cli;
 using RedStar.Cli.Commands;
 using RedStar.Cli.Infrastructure;

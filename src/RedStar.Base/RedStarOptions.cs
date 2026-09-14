@@ -1,5 +1,6 @@
 using RedStar.Base.Agents.ClaudeCode;
 using RedStar.Base.Agents.GoogleAI;
+using RedStar.Base.ModelListing;
 
 namespace RedStar.Base;
 

@@ -2,6 +2,7 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
+using RedStar.Base.ModelListing;
 using RedStar.Base.Telemetry;
 
 namespace RedStar.Base.Agents.ClaudeCode;
