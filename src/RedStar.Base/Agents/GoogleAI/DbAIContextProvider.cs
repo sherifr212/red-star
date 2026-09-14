@@ -27,10 +27,11 @@ public sealed class DbAIContextProvider : AIContextProvider
 
         var options = context.Agent.GetService<ChatOptions>();
 
-        var newUserMessages = newAIContext.Messages?.Where(
-                x => x.GetAgentRequestMessageSourceType() != AgentRequestMessageSourceType.ChatHistory)
-            ?? [];
-        
+        // This is invalid. Removing parts of the Messages list is misleading since all of it is sent to the model.
+        // var newUserMessages = newAIContext.Messages?.Where(
+        //         x => x.GetAgentRequestMessageSourceType() != AgentRequestMessageSourceType.ChatHistory)
+        //     ?? [];
+
         var part = new InferenceRequestPart
         {
             SessionType = context.Session?.GetType().ToString(),
@@ -43,7 +44,7 @@ public sealed class DbAIContextProvider : AIContextProvider
             AgentType = context.Agent.GetType().ToString(), // Might be costly!
 
             ContextInstructions = newAIContext.Instructions,
-            ContextMessages = newUserMessages,
+            ContextMessages = newAIContext.Messages,
             ContextTools = newAIContext.Tools
         };
 
@@ -59,9 +60,9 @@ public sealed class DbAIContextProvider : AIContextProvider
     protected override async ValueTask InvokedCoreAsync(InvokedContext context, CancellationToken cancellationToken = default)
     {
         var newResponseMessages = context.ResponseMessages?.Where(
-                x => x.GetAgentRequestMessageSourceType() == AgentRequestMessageSourceType.External) 
+                x => x.GetAgentRequestMessageSourceType() == AgentRequestMessageSourceType.External)
                 ?? [];
-        
+
         var part = new InferenceResponsePart
         {
             SessionType = context.Session?.GetType().ToString(),
