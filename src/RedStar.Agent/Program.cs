@@ -46,16 +46,15 @@ public class Program
                 services.AddTransient<AITool>(sp => AIFunctionFactory.Create(sp.GetRequiredService<EditTool>().EditAsync, "edit"));
                 services.AddTransient<AITool>(sp => AIFunctionFactory.Create(sp.GetRequiredService<BashTool>().RunBashAsync, "bash"));
 
-                services.AddTransient<AgentApp>();
+                services.AddHostedService<AgentApp>();
             })
             .Build();
 
-        var app = host.Services.GetRequiredService<AgentApp>();
-        await app.RunAsync();
+        await host.RunAsync();
     }
 }
 
-public sealed partial class AgentApp
+public sealed partial class AgentApp : BackgroundService
 {
     private readonly RedStarOptions _options;
     private readonly IServiceProvider _serviceProvider;
@@ -72,7 +71,7 @@ public sealed partial class AgentApp
         _lifetime = lifetime;
     }
 
-    public async Task RunAsync()
+    protected override async Task ExecuteAsync(System.Threading.CancellationToken stoppingToken)
     {
         var agentName = _options.Agent ?? AgentNames.Unsloth;
 
@@ -115,7 +114,7 @@ public sealed partial class AgentApp
         Console.WriteLine("Type 'exit' or 'quit' to quit.");
         Console.WriteLine("---------------------------------------");
 
-        using var cts = System.Threading.CancellationTokenSource.CreateLinkedTokenSource(_lifetime.ApplicationStopping);
+        using var cts = System.Threading.CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, _lifetime.ApplicationStopping);
         Console.CancelKeyPress += (s, e) =>
         {
             e.Cancel = true;
@@ -125,7 +124,16 @@ public sealed partial class AgentApp
         while (!cts.IsCancellationRequested)
         {
             Console.Write("> ");
-            var input = Console.ReadLine();
+
+            string? input = null;
+            try
+            {
+                input = await Task.Run(() => Console.ReadLine(), cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
 
             if (string.IsNullOrWhiteSpace(input))
                 continue;
@@ -133,6 +141,7 @@ public sealed partial class AgentApp
             if (input.Equals("exit", StringComparison.OrdinalIgnoreCase) ||
                 input.Equals("quit", StringComparison.OrdinalIgnoreCase))
             {
+                _lifetime.StopApplication();
                 break;
             }
 
@@ -144,6 +153,10 @@ public sealed partial class AgentApp
                     Console.Write(chunk);
                 });
                 Console.WriteLine("\n");
+            }
+            catch (OperationCanceledException)
+            {
+                break;
             }
             catch(Exception ex)
             {

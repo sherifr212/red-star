@@ -41,14 +41,13 @@ public sealed partial class EditTool
                  return "Error: Search string cannot be empty.";
             }
 
-            int index = content.IndexOf(searchString, System.StringComparison.Ordinal);
-            if (index < 0)
+            if (!content.Contains(searchString, System.StringComparison.Ordinal))
             {
                 LogSearchStringNotFound(filePath);
                 return $"Error: Search string not found in file '{filePath}'.";
             }
 
-            var newContent = string.Concat(content.AsSpan(0, index), replaceString, content.AsSpan(index + searchString.Length));
+            var newContent = content.Replace(searchString, replaceString, System.StringComparison.Ordinal);
             await File.WriteAllTextAsync(filePath, newContent);
 
             LogFileEditSuccess(filePath);

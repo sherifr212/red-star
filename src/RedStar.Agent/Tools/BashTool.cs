@@ -49,8 +49,8 @@ public sealed partial class BashTool
 
             using var cts = new System.Threading.CancellationTokenSource(System.TimeSpan.FromMinutes(1));
 
-            var outputTask = process.StandardOutput.ReadToEndAsync(cts.Token);
-            var errorTask = process.StandardError.ReadToEndAsync(cts.Token);
+            var outputTask = process.StandardOutput.ReadToEndAsync();
+            var errorTask = process.StandardError.ReadToEndAsync();
 
             string output, error;
             try
@@ -61,7 +61,22 @@ public sealed partial class BashTool
             }
             catch (System.OperationCanceledException)
             {
-                process.Kill();
+                try
+                {
+                    process.Kill();
+                }
+                catch (Exception killEx)
+                {
+                    LogBashException(killEx, command);
+                }
+
+                try
+                {
+                    await outputTask;
+                    await errorTask;
+                }
+                catch { }
+
                 return "Error: Command execution timed out after 1 minute.";
             }
 
