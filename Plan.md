@@ -1,8 +1,0 @@
-1. Understand the Base code (done)
-2. Setup RedStar.Agent project (done)
-3. Implement tools: read, write, edit, bash (done)
-4. Implement main agent app in Program.cs (done)
-5. Write tests for tools (done)
-6. Ensure tools work with Unsloth and LMStudio agents (done)
-7. Improve write tool with diff capability (done)
-8. Clean up codebase (remove temporary comments, extra scripts) (done)
