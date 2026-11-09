@@ -41,13 +41,10 @@ public class Program
                 services.AddTransient<EditTool>();
                 services.AddTransient<BashTool>();
 
-                services.AddTransient<IEnumerable<AITool>>(sp => new List<AITool>
-                {
-                    AIFunctionFactory.Create(sp.GetRequiredService<ReadTool>().ReadAsync, "read"),
-                    AIFunctionFactory.Create(sp.GetRequiredService<WriteTool>().WriteAsync, "write"),
-                    AIFunctionFactory.Create(sp.GetRequiredService<EditTool>().EditAsync, "edit"),
-                    AIFunctionFactory.Create(sp.GetRequiredService<BashTool>().RunBashAsync, "bash")
-                });
+                services.AddTransient<AITool>(sp => AIFunctionFactory.Create(sp.GetRequiredService<ReadTool>().ReadAsync, "read"));
+                services.AddTransient<AITool>(sp => AIFunctionFactory.Create(sp.GetRequiredService<WriteTool>().WriteAsync, "write"));
+                services.AddTransient<AITool>(sp => AIFunctionFactory.Create(sp.GetRequiredService<EditTool>().EditAsync, "edit"));
+                services.AddTransient<AITool>(sp => AIFunctionFactory.Create(sp.GetRequiredService<BashTool>().RunBashAsync, "bash"));
 
                 services.AddTransient<AgentApp>();
             })
@@ -64,13 +61,15 @@ public sealed partial class AgentApp
     private readonly IServiceProvider _serviceProvider;
     private readonly IEnumerable<AITool> _tools;
     private readonly ILogger<AgentApp> _logger;
+    private readonly IHostApplicationLifetime _lifetime;
 
-    public AgentApp(RedStarOptions options, IServiceProvider serviceProvider, IEnumerable<AITool> tools, ILogger<AgentApp> logger)
+    public AgentApp(RedStarOptions options, IServiceProvider serviceProvider, IEnumerable<AITool> tools, ILogger<AgentApp> logger, IHostApplicationLifetime lifetime)
     {
         _options = options;
         _serviceProvider = serviceProvider;
         _tools = tools;
         _logger = logger;
+        _lifetime = lifetime;
     }
 
     public async Task RunAsync()
@@ -79,7 +78,9 @@ public sealed partial class AgentApp
 
         LogStartingAgentApp(agentName);
 
-        string systemPrompt = "You are an agentic console application. Use tools appropriately to fulfill the user request.";
+        string systemPrompt = string.IsNullOrWhiteSpace(_options.SystemPrompt)
+            ? "You are an agentic console application. Use tools appropriately to fulfill the user request."
+            : _options.SystemPrompt;
         string defaultModel = "";
 
         var tools = _tools.ToList();
@@ -114,7 +115,7 @@ public sealed partial class AgentApp
         Console.WriteLine("Type 'exit' or 'quit' to quit.");
         Console.WriteLine("---------------------------------------");
 
-        using var cts = new System.Threading.CancellationTokenSource();
+        using var cts = System.Threading.CancellationTokenSource.CreateLinkedTokenSource(_lifetime.ApplicationStopping);
         Console.CancelKeyPress += (s, e) =>
         {
             e.Cancel = true;
