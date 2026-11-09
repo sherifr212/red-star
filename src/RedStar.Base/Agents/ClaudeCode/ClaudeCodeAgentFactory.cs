@@ -26,7 +26,7 @@ public static class ClaudeCodeAgentFactory
     /// <see cref="ClaudeCodeAgentOptions.DefaultModel"/> verbatim, including empty (meaning "let the CLI use
     /// its own configured default").
     /// </param>
-    public static AIAgent Create(RedStarOptions options, string modelId, string? instructions = null)
+    public static AIAgent Create(RedStarOptions options, string modelId, string? instructions = null, IEnumerable<AITool>? tools = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(modelId);
@@ -40,8 +40,15 @@ public static class ClaudeCodeAgentFactory
             ? new LongLivedClaudeCodeProcessRunner(claudeCode, modelId)
             : new PerTurnClaudeCodeProcessRunner(claudeCode, modelId);
 
-        var chatClient = new ClaudeCodeChatClient(runner);
+        IChatClient chatClient = new ClaudeCodeChatClient(runner);
         var chatOptions = new ChatOptions { Instructions = instructions };
+
+        var toolList = tools?.ToList();
+        if (toolList is { Count: > 0 })
+        {
+            chatOptions.Tools = toolList;
+            chatClient = chatClient.AsBuilder().UseFunctionInvocation().Build();
+        }
 
         return chatClient.AsAIAgent(new ChatClientAgentOptions { ChatOptions = chatOptions });
     }
