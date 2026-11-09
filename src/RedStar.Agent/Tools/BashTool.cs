@@ -31,7 +31,7 @@ public sealed partial class BashTool
             var processInfo = new ProcessStartInfo
             {
                 FileName = "/bin/bash",
-                Arguments = $"-c \"{command.Replace("\"", "\\\"")}\"",
+                RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
@@ -44,13 +44,26 @@ public sealed partial class BashTool
                 return "Error: Failed to start bash process.";
             }
 
-            var outputTask = process.StandardOutput.ReadToEndAsync();
-            var errorTask = process.StandardError.ReadToEndAsync();
+            await process.StandardInput.WriteLineAsync(command);
+            process.StandardInput.Close();
 
-            await process.WaitForExitAsync();
+            using var cts = new System.Threading.CancellationTokenSource(System.TimeSpan.FromMinutes(1));
 
-            var output = await outputTask;
-            var error = await errorTask;
+            var outputTask = process.StandardOutput.ReadToEndAsync(cts.Token);
+            var errorTask = process.StandardError.ReadToEndAsync(cts.Token);
+
+            string output, error;
+            try
+            {
+                await process.WaitForExitAsync(cts.Token);
+                output = await outputTask;
+                error = await errorTask;
+            }
+            catch (System.OperationCanceledException)
+            {
+                process.Kill();
+                return "Error: Command execution timed out after 1 minute.";
+            }
 
             LogBashCommandFinished(command, process.ExitCode);
 

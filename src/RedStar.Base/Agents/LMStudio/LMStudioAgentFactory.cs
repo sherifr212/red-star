@@ -26,7 +26,7 @@ public static class LMStudioAgentFactory
     /// needs no fields outside the standard OpenAI schema that the OpenAI SDK/<c>Microsoft.Extensions.AI</c>
     /// don't already model directly. See <see cref="CreateChatOptions"/> for the one request field it does add.
     /// </summary>
-    public static AIAgent Create(HttpClient httpClient, RedStarOptions options, string modelId, string? instructions = null)
+    public static AIAgent Create(HttpClient httpClient, RedStarOptions options, string modelId, string? instructions = null, IEnumerable<AITool>? tools = null)
     {
         ArgumentNullException.ThrowIfNull(httpClient);
         ArgumentNullException.ThrowIfNull(options);
@@ -48,6 +48,12 @@ public static class LMStudioAgentFactory
 
         var chatOptions = CreateChatOptions();
         chatOptions.Instructions = instructions;
+
+        var toolList = tools?.ToList();
+        if (toolList is { Count: > 0 })
+        {
+            chatOptions.Tools = toolList;
+        }
 
         return openAiClient.GetChatClient(modelId).AsAIAgent(new ChatClientAgentOptions { ChatOptions = chatOptions });
     }

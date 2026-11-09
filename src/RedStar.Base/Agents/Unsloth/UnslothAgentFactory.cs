@@ -24,7 +24,7 @@ public static class UnslothAgentFactory
     /// <see cref="ChatOptions.Instructions"/> on every run by <see cref="ChatClientAgent"/>) rather than a
     /// message the caller has to manage.
     /// </summary>
-    public static AIAgent Create(HttpClient httpClient, RedStarOptions options, string modelId, string? instructions = null)
+    public static AIAgent Create(HttpClient httpClient, RedStarOptions options, string modelId, string? instructions = null, IEnumerable<AITool>? tools = null)
     {
         ArgumentNullException.ThrowIfNull(httpClient);
         ArgumentNullException.ThrowIfNull(options);
@@ -46,6 +46,12 @@ public static class UnslothAgentFactory
 
         var chatOptions = CreateChatOptions(options);
         chatOptions.Instructions = instructions;
+
+        var toolList = tools?.ToList();
+        if (toolList is { Count: > 0 })
+        {
+            chatOptions.Tools = toolList;
+        }
 
         return openAiClient.GetChatClient(modelId).AsAIAgent(new ChatClientAgentOptions { ChatOptions = chatOptions });
     }

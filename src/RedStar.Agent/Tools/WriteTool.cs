@@ -37,31 +37,10 @@ public sealed partial class WriteTool
 
             var isNewFile = !File.Exists(filePath);
 
-            // Note: Since diff tool implementations would require a diff library,
-            // a simple representation of the change is to just return a message that it changed.
-            // If the user wants an actual diff patch generated, we could output the old vs new content.
-            string diffOutput = "";
-            if (!isNewFile)
-            {
-                 var oldContent = await File.ReadAllTextAsync(filePath);
-                 if (oldContent != content)
-                 {
-                     var oldSlice = oldContent.Length > 20 ? oldContent.AsSpan(0, 20) : oldContent.AsSpan();
-                     var newSlice = content.Length > 20 ? content.AsSpan(0, 20) : content.AsSpan();
-
-                     diffOutput = "Diff:\n- " + new string(oldSlice) + (oldContent.Length > 20 ? "..." : "")
-                                + "\n+ " + new string(newSlice) + (content.Length > 20 ? "..." : "") + "\n";
-                 }
-                 else
-                 {
-                     diffOutput = "No changes detected.\n";
-                 }
-            }
-
             await File.WriteAllTextAsync(filePath, content ?? string.Empty);
 
             LogFileWriteSuccess(filePath, isNewFile);
-            return $"Successfully {(isNewFile ? "created" : "overwritten")} file '{filePath}'.\n{diffOutput}";
+            return $"Successfully {(isNewFile ? "created" : "overwritten")} file '{filePath}'.";
         }
         catch (Exception ex)
         {
