@@ -10,6 +10,8 @@ public sealed class RedStarOptions
 
     public string DbConnectionString { get; set; } = string.Empty;
 
+    public string SystemPrompt { get; set; } = string.Empty;
+
     /// <summary>
     /// Which agent backend this run talks to -- one of <see cref="AgentNames"/>. Selects both the default
     /// <c>agentFactory</c>/<c>responseExtractor</c>/<c>modelsClientFactory</c> in

@@ -29,7 +29,7 @@ public sealed partial class WriteTool
         try
         {
             var directory = Path.GetDirectoryName(filePath);
-            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+            if (!string.IsNullOrWhiteSpace(directory) && !Directory.Exists(directory))
             {
                 Directory.CreateDirectory(directory);
                 LogDirectoryCreated(directory);
@@ -37,7 +37,8 @@ public sealed partial class WriteTool
 
             var isNewFile = !File.Exists(filePath);
 
-            await File.WriteAllTextAsync(filePath, content ?? string.Empty);
+            await using var writer = new StreamWriter(new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None, 4096, true));
+            await writer.WriteAsync(content ?? string.Empty);
 
             LogFileWriteSuccess(filePath, isNewFile);
             return $"Successfully {(isNewFile ? "created" : "overwritten")} file '{filePath}'.";

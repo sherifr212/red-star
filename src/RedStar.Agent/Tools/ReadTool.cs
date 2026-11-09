@@ -32,6 +32,17 @@ public sealed partial class ReadTool
                 return $"Error: File '{filePath}' not found.";
             }
 
+            var fileInfo = new FileInfo(filePath);
+            if (fileInfo.Length > 100 * 1024)
+            {
+                using var reader = new StreamReader(filePath);
+                var buffer = new char[100 * 1024];
+                int read = await reader.ReadAsync(buffer, 0, buffer.Length);
+                var contentTruncated = new string(buffer, 0, read);
+                LogFileReadSuccess(filePath);
+                return contentTruncated + "\n\n[WARNING: File too large, content truncated]";
+            }
+
             var content = await File.ReadAllTextAsync(filePath);
             LogFileReadSuccess(filePath);
             return content;
