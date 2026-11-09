@@ -47,3 +47,14 @@ Since nullable contexts are enabled in the project (`<Nullable>enable</Nullable>
 
 ## Conclusion
 The agent framework is functional and robust. The next tier of improvements revolves around code design (Strategy Pattern for Agent instantiation) and tightening edge case handling (invalid config names, package references, and strict nullability).
+### 6. Synchronous Methods in Asynchronous Pipelines
+**Issue:** `Program.cs` extensively uses synchronous I/O operations (`Console.WriteLine`, `Console.Write`, and `Console.ReadLine`) inside the asynchronous `ExecuteAsync` pipeline of the background service.
+While `Console.ReadLine()` has been mitigated somewhat by wrapping it in `Task.Run`, `Console.WriteLine` and `Console.Write` are still called directly.
+
+Using synchronous variants when asynchronous ones (`Console.Out.WriteLineAsync`, `Console.In.ReadLineAsync`) are available causes two critical problems:
+1. **Performance problems:** Thread pool threads can become blocked waiting for I/O to complete, leading to thread starvation and degrading the overall throughput and responsiveness of the application.
+2. **Mixing sync and async operations together:** Combining sync over async (or vice-versa) in one pipeline breaks the async state machine flow, potentially causing deadlocks in context-aware environments (though less common in modern console apps, it's still an anti-pattern).
+
+**Recommendation:** The correct practice is to *always* use the async variant of all methods when available. Update all `Console.WriteLine` to `await Console.Out.WriteLineAsync` and `Console.Write` to `await Console.Out.WriteAsync`. Change `Task.Run(() => Console.ReadLine())` to `await Console.In.ReadLineAsync(cts.Token)` if the framework version supports it properly with cancellation, or at least keep the `Task.Run` but wrap the async version `await Task.Run(() => Console.In.ReadLineAsync())`.
+
+*Note: In the tools (`ReadTool.cs`, `EditTool.cs`, etc.), methods like `File.Exists` are used synchronously. This is correct and acceptable since the framework engineers did not provide a `File.ExistsAsync` method, determining that checking metadata is sufficiently fast and safe to be used synchronously.*
