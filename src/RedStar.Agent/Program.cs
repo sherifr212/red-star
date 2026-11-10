@@ -98,7 +98,7 @@ public sealed partial class AgentApp : BackgroundService
             string? input = null;
             try
             {
-                input = await Task.Run(() => Console.In.ReadLineAsync(), cts.Token);
+                input = await Console.In.ReadLineAsync(cts.Token);
             }
             catch (OperationCanceledException)
             {
