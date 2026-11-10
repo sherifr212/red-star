@@ -80,28 +80,57 @@ public sealed class UnslothAgentResponseExtractor : IAgentResponseExtractor
         }
 
         var results = new List<WebSearchResult>();
-        foreach (var block in resultText.Split("\n\n---\n\n"))
+
+        ReadOnlySpan<char> textSpan = resultText.AsSpan();
+        ReadOnlySpan<char> separator = "\n\n---\n\n".AsSpan();
+
+        while (!textSpan.IsEmpty)
         {
+            ReadOnlySpan<char> blockSpan;
+            int separatorIndex = textSpan.IndexOf(separator);
+            if (separatorIndex != -1)
+            {
+                blockSpan = textSpan.Slice(0, separatorIndex);
+                textSpan = textSpan.Slice(separatorIndex + separator.Length);
+            }
+            else
+            {
+                blockSpan = textSpan;
+                textSpan = default;
+            }
+
             string? title = null;
             string? url = null;
-            foreach (var line in block.Split('\n'))
+
+            while (!blockSpan.IsEmpty)
             {
-                if (line.StartsWith("Title: ", StringComparison.Ordinal))
+                ReadOnlySpan<char> lineSpan;
+                int lineSeparatorIndex = blockSpan.IndexOf('\n');
+                if (lineSeparatorIndex != -1)
                 {
-                    title = line["Title: ".Length..].Trim();
+                    lineSpan = blockSpan.Slice(0, lineSeparatorIndex);
+                    blockSpan = blockSpan.Slice(lineSeparatorIndex + 1);
                 }
-                else if (line.StartsWith("URL: ", StringComparison.Ordinal))
+                else
                 {
-                    url = line["URL: ".Length..].Trim();
+                    lineSpan = blockSpan;
+                    blockSpan = default;
+                }
+
+                if (lineSpan.StartsWith("Title: ", StringComparison.Ordinal))
+                {
+                    title = lineSpan.Slice("Title: ".Length).Trim().ToString();
+                }
+                else if (lineSpan.StartsWith("URL: ", StringComparison.Ordinal))
+                {
+                    url = lineSpan.Slice("URL: ".Length).Trim().ToString();
                 }
             }
 
-            if (title is null || url is null)
+            if (title is not null && url is not null)
             {
-                continue;
+                results.Add(new WebSearchResult(title, url));
             }
-
-            results.Add(new WebSearchResult(title, url));
         }
 
         return results.Count == 0 ? null : results;
