@@ -46,6 +46,7 @@ public class Program
                 services.AddTransient<AITool>(sp => AIFunctionFactory.Create(sp.GetRequiredService<EditTool>().EditAsync, "edit"));
                 services.AddTransient<AITool>(sp => AIFunctionFactory.Create(sp.GetRequiredService<BashTool>().RunBashAsync, "bash"));
 
+                services.AddTransient<IAgentFactory, AgentFactory>();
                 services.AddHostedService<AgentApp>();
             })
             .Build();
@@ -57,16 +58,14 @@ public class Program
 public sealed partial class AgentApp : BackgroundService
 {
     private readonly RedStarOptions _options;
-    private readonly IServiceProvider _serviceProvider;
-    private readonly IEnumerable<AITool> _tools;
+    private readonly IAgentFactory _agentFactory;
     private readonly ILogger<AgentApp> _logger;
     private readonly IHostApplicationLifetime _lifetime;
 
-    public AgentApp(RedStarOptions options, IServiceProvider serviceProvider, IEnumerable<AITool> tools, ILogger<AgentApp> logger, IHostApplicationLifetime lifetime)
+    public AgentApp(RedStarOptions options, IAgentFactory agentFactory, ILogger<AgentApp> logger, IHostApplicationLifetime lifetime)
     {
         _options = options;
-        _serviceProvider = serviceProvider;
-        _tools = tools;
+        _agentFactory = agentFactory;
         _logger = logger;
         _lifetime = lifetime;
     }
@@ -77,42 +76,13 @@ public sealed partial class AgentApp : BackgroundService
 
         LogStartingAgentApp(agentName);
 
-        string systemPrompt = string.IsNullOrWhiteSpace(_options.SystemPrompt)
-            ? "You are an agentic console application. Use tools appropriately to fulfill the user request."
-            : _options.SystemPrompt;
-        string defaultModel = "";
-
-        var tools = _tools.ToList();
-
-        AIAgent agent;
-        if (string.Equals(agentName, AgentNames.LMStudio, StringComparison.OrdinalIgnoreCase))
-        {
-             defaultModel = _options.Agents.LMStudio.DefaultModel;
-             var client = _serviceProvider.GetRequiredService<LMStudioHttpClient>().HttpClient;
-             agent = LMStudioAgentFactory.Create(client, _options, defaultModel, systemPrompt, tools);
-        }
-        else if (string.Equals(agentName, AgentNames.GoogleAI, StringComparison.OrdinalIgnoreCase))
-        {
-             defaultModel = _options.Agents.GoogleAI.DefaultModel;
-             agent = GoogleAIAgentFactory.Create(() => _serviceProvider.GetRequiredService<GoogleAIHttpClient>().HttpClient, _options, defaultModel, systemPrompt, tools, null);
-        }
-        else if (string.Equals(agentName, AgentNames.ClaudeCode, StringComparison.OrdinalIgnoreCase))
-        {
-             defaultModel = _options.Agents.ClaudeCode.DefaultModel;
-             agent = ClaudeCodeAgentFactory.Create(_options, defaultModel, systemPrompt, tools);
-        }
-        else
-        {
-             defaultModel = _options.Agents.Unsloth.DefaultModel;
-             var client = _serviceProvider.GetRequiredService<UnslothHttpClient>().HttpClient;
-             agent = UnslothAgentFactory.Create(client, _options, defaultModel, systemPrompt, tools);
-        }
+        var agent = _agentFactory.CreateAgent(agentName, out string defaultModel);
 
         var session = new ChatSession(agent);
 
-        Console.WriteLine($"Starting RedStar.Agent chat loop (Model: {defaultModel}, Agent: {agentName}).");
-        Console.WriteLine("Type 'exit' or 'quit' to quit.");
-        Console.WriteLine("---------------------------------------");
+        await Console.Out.WriteLineAsync($"Starting RedStar.Agent chat loop (Model: {defaultModel}, Agent: {agentName}).");
+        await Console.Out.WriteLineAsync("Type 'exit' or 'quit' to quit.");
+        await Console.Out.WriteLineAsync("---------------------------------------");
 
         using var cts = System.Threading.CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, _lifetime.ApplicationStopping);
         Console.CancelKeyPress += (s, e) =>
@@ -123,12 +93,12 @@ public sealed partial class AgentApp : BackgroundService
 
         while (!cts.IsCancellationRequested)
         {
-            Console.Write("> ");
+            await Console.Out.WriteAsync("> ");
 
             string? input = null;
             try
             {
-                input = await Task.Run(() => Console.ReadLine(), cts.Token);
+                input = await Task.Run(() => Console.In.ReadLineAsync(), cts.Token);
             }
             catch (OperationCanceledException)
             {
@@ -147,12 +117,12 @@ public sealed partial class AgentApp : BackgroundService
 
             try
             {
-                Console.WriteLine("\nAgent: ");
+                await Console.Out.WriteLineAsync("\nAgent: ");
                 await session.SendAsync(input, cancellationToken: cts.Token, onTextChunk: chunk =>
                 {
                     Console.Write(chunk);
                 });
-                Console.WriteLine("\n");
+                await Console.Out.WriteLineAsync("\n");
             }
             catch (OperationCanceledException)
             {
@@ -161,7 +131,7 @@ public sealed partial class AgentApp : BackgroundService
             catch(Exception ex)
             {
                 LogError(ex, "Error processing chat");
-                Console.WriteLine($"\nError: {ex.Message}");
+                await Console.Out.WriteLineAsync($"\nError: {ex.Message}");
             }
         }
     }

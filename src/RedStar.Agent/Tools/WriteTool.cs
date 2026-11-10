@@ -18,7 +18,7 @@ public sealed partial class WriteTool
     [Description("Creates and writes new files from scratch or overwrites existing files entirely.")]
     public async Task<string> WriteAsync(
         [Description("The path to the file to write")] string filePath,
-        [Description("The content to write to the file")] string content)
+        [Description("The content to write to the file")] string? content)
     {
         if (string.IsNullOrWhiteSpace(filePath))
         {
